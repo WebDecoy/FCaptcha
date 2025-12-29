@@ -1,13 +1,32 @@
-  node_modules/
-  .env
-  .env.*
-  !.env.example
-  *.log
-  .DS_Store
-  .idea/
-  .DS_Store
-  *.log
-  .env
-  .env.*
-  !.env.example
-  node_modules/
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build outputs
+*.exe
+fcaptcha-server
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
