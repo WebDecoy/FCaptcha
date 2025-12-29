@@ -3,19 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FCaptcha Demo</title>
+  <title>FCaptcha Demo - WebDecoy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #121212;
       min-height: 100vh;
       margin: 0;
       padding: 40px 20px;
-      color: #fff;
+      color: #e0e0e0;
     }
 
     .container {
@@ -23,51 +26,63 @@
       margin: 0 auto;
     }
 
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .logo {
+      width: 48px;
+      height: 48px;
+    }
+
     h1 {
       text-align: center;
       font-size: 2.5em;
-      margin-bottom: 10px;
-      background: linear-gradient(90deg, #00d9ff, #00ff88);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      margin: 0;
+      color: #00bcd4;
+      font-weight: 600;
     }
 
     .subtitle {
       text-align: center;
-      color: #888;
+      color: #b0b0b0;
       margin-bottom: 40px;
       font-size: 1.1em;
     }
 
     .demo-section {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
+      background: #1e1e1e;
+      border: 1px solid #424242;
+      border-radius: 8px;
       padding: 30px;
-      margin-bottom: 30px;
+      margin-bottom: 24px;
     }
 
     .demo-section h2 {
-      color: #00d9ff;
+      color: #00bcd4;
       margin-top: 0;
       font-size: 1.4em;
+      font-weight: 600;
       display: flex;
       align-items: center;
       gap: 10px;
     }
 
     .demo-section h2 .badge {
-      background: rgba(0, 217, 255, 0.2);
-      color: #00d9ff;
+      background: rgba(0, 188, 212, 0.12);
+      color: #00bcd4;
       font-size: 0.6em;
       padding: 4px 8px;
       border-radius: 4px;
-      font-weight: normal;
+      font-weight: 500;
     }
 
     .demo-section p {
-      color: #aaa;
+      color: #b0b0b0;
       line-height: 1.6;
     }
 
@@ -76,7 +91,7 @@
     }
 
     .form-demo {
-      background: rgba(0, 0, 0, 0.2);
+      background: #252525;
       padding: 25px;
       border-radius: 8px;
       margin-top: 20px;
@@ -89,52 +104,64 @@
     .form-group label {
       display: block;
       margin-bottom: 5px;
-      color: #ccc;
+      color: #b0b0b0;
       font-size: 0.9em;
+      font-weight: 500;
     }
 
-    .form-group input {
+    .form-group input,
+    .form-group textarea {
       width: 100%;
       padding: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      border: 1px solid #424242;
       border-radius: 6px;
-      background: rgba(255, 255, 255, 0.05);
-      color: #fff;
+      background: #1e1e1e;
+      color: #e0e0e0;
       font-size: 1em;
+      font-family: inherit;
     }
 
-    .form-group input:focus {
+    .form-group input:focus,
+    .form-group textarea:focus {
       outline: none;
-      border-color: #00d9ff;
+      border-color: #00bcd4;
+    }
+
+    .form-group textarea {
+      min-height: 80px;
+      resize: vertical;
     }
 
     button[type="submit"] {
-      background: linear-gradient(90deg, #00d9ff, #00ff88);
+      background: #00bcd4;
       border: none;
-      padding: 12px 30px;
+      padding: 12px 24px;
       border-radius: 6px;
       color: #000;
       font-weight: 600;
       font-size: 1em;
       cursor: pointer;
       margin-top: 10px;
-      transition: transform 0.2s;
+      transition: background 0.2s, transform 0.2s;
+      font-family: inherit;
     }
 
     button[type="submit"]:hover {
-      transform: translateY(-2px);
+      background: #4dd0e1;
+      transform: translateY(-1px);
     }
 
     .result-box {
-      background: rgba(0, 0, 0, 0.3);
+      background: #0d1117;
       border-radius: 8px;
       padding: 20px;
       margin-top: 20px;
-      font-family: 'Monaco', 'Menlo', monospace;
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
       font-size: 0.85em;
       white-space: pre-wrap;
       word-break: break-all;
       display: none;
+      color: #e6edf3;
     }
 
     .result-box.visible {
@@ -142,15 +169,15 @@
     }
 
     .result-box.success {
-      border-left: 4px solid #00ff88;
+      border-left: 4px solid #4caf50;
     }
 
     .result-box.error {
-      border-left: 4px solid #ff5252;
+      border-left: 4px solid #f44336;
     }
 
     .code-block {
-      background: rgba(0, 0, 0, 0.4);
+      background: #0d1117;
       border-radius: 8px;
       padding: 20px;
       margin: 20px 0;
@@ -160,49 +187,54 @@
     .code-block code {
       font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
       font-size: 0.9em;
-      color: #e0e0e0;
+      color: #e6edf3;
     }
 
     .code-block .comment {
-      color: #6a9955;
+      color: #8b949e;
     }
 
     .code-block .keyword {
-      color: #569cd6;
+      color: #ff7b72;
     }
 
     .code-block .string {
-      color: #ce9178;
+      color: #a5d6ff;
     }
 
     .code-block .function {
-      color: #dcdcaa;
+      color: #d2a8ff;
     }
 
     .tabs {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       margin-bottom: 20px;
+      flex-wrap: wrap;
     }
 
     .tab {
       padding: 10px 20px;
-      background: rgba(255, 255, 255, 0.1);
-      border: none;
+      background: #252525;
+      border: 1px solid #424242;
       border-radius: 6px;
-      color: #888;
+      color: #b0b0b0;
       cursor: pointer;
       font-size: 0.9em;
+      font-weight: 500;
       transition: all 0.2s;
+      font-family: inherit;
     }
 
     .tab.active {
-      background: rgba(0, 217, 255, 0.2);
-      color: #00d9ff;
+      background: rgba(0, 188, 212, 0.12);
+      color: #00bcd4;
+      border-color: rgba(0, 188, 212, 0.3);
     }
 
     .tab:hover:not(.active) {
-      background: rgba(255, 255, 255, 0.15);
+      background: #2a2a2a;
+      border-color: #555;
     }
 
     .tab-content {
@@ -217,51 +249,103 @@
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 20px;
-      background: rgba(0, 0, 0, 0.3);
+      padding: 12px 20px;
+      background: #252525;
       border-radius: 8px;
       margin-top: 15px;
     }
 
     .score-value {
       font-size: 1.8em;
-      font-weight: bold;
+      font-weight: 700;
     }
 
     .score-value.good {
-      color: #00ff88;
+      color: #4caf50;
     }
 
     .score-value.medium {
-      color: #ffaa00;
+      color: #ff9800;
     }
 
     .score-value.bad {
-      color: #ff5252;
+      color: #f44336;
     }
 
     .score-label {
-      color: #888;
+      color: #808080;
       font-size: 0.9em;
+    }
+
+    .detection-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .detection-card {
+      background: #252525;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid #333;
+    }
+
+    .detection-card strong {
+      color: #00bcd4;
+      font-weight: 600;
+    }
+
+    .detection-card p {
+      margin: 8px 0 0;
+      font-size: 0.9em;
+      color: #b0b0b0;
     }
 
     footer {
       text-align: center;
       margin-top: 50px;
       padding-top: 30px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      color: #666;
+      border-top: 1px solid #333;
+      color: #808080;
     }
 
     footer a {
-      color: #00d9ff;
+      color: #00bcd4;
       text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .footer-brand svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .footer-brand span {
+      font-weight: 600;
+      color: #e0e0e0;
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>FCaptcha</h1>
+    <div class="header">
+      <!-- WebDecoy Duck Logo -->
+      <svg class="logo" viewBox="0 0 564.908 720.999" xmlns="http://www.w3.org/2000/svg"><path fill="#ff2a6d" d="M165.851 719.954c-20.748-2.169-46.753-9.412-63.88-17.792l-10.275-5.027-4.556-9.769c-2.506-5.373-5.708-13.31-7.115-17.638l-2.558-7.87 2.229-10.13 2.23-10.131 5.627-5.75c6.667-6.811 7.037-6.88 9.914-1.841 5.494 9.621 22.86 27.841 24.743 25.959.236-.236-2.76-6.04-6.657-12.899-3.896-6.858-9.498-17.538-12.447-23.732l-5.362-11.264v-19.855l1.078-.666c1.825-1.128 39.797 38.194 72.553 75.133 14.353 16.186 4.522-5.05-12.986-28.052-11.583-15.218-64.667-77.933-78.306-92.515-9.064-9.69-28.458-45.398-32.766-60.326-2.484-8.61-6.557-33.033-6.567-39.387l-.005-3.195 5.643 2.584c3.104 1.421 7.544 2.798 9.867 3.06l4.223.476 1.086 5.135c.597 2.824 1.806 9.86 2.686 15.635l1.6 10.5 6.568 12.5c12.762 24.288 26.774 42.621 68.34 89.413 19.815 22.307 34.657 40.79 61.507 76.596 17.027 22.709 17.471 22.938 27.393 14.171 3.623-3.2 16.037-13.623 27.587-23.16 22.461-18.548 26.399-21.918 47.338-40.52 7.43-6.6 16.051-14.25 19.16-17 3.108-2.75 12.32-11.075 20.47-18.5l14.82-13.5 14.51-18 14.512-18 7.256-15c3.99-8.25 9.052-18.246 11.248-22.213l3.992-7.213 1.203-7.287c.661-4.008 2.299-12.639 3.64-19.18l2.436-11.893-1.12-43.107-1.12-43.107-5.878-23c-12.765-49.943-27.697-83.214-56.997-127l-10.706-16-13.402-13.5c-36.686-36.953-62.787-54.34-104.431-69.567l-17.594-6.433H166.37l-12.473 6.25-12.473 6.25-7.558 8.85c-18.644 21.834-24.805 31.333-34.146 52.65-5.417 12.36-16.808 46.401-17.184 51.353l-.293 3.854 19.464-.161 19.463-.16 5.537-3.349c3.045-1.841 7.69-4.388 10.321-5.659l4.786-2.311.54-2.534c1.96-9.177 7.041-24.349 11.579-34.57l5.31-11.963 21-21.347 21-21.347 7.816-3.752 7.816-3.752 20.957 10.382 20.956 10.382 17.728 11.883 17.727 11.883 9.204 9.334c5.061 5.133 10.461 11.203 12 13.487s8.362 10.16 15.165 17.5c25.692 27.721 48.33 69.721 56.687 105.17 2.195 9.31 2.209 9.294-5.69 6.628l-6.366-2.15-5.012.412-5.013.412-6.901 4.043-6.902 4.044-2.086 5.894-2.086 5.894-5.904 2.95c-3.247 1.622-7.522 3.003-9.5 3.068l-3.596.12-6.047 3.95c-3.326 2.172-8.613 4.821-11.75 5.887-6.768 2.301-7.323 3.417-1.453 2.919 2.338-.199 10.433-.64 17.99-.98l13.74-.618 4.475-3.417c4.835-3.692 8.77-8.898 12.884-17.043l2.607-5.163 3.63-1.198c6.26-2.067 20.367 2.066 28.67 8.4l3.517 2.681 1.654 8.722c.91 4.797 2.048 11.999 2.529 16.004l.875 7.283-1.022 3.717c-1.518 5.52-4.323 10.575-8.014 14.447l-3.285 3.445-7 2.6c-3.85 1.43-14.425 4.926-23.5 7.769-27.942 8.752-36.519 12.903-62 30.01-10.567 7.094-23.77 14.524-36.074 20.302l-9.426 4.426-22 .604-22 .604-28-9.045c-15.4-4.975-35.513-11.523-44.696-14.55l-16.697-5.506-8.303-.868c-4.567-.477-13.767-1.585-20.443-2.462l-12.14-1.595-7.92 2.502-7.921 2.502-2.364 2.516-2.365 2.517h45.349v3.877l-4.25.543c-8.95 1.144-27.36 2.412-29.75 2.05-10.275-1.556-16.955-2.78-19.628-3.593l-3.129-.952-1.704-4.463-1.705-4.464 1.399-4.25 1.398-4.248 14.435-3.644c7.939-2.004 19.204-4.153 25.034-4.776l10.6-1.132 8.9 2.062c12.914 2.992 30.091 8.486 44.4 14.201 16.804 6.712 44.684 16.97 54.842 20.179l8.261 2.61h33.506l18.024-5.854 18.024-5.854 7.922-5.328c8.044-5.411 16.487-11.586 26.421-19.324 32.506-25.32 35.48-27.09 55.543-33.048 13.249-3.935 14.407-4.718 15.105-10.205l.494-3.887-2.362-7-2.362-7-5.597-.297-5.597-.296-3.703 6.622c-4.27 7.634-4.187 7.996 1.48 6.47 8.087-2.177 5.232 3.34-4.191 8.097-10.517 5.309-45.718 28.655-77.405 51.337l-6.095 4.363-14.542 4.602-14.542 4.602h-41.623l-8.551-2.607c-11.462-3.494-34.606-12.824-50.552-20.378l-13-6.159-13.193-2.968c-7.256-1.633-16.447-4.075-20.425-5.428l-7.232-2.46H44.828l-11.792 6.048-11.792 6.048-4.584 7.702c-6.597 11.084-9.063 10.73-13.799-1.976L0 403.241l1.71-3.822c.94-2.102 2.516-6.297 3.5-9.322 2.834-8.704 9.437-13.14 30.38-20.409l10.348-3.591 12.653.008c16.178.01 21.5.9 44.653 7.478 10.45 2.968 23.05 6.487 28 7.818 4.95 1.332 13.275 4.575 18.5 7.206 14.42 7.262 46.254 21.49 48.08 21.49 5.752 0-20.486-17.514-39.744-26.528-19.937-9.332-30.065-13.117-50.586-18.906-6.946-1.96-7.034-2.388-1.135-5.517 5.225-2.772 15.915-10.692 18.811-13.937l1.926-2.158-6.972.648c-4.111.382-9.969.142-14.274-.584l-7.301-1.231-7.809-3.909-7.809-3.908-5.376-5.807c-2.957-3.194-7.161-9.15-9.343-13.235l-3.966-7.428-.731 16.755c-.403 9.215-1.078 19.565-1.501 23l-.77 6.245-6.885.299-6.885.299.634-4.799c.349-2.64 1.977-17.624 3.618-33.299s3.176-29.625 3.412-31-.385-6.325-1.379-11l-1.806-8.5-4.605-4.054-4.604-4.054V236.48l1.25-1.698 1.25-1.697 11.46-1.274 11.461-1.273 1.253-8.07c.688-4.439 3.02-15.675 5.18-24.97l3.927-16.9 15.63-31.5 15.629-31.5 16.631-16.663 16.632-16.663 4.599-1.26c2.529-.695 8.036-2.72 12.238-4.504l7.64-3.24 20.742-.981 20.742-.98 6.618 2.29c46.64 16.148 74.604 32.998 120.88 72.836 5.095 4.386 11.822 11.167 14.949 15.07 3.126 3.902 8.231 10.02 11.343 13.594 3.113 3.575 8.719 11 12.458 16.5s7.351 10.675 8.026 11.5c15.086 18.46 40.302 75.305 49.904 112.5l6.454 25 1.041 12.5c.573 6.875 1.743 19.025 2.601 27l1.56 14.5-1.607 19.5c-7.655 92.871-36.626 139.549-128.49 207.028-50.125 36.818-74 57.692-74 64.695 0 2.328 1.74 1.342 9.661-5.473 9.389-8.078 40.566-31.488 65.838-49.436 104.658-74.327 135.582-102.077 169.57-152.167l8.042-11.854-.306-2.146c-.577-4.047-3.221-2.14-8.116 5.853-9.087 14.838-48.24 53.761-61.035 60.675l-1.844.997.726-2.336c.399-1.285 2.208-5.296 4.02-8.914 11.935-23.828 18.472-45.308 23.56-77.422l3.17-20-.138-10c-.075-5.5-.604-20.575-1.174-33.5l-1.037-23.5-3.556-17.5c-10.625-52.284-22.52-83.94-48.161-128.164-5.463-9.423-9.854-16.453-23.22-37.177-5.657-8.769-54.092-54.057-70.153-65.594-33.466-24.04-70.155-41.303-98.12-46.17l-12.228-2.127-6 1.095c-3.3.603-8.137 1.381-10.75 1.73l-4.75.634v-1.009c0-2.035 24.857-16.179 40.235-22.895 54.127-23.637 94.149-34.824 144.265-40.323l10-1.097 16.5 5.048 16.5 5.048 19.381 9.75c27.995 14.084 27.403 13.277 66.737 91.071l9.262 18.32 9.478 28.68c25.373 76.787 42.306 134.011 52.279 176.684l4.673 19.996.427 27.713.427 27.713-2.661 9.287c-18.412 64.255-53.354 105.73-150.503 178.64-47.784 35.863-62.891 47.773-82.685 65.187-17.431 15.336-31.488 25.065-50.32 34.827l-15.495 8.033-12.798 4.115c-29.927 9.625-56.78 12.75-84.595 9.842"/></svg>
+
+      <h1>F***Captcha</h1>
+    </div>
     <p class="subtitle">Open source CAPTCHA for detecting bots, vision AI agents, and automation</p>
 
     <!-- Checkbox Mode Demo -->
@@ -309,7 +393,7 @@
           </div>
           <div class="form-group">
             <label>Message</label>
-            <textarea name="message" placeholder="Hello..." required style="width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: rgba(255,255,255,0.05); color: #fff; font-size: 1em; font-family: inherit; min-height: 80px; resize: vertical;"></textarea>
+            <textarea name="message" placeholder="Hello..." required></textarea>
           </div>
           <button type="submit">Submit (Protected by Invisible CAPTCHA)</button>
         </form>
@@ -439,38 +523,42 @@
       <h2>What It Detects</h2>
       <p>FCaptcha analyzes 40+ signals across multiple categories:</p>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
-        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <strong style="color: #00d9ff;">Vision AI Agents</strong>
-          <p style="margin: 10px 0 0; font-size: 0.9em;">GPT-4V, Claude, and other screenshot-based automation</p>
+      <div class="detection-grid">
+        <div class="detection-card">
+          <strong>Vision AI Agents</strong>
+          <p>GPT-4V, Claude, and other screenshot-based automation</p>
         </div>
-        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <strong style="color: #00d9ff;">Headless Browsers</strong>
-          <p style="margin: 10px 0 0; font-size: 0.9em;">Puppeteer, Playwright, Selenium, PhantomJS</p>
+        <div class="detection-card">
+          <strong>Headless Browsers</strong>
+          <p>Puppeteer, Playwright, Selenium, PhantomJS</p>
         </div>
-        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <strong style="color: #00d9ff;">Automation Frameworks</strong>
-          <p style="margin: 10px 0 0; font-size: 0.9em;">WebDriver, Cypress, Nightmare, custom bots</p>
+        <div class="detection-card">
+          <strong>Automation Frameworks</strong>
+          <p>WebDriver, Cypress, Nightmare, custom bots</p>
         </div>
-        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <strong style="color: #00d9ff;">CAPTCHA Farms</strong>
-          <p style="margin: 10px 0 0; font-size: 0.9em;">Unusual timing patterns from human solving services</p>
+        <div class="detection-card">
+          <strong>CAPTCHA Farms</strong>
+          <p>Unusual timing patterns from human solving services</p>
         </div>
-        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <strong style="color: #00d9ff;">Behavioral Anomalies</strong>
-          <p style="margin: 10px 0 0; font-size: 0.9em;">Scripted movements, inhuman timing, no micro-tremor</p>
+        <div class="detection-card">
+          <strong>Behavioral Anomalies</strong>
+          <p>Scripted movements, inhuman timing, no micro-tremor</p>
         </div>
-        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
-          <strong style="color: #00d9ff;">Fingerprint Abuse</strong>
-          <p style="margin: 10px 0 0; font-size: 0.9em;">Same fingerprint from many IPs, or many fingerprints from one IP</p>
+        <div class="detection-card">
+          <strong>Fingerprint Abuse</strong>
+          <p>Same fingerprint from many IPs, or many fingerprints from one IP</p>
         </div>
       </div>
     </div>
 
     <footer>
+      <div class="footer-brand">
+        <svg viewBox="0 0 564.908 720.999" xmlns="http://www.w3.org/2000/svg"><path fill="#ff2a6d" d="M165.851 719.954c-20.748-2.169-46.753-9.412-63.88-17.792l-10.275-5.027-4.556-9.769c-2.506-5.373-5.708-13.31-7.115-17.638l-2.558-7.87 2.229-10.13 2.23-10.131 5.627-5.75c6.667-6.811 7.037-6.88 9.914-1.841 5.494 9.621 22.86 27.841 24.743 25.959.236-.236-2.76-6.04-6.657-12.899-3.896-6.858-9.498-17.538-12.447-23.732l-5.362-11.264v-19.855l1.078-.666c1.825-1.128 39.797 38.194 72.553 75.133 14.353 16.186 4.522-5.05-12.986-28.052-11.583-15.218-64.667-77.933-78.306-92.515-9.064-9.69-28.458-45.398-32.766-60.326-2.484-8.61-6.557-33.033-6.567-39.387l-.005-3.195 5.643 2.584c3.104 1.421 7.544 2.798 9.867 3.06l4.223.476 1.086 5.135c.597 2.824 1.806 9.86 2.686 15.635l1.6 10.5 6.568 12.5c12.762 24.288 26.774 42.621 68.34 89.413 19.815 22.307 34.657 40.79 61.507 76.596 17.027 22.709 17.471 22.938 27.393 14.171 3.623-3.2 16.037-13.623 27.587-23.16 22.461-18.548 26.399-21.918 47.338-40.52 7.43-6.6 16.051-14.25 19.16-17 3.108-2.75 12.32-11.075 20.47-18.5l14.82-13.5 14.51-18 14.512-18 7.256-15c3.99-8.25 9.052-18.246 11.248-22.213l3.992-7.213 1.203-7.287c.661-4.008 2.299-12.639 3.64-19.18l2.436-11.893-1.12-43.107-1.12-43.107-5.878-23c-12.765-49.943-27.697-83.214-56.997-127l-10.706-16-13.402-13.5c-36.686-36.953-62.787-54.34-104.431-69.567l-17.594-6.433H166.37l-12.473 6.25-12.473 6.25-7.558 8.85c-18.644 21.834-24.805 31.333-34.146 52.65-5.417 12.36-16.808 46.401-17.184 51.353l-.293 3.854 19.464-.161 19.463-.16 5.537-3.349c3.045-1.841 7.69-4.388 10.321-5.659l4.786-2.311.54-2.534c1.96-9.177 7.041-24.349 11.579-34.57l5.31-11.963 21-21.347 21-21.347 7.816-3.752 7.816-3.752 20.957 10.382 20.956 10.382 17.728 11.883 17.727 11.883 9.204 9.334c5.061 5.133 10.461 11.203 12 13.487s8.362 10.16 15.165 17.5c25.692 27.721 48.33 69.721 56.687 105.17 2.195 9.31 2.209 9.294-5.69 6.628l-6.366-2.15-5.012.412-5.013.412-6.901 4.043-6.902 4.044-2.086 5.894-2.086 5.894-5.904 2.95c-3.247 1.622-7.522 3.003-9.5 3.068l-3.596.12-6.047 3.95c-3.326 2.172-8.613 4.821-11.75 5.887-6.768 2.301-7.323 3.417-1.453 2.919 2.338-.199 10.433-.64 17.99-.98l13.74-.618 4.475-3.417c4.835-3.692 8.77-8.898 12.884-17.043l2.607-5.163 3.63-1.198c6.26-2.067 20.367 2.066 28.67 8.4l3.517 2.681 1.654 8.722c.91 4.797 2.048 11.999 2.529 16.004l.875 7.283-1.022 3.717c-1.518 5.52-4.323 10.575-8.014 14.447l-3.285 3.445-7 2.6c-3.85 1.43-14.425 4.926-23.5 7.769-27.942 8.752-36.519 12.903-62 30.01-10.567 7.094-23.77 14.524-36.074 20.302l-9.426 4.426-22 .604-22 .604-28-9.045c-15.4-4.975-35.513-11.523-44.696-14.55l-16.697-5.506-8.303-.868c-4.567-.477-13.767-1.585-20.443-2.462l-12.14-1.595-7.92 2.502-7.921 2.502-2.364 2.516-2.365 2.517h45.349v3.877l-4.25.543c-8.95 1.144-27.36 2.412-29.75 2.05-10.275-1.556-16.955-2.78-19.628-3.593l-3.129-.952-1.704-4.463-1.705-4.464 1.399-4.25 1.398-4.248 14.435-3.644c7.939-2.004 19.204-4.153 25.034-4.776l10.6-1.132 8.9 2.062c12.914 2.992 30.091 8.486 44.4 14.201 16.804 6.712 44.684 16.97 54.842 20.179l8.261 2.61h33.506l18.024-5.854 18.024-5.854 7.922-5.328c8.044-5.411 16.487-11.586 26.421-19.324 32.506-25.32 35.48-27.09 55.543-33.048 13.249-3.935 14.407-4.718 15.105-10.205l.494-3.887-2.362-7-2.362-7-5.597-.297-5.597-.296-3.703 6.622c-4.27 7.634-4.187 7.996 1.48 6.47 8.087-2.177 5.232 3.34-4.191 8.097-10.517 5.309-45.718 28.655-77.405 51.337l-6.095 4.363-14.542 4.602-14.542 4.602h-41.623l-8.551-2.607c-11.462-3.494-34.606-12.824-50.552-20.378l-13-6.159-13.193-2.968c-7.256-1.633-16.447-4.075-20.425-5.428l-7.232-2.46H44.828l-11.792 6.048-11.792 6.048-4.584 7.702c-6.597 11.084-9.063 10.73-13.799-1.976L0 403.241l1.71-3.822c.94-2.102 2.516-6.297 3.5-9.322 2.834-8.704 9.437-13.14 30.38-20.409l10.348-3.591 12.653.008c16.178.01 21.5.9 44.653 7.478 10.45 2.968 23.05 6.487 28 7.818 4.95 1.332 13.275 4.575 18.5 7.206 14.42 7.262 46.254 21.49 48.08 21.49 5.752 0-20.486-17.514-39.744-26.528-19.937-9.332-30.065-13.117-50.586-18.906-6.946-1.96-7.034-2.388-1.135-5.517 5.225-2.772 15.915-10.692 18.811-13.937l1.926-2.158-6.972.648c-4.111.382-9.969.142-14.274-.584l-7.301-1.231-7.809-3.909-7.809-3.908-5.376-5.807c-2.957-3.194-7.161-9.15-9.343-13.235l-3.966-7.428-.731 16.755c-.403 9.215-1.078 19.565-1.501 23l-.77 6.245-6.885.299-6.885.299.634-4.799c.349-2.64 1.977-17.624 3.618-33.299s3.176-29.625 3.412-31-.385-6.325-1.379-11l-1.806-8.5-4.605-4.054-4.604-4.054V236.48l1.25-1.698 1.25-1.697 11.46-1.274 11.461-1.273 1.253-8.07c.688-4.439 3.02-15.675 5.18-24.97l3.927-16.9 15.63-31.5 15.629-31.5 16.631-16.663 16.632-16.663 4.599-1.26c2.529-.695 8.036-2.72 12.238-4.504l7.64-3.24 20.742-.981 20.742-.98 6.618 2.29c46.64 16.148 74.604 32.998 120.88 72.836 5.095 4.386 11.822 11.167 14.949 15.07 3.126 3.902 8.231 10.02 11.343 13.594 3.113 3.575 8.719 11 12.458 16.5s7.351 10.675 8.026 11.5c15.086 18.46 40.302 75.305 49.904 112.5l6.454 25 1.041 12.5c.573 6.875 1.743 19.025 2.601 27l1.56 14.5-1.607 19.5c-7.655 92.871-36.626 139.549-128.49 207.028-50.125 36.818-74 57.692-74 64.695 0 2.328 1.74 1.342 9.661-5.473 9.389-8.078 40.566-31.488 65.838-49.436 104.658-74.327 135.582-102.077 169.57-152.167l8.042-11.854-.306-2.146c-.577-4.047-3.221-2.14-8.116 5.853-9.087 14.838-48.24 53.761-61.035 60.675l-1.844.997.726-2.336c.399-1.285 2.208-5.296 4.02-8.914 11.935-23.828 18.472-45.308 23.56-77.422l3.17-20-.138-10c-.075-5.5-.604-20.575-1.174-33.5l-1.037-23.5-3.556-17.5c-10.625-52.284-22.52-83.94-48.161-128.164-5.463-9.423-9.854-16.453-23.22-37.177-5.657-8.769-54.092-54.057-70.153-65.594-33.466-24.04-70.155-41.303-98.12-46.17l-12.228-2.127-6 1.095c-3.3.603-8.137 1.381-10.75 1.73l-4.75.634v-1.009c0-2.035 24.857-16.179 40.235-22.895 54.127-23.637 94.149-34.824 144.265-40.323l10-1.097 16.5 5.048 16.5 5.048 19.381 9.75c27.995 14.084 27.403 13.277 66.737 91.071l9.262 18.32 9.478 28.68c25.373 76.787 42.306 134.011 52.279 176.684l4.673 19.996.427 27.713.427 27.713-2.661 9.287c-18.412 64.255-53.354 105.73-150.503 178.64-47.784 35.863-62.891 47.773-82.685 65.187-17.431 15.336-31.488 25.065-50.32 34.827l-15.495 8.033-12.798 4.115c-29.927 9.625-56.78 12.75-84.595 9.842"/></svg>
+        <span>WebDecoy</span>
+      </div>
       <p>
         MIT License &middot;
-        <a href="https://github.com/fcaptcha/fcaptcha">GitHub</a> &middot;
+        <a href="https://github.com/webdecoy/fcaptcha">GitHub</a> &middot;
         Self-hosted, open source, privacy-first
       </p>
     </footer>

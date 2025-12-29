@@ -7,6 +7,8 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python)
 ![Node](https://img.shields.io/badge/Node-20+-339933?logo=node.js)
 
+**[Try the Live Demo](https://webdecoy.com/product/fcaptcha-demo/)**
+
 FCaptcha is a modern CAPTCHA system designed to detect everything: traditional bots, headless browsers, automation frameworks, CAPTCHA farms, and the new generation of vision-based AI agents.
 
 ## Features

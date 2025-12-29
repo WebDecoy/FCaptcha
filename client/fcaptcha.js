@@ -1222,10 +1222,10 @@
         <div class="fcaptcha-widget ${isDark ? 'fcaptcha-dark' : ''}" id="${this.id}">
           <style>
             .fcaptcha-widget {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-              background: ${isDark ? '#1a1a2e' : '#fafafa'};
-              border: 1px solid ${isDark ? '#333' : '#d3d3d3'};
-              border-radius: 4px;
+              font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+              background: ${isDark ? '#1e1e1e' : '#fafafa'};
+              border: 1px solid ${isDark ? '#424242' : '#d3d3d3'};
+              border-radius: 6px;
               padding: 12px 16px;
               display: inline-flex;
               align-items: center;
@@ -1238,24 +1238,24 @@
               width: 24px;
               height: 24px;
               border: 2px solid ${isDark ? '#555' : '#c1c1c1'};
-              border-radius: 3px;
+              border-radius: 4px;
               cursor: pointer;
               display: flex;
               align-items: center;
               justify-content: center;
-              background: ${isDark ? '#2a2a3e' : '#fff'};
+              background: ${isDark ? '#252525' : '#fff'};
               transition: all 0.15s ease;
               flex-shrink: 0;
             }
-            .fcaptcha-checkbox:hover { border-color: ${isDark ? '#7c7cff' : '#4285f4'}; }
-            .fcaptcha-checkbox.loading { border-color: ${isDark ? '#7c7cff' : '#4285f4'}; }
-            .fcaptcha-checkbox.verified { background: #00c853; border-color: #00c853; }
-            .fcaptcha-checkbox.failed { background: #ea4335; border-color: #ea4335; }
+            .fcaptcha-checkbox:hover { border-color: #00bcd4; }
+            .fcaptcha-checkbox.loading { border-color: #00bcd4; }
+            .fcaptcha-checkbox.verified { background: #4caf50; border-color: #4caf50; }
+            .fcaptcha-checkbox.failed { background: #f44336; border-color: #f44336; }
             .fcaptcha-spinner {
               width: 16px;
               height: 16px;
               border: 2px solid ${isDark ? '#555' : '#e0e0e0'};
-              border-top-color: ${isDark ? '#7c7cff' : '#4285f4'};
+              border-top-color: #00bcd4;
               border-radius: 50%;
               animation: fcaptcha-spin 0.8s linear infinite;
             }
@@ -1268,10 +1268,8 @@
             .fcaptcha-branding {
               display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0;
             }
-            .fcaptcha-logo { font-size: 11px; font-weight: 600; color: ${isDark ? '#888' : '#666'}; letter-spacing: 0.5px; }
-            .fcaptcha-privacy { font-size: 9px; color: ${isDark ? '#666' : '#999'}; }
-            .fcaptcha-privacy a { color: inherit; text-decoration: none; }
-            .fcaptcha-privacy a:hover { text-decoration: underline; }
+            .fcaptcha-brand { font-size: 11px; font-weight: 600; color: #ff2a6d; letter-spacing: 0.5px; }
+            .fcaptcha-logo { font-size: 9px; font-weight: 500; color: ${isDark ? '#808080' : '#999'}; }
           </style>
           <div class="fcaptcha-checkbox" role="checkbox" aria-checked="false" tabindex="0">
             <div class="fcaptcha-spinner" style="display: none;"></div>
@@ -1280,11 +1278,8 @@
           </div>
           <span class="fcaptcha-label">I'm not a robot</span>
           <div class="fcaptcha-branding">
+            <span class="fcaptcha-brand">WebDecoy</span>
             <span class="fcaptcha-logo">FCaptcha</span>
-            <span class="fcaptcha-privacy">
-              <a href="#" onclick="return false;">Privacy</a> ·
-              <a href="#" onclick="return false;">Terms</a>
-            </span>
           </div>
         </div>
       `;
