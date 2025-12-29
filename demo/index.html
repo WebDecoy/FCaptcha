@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FCaptcha Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      margin: 0;
+      padding: 40px 20px;
+      color: #fff;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 2.5em;
+      margin-bottom: 10px;
+      background: linear-gradient(90deg, #00d9ff, #00ff88);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #888;
+      margin-bottom: 40px;
+      font-size: 1.1em;
+    }
+
+    .demo-section {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 30px;
+      margin-bottom: 30px;
+    }
+
+    .demo-section h2 {
+      color: #00d9ff;
+      margin-top: 0;
+      font-size: 1.4em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .demo-section h2 .badge {
+      background: rgba(0, 217, 255, 0.2);
+      color: #00d9ff;
+      font-size: 0.6em;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-weight: normal;
+    }
+
+    .demo-section p {
+      color: #aaa;
+      line-height: 1.6;
+    }
+
+    .captcha-container {
+      margin: 20px 0;
+    }
+
+    .form-demo {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 25px;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 5px;
+      color: #ccc;
+      font-size: 0.9em;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      font-size: 1em;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #00d9ff;
+    }
+
+    button[type="submit"] {
+      background: linear-gradient(90deg, #00d9ff, #00ff88);
+      border: none;
+      padding: 12px 30px;
+      border-radius: 6px;
+      color: #000;
+      font-weight: 600;
+      font-size: 1em;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: transform 0.2s;
+    }
+
+    button[type="submit"]:hover {
+      transform: translateY(-2px);
+    }
+
+    .result-box {
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 20px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.85em;
+      white-space: pre-wrap;
+      word-break: break-all;
+      display: none;
+    }
+
+    .result-box.visible {
+      display: block;
+    }
+
+    .result-box.success {
+      border-left: 4px solid #00ff88;
+    }
+
+    .result-box.error {
+      border-left: 4px solid #ff5252;
+    }
+
+    .code-block {
+      background: rgba(0, 0, 0, 0.4);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+
+    .code-block code {
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+      font-size: 0.9em;
+      color: #e0e0e0;
+    }
+
+    .code-block .comment {
+      color: #6a9955;
+    }
+
+    .code-block .keyword {
+      color: #569cd6;
+    }
+
+    .code-block .string {
+      color: #ce9178;
+    }
+
+    .code-block .function {
+      color: #dcdcaa;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .tab {
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      border-radius: 6px;
+      color: #888;
+      cursor: pointer;
+      font-size: 0.9em;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: rgba(0, 217, 255, 0.2);
+      color: #00d9ff;
+    }
+
+    .tab:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .score-display {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      margin-top: 15px;
+    }
+
+    .score-value {
+      font-size: 1.8em;
+      font-weight: bold;
+    }
+
+    .score-value.good {
+      color: #00ff88;
+    }
+
+    .score-value.medium {
+      color: #ffaa00;
+    }
+
+    .score-value.bad {
+      color: #ff5252;
+    }
+
+    .score-label {
+      color: #888;
+      font-size: 0.9em;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 50px;
+      padding-top: 30px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      color: #666;
+    }
+
+    footer a {
+      color: #00d9ff;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>FCaptcha</h1>
+    <p class="subtitle">Open source CAPTCHA for detecting bots, vision AI agents, and automation</p>
+
+    <!-- Checkbox Mode Demo -->
+    <div class="demo-section">
+      <h2>Checkbox Mode <span class="badge">Interactive</span></h2>
+      <p>
+        Classic "I'm not a robot" checkbox that analyzes mouse movements, click behavior,
+        and environmental signals. Just like Cloudflare Turnstile or reCAPTCHA v2.
+      </p>
+
+      <div class="captcha-container">
+        <div id="checkbox-captcha"></div>
+      </div>
+
+      <div id="checkbox-result" class="result-box"></div>
+
+      <div class="code-block">
+        <code><span class="comment">// HTML</span>
+&lt;div id="captcha"&gt;&lt;/div&gt;
+
+<span class="comment">// JavaScript</span>
+<span class="keyword">const</span> widgetId = <span class="function">FCaptcha.render</span>(<span class="string">'captcha'</span>, {
+  siteKey: <span class="string">'your-site-key'</span>,
+  theme: <span class="string">'dark'</span>,
+  callback: (token) => {
+    <span class="function">console.log</span>(<span class="string">'Verified!'</span>, token);
+  }
+});</code>
+      </div>
+    </div>
+
+    <!-- Invisible Mode Demo -->
+    <div class="demo-section">
+      <h2>Invisible Mode <span class="badge">Zero-Click</span></h2>
+      <p>
+        Like reCAPTCHA v3 - runs silently in the background, scoring user behavior without
+        any visible widget. Perfect for frictionless protection.
+      </p>
+
+      <div class="form-demo">
+        <form id="invisible-form">
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" placeholder="you@example.com" required>
+          </div>
+          <div class="form-group">
+            <label>Message</label>
+            <textarea name="message" placeholder="Hello..." required style="width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: rgba(255,255,255,0.05); color: #fff; font-size: 1em; font-family: inherit; min-height: 80px; resize: vertical;"></textarea>
+          </div>
+          <button type="submit">Submit (Protected by Invisible CAPTCHA)</button>
+        </form>
+
+        <div id="invisible-score" class="score-display" style="display: none;">
+          <div>
+            <div id="score-value" class="score-value">0.00</div>
+            <div class="score-label">Risk Score (lower = human)</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="invisible-result" class="result-box"></div>
+
+      <div class="code-block">
+        <code><span class="comment">// Initialize invisible protection on page load</span>
+<span class="keyword">const</span> session = <span class="function">FCaptcha.invisible</span>({
+  siteKey: <span class="string">'your-site-key'</span>,
+  autoScore: <span class="keyword">true</span>  <span class="comment">// Auto-protect all forms</span>
+});
+
+<span class="comment">// Or manually execute for specific actions</span>
+<span class="keyword">const</span> result = <span class="keyword">await</span> <span class="function">FCaptcha.execute</span>(<span class="string">'your-site-key'</span>, {
+  action: <span class="string">'login'</span>
+});
+
+<span class="keyword">if</span> (result.score &lt; 0.5) {
+  <span class="comment">// Likely human, proceed</span>
+}</code>
+      </div>
+    </div>
+
+    <!-- Server Verification -->
+    <div class="demo-section">
+      <h2>Server-Side Verification</h2>
+      <p>
+        Always verify tokens on your backend. Never trust client-side scores alone.
+      </p>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="go">Go</button>
+        <button class="tab" data-tab="node">Node.js</button>
+        <button class="tab" data-tab="python">Python</button>
+        <button class="tab" data-tab="curl">cURL</button>
+      </div>
+
+      <div id="tab-go" class="tab-content active">
+        <div class="code-block">
+          <code><span class="keyword">import</span> <span class="string">"net/http"</span>
+
+<span class="keyword">func</span> <span class="function">verifyHandler</span>(w http.ResponseWriter, r *http.Request) {
+    token := r.FormValue(<span class="string">"fcaptcha_token"</span>)
+
+    resp, _ := http.Post(
+        <span class="string">"https://your-server/api/token/verify"</span>,
+        <span class="string">"application/json"</span>,
+        strings.NewReader(fmt.Sprintf(
+            `{"token": "%s", "secret": "%s"}`,
+            token, os.Getenv(<span class="string">"FCAPTCHA_SECRET"</span>),
+        )),
+    )
+
+    <span class="keyword">var</span> result map[string]<span class="keyword">interface</span>{}
+    json.NewDecoder(resp.Body).Decode(&result)
+
+    <span class="keyword">if</span> result[<span class="string">"valid"</span>].(<span class="keyword">bool</span>) && result[<span class="string">"score"</span>].(float64) < 0.5 {
+        <span class="comment">// Request is valid</span>
+    }
+}</code>
+        </div>
+      </div>
+
+      <div id="tab-node" class="tab-content">
+        <div class="code-block">
+          <code><span class="keyword">const</span> <span class="function">verifyToken</span> = <span class="keyword">async</span> (token) => {
+  <span class="keyword">const</span> response = <span class="keyword">await</span> <span class="function">fetch</span>(<span class="string">'https://your-server/api/token/verify'</span>, {
+    method: <span class="string">'POST'</span>,
+    headers: { <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span> },
+    body: <span class="function">JSON.stringify</span>({
+      token: token,
+      secret: process.env.FCAPTCHA_SECRET
+    })
+  });
+
+  <span class="keyword">const</span> result = <span class="keyword">await</span> response.<span class="function">json</span>();
+
+  <span class="keyword">if</span> (result.valid && result.score < 0.5) {
+    <span class="comment">// Request is valid</span>
+  }
+};</code>
+        </div>
+      </div>
+
+      <div id="tab-python" class="tab-content">
+        <div class="code-block">
+          <code><span class="keyword">import</span> requests
+<span class="keyword">import</span> os
+
+<span class="keyword">def</span> <span class="function">verify_token</span>(token):
+    response = requests.<span class="function">post</span>(
+        <span class="string">'https://your-server/api/token/verify'</span>,
+        json={
+            <span class="string">'token'</span>: token,
+            <span class="string">'secret'</span>: os.environ[<span class="string">'FCAPTCHA_SECRET'</span>]
+        }
+    )
+
+    result = response.<span class="function">json</span>()
+
+    <span class="keyword">if</span> result[<span class="string">'valid'</span>] <span class="keyword">and</span> result[<span class="string">'score'</span>] < 0.5:
+        <span class="comment"># Request is valid</span>
+        <span class="keyword">return</span> <span class="keyword">True</span></code>
+        </div>
+      </div>
+
+      <div id="tab-curl" class="tab-content">
+        <div class="code-block">
+          <code>curl -X POST https://your-server/api/token/verify \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"token": "TOKEN_HERE", "secret": "YOUR_SECRET"}'</span></code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detection Capabilities -->
+    <div class="demo-section">
+      <h2>What It Detects</h2>
+      <p>FCaptcha analyzes 40+ signals across multiple categories:</p>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
+        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <strong style="color: #00d9ff;">Vision AI Agents</strong>
+          <p style="margin: 10px 0 0; font-size: 0.9em;">GPT-4V, Claude, and other screenshot-based automation</p>
+        </div>
+        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <strong style="color: #00d9ff;">Headless Browsers</strong>
+          <p style="margin: 10px 0 0; font-size: 0.9em;">Puppeteer, Playwright, Selenium, PhantomJS</p>
+        </div>
+        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <strong style="color: #00d9ff;">Automation Frameworks</strong>
+          <p style="margin: 10px 0 0; font-size: 0.9em;">WebDriver, Cypress, Nightmare, custom bots</p>
+        </div>
+        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <strong style="color: #00d9ff;">CAPTCHA Farms</strong>
+          <p style="margin: 10px 0 0; font-size: 0.9em;">Unusual timing patterns from human solving services</p>
+        </div>
+        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <strong style="color: #00d9ff;">Behavioral Anomalies</strong>
+          <p style="margin: 10px 0 0; font-size: 0.9em;">Scripted movements, inhuman timing, no micro-tremor</p>
+        </div>
+        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
+          <strong style="color: #00d9ff;">Fingerprint Abuse</strong>
+          <p style="margin: 10px 0 0; font-size: 0.9em;">Same fingerprint from many IPs, or many fingerprints from one IP</p>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <p>
+        MIT License &middot;
+        <a href="https://github.com/fcaptcha/fcaptcha">GitHub</a> &middot;
+        Self-hosted, open source, privacy-first
+      </p>
+    </footer>
+  </div>
+
+  <!-- Load FCaptcha -->
+  <script src="../client/fcaptcha.js"></script>
+
+  <script>
+    // Configure FCaptcha to use local server
+    FCaptcha.serverUrl = 'http://localhost:3000';
+
+    // Demo: Checkbox Mode
+    const checkboxResult = document.getElementById('checkbox-result');
+
+    FCaptcha.render('checkbox-captcha', {
+      siteKey: 'demo-site-key',
+      theme: 'dark',
+      callback: (token) => {
+        checkboxResult.classList.add('visible', 'success');
+        checkboxResult.classList.remove('error');
+        checkboxResult.textContent = 'Verified!\n\nToken: ' + token.substring(0, 50) + '...';
+      },
+      errorCallback: (error) => {
+        checkboxResult.classList.add('visible', 'error');
+        checkboxResult.classList.remove('success');
+        checkboxResult.textContent = 'Verification failed: ' + error;
+      }
+    });
+
+    // Demo: Invisible Mode
+    const invisibleSession = FCaptcha.invisible({
+      siteKey: 'demo-site-key',
+      autoScore: false  // We'll handle form submission manually for demo
+    });
+
+    const invisibleForm = document.getElementById('invisible-form');
+    const invisibleResult = document.getElementById('invisible-result');
+    const scoreDisplay = document.getElementById('invisible-score');
+    const scoreValue = document.getElementById('score-value');
+
+    invisibleForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      invisibleResult.textContent = 'Analyzing behavior...';
+      invisibleResult.classList.add('visible');
+      invisibleResult.classList.remove('success', 'error');
+
+      const result = await invisibleSession.execute('form_submit');
+
+      // Show score
+      scoreDisplay.style.display = 'block';
+      scoreValue.textContent = result.score.toFixed(2);
+      scoreValue.className = 'score-value ' + (
+        result.score < 0.3 ? 'good' :
+        result.score < 0.6 ? 'medium' : 'bad'
+      );
+
+      if (result.success) {
+        invisibleResult.classList.add('success');
+        invisibleResult.textContent = 'Form submission allowed!\n\n' + JSON.stringify(result, null, 2);
+      } else {
+        invisibleResult.classList.add('error');
+        invisibleResult.textContent = 'Bot detected - form blocked\n\n' + JSON.stringify(result, null, 2);
+      }
+    });
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+        tab.classList.add('active');
+        document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
