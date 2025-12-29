@@ -1,4 +1,4 @@
-# FCaptcha
+# F***Captcha
 
 **Open source CAPTCHA that blocks bots, vision AI agents, and automation - with a single click or less.**
 
