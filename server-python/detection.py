@@ -417,3 +417,53 @@ def analyze_form_interaction(form_analysis: Optional[Dict]) -> List[Dict]:
                 })
 
     return detections
+
+
+# =============================================================================
+# CDP Detection
+# =============================================================================
+
+def detect_cdp(signals: Dict) -> List[Dict]:
+    """Detect Chrome DevTools Protocol (CDP) automation artifacts."""
+    detections = []
+    env = signals.get("environmental", {})
+    cdp = env.get("cdp", {})
+
+    if not cdp.get("detected"):
+        return detections
+
+    signal_list = cdp.get("signals", [])
+    signal_count = len(signal_list)
+
+    if signal_count == 0:
+        return detections
+
+    # High-confidence signals
+    high_conf_signals = ['chromedriver_cdc', 'puppeteer_eval', 'cdp_script_injection']
+    has_high_conf = any(s in high_conf_signals for s in signal_list)
+
+    signals_joined = ', '.join(signal_list)
+
+    if has_high_conf:
+        detections.append({
+            "category": "cdp",
+            "score": 0.9,
+            "confidence": 0.95,
+            "reason": f"CDP automation detected: {signals_joined}"
+        })
+    elif signal_count >= 2:
+        detections.append({
+            "category": "cdp",
+            "score": 0.8,
+            "confidence": 0.85,
+            "reason": f"Multiple CDP indicators: {signals_joined}"
+        })
+    else:
+        detections.append({
+            "category": "cdp",
+            "score": 0.6,
+            "confidence": 0.7,
+            "reason": f"CDP indicator: {signals_joined}"
+        })
+
+    return detections

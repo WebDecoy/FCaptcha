@@ -658,6 +658,7 @@
         // Comprehensive automation detection
         webdriver: this._detectWebdriver(),
         automationFlags: this._getAutomationFlags(),
+        cdp: this._detectCDP(),
 
         // Browser fingerprints
         canvasHash: this._getCanvasHash(),
@@ -741,6 +742,56 @@
         // Permissions API
         permissionsAPI: !!navigator.permissions
       };
+    }
+
+    _detectCDP() {
+      try {
+        const signals = [];
+
+        // ChromeDriver injects cdc_ prefixed properties (ChromeDriver Canary Detection)
+        // These are randomly named but always start with cdc_
+        const cdcKeys = Object.keys(window).filter(k => k.startsWith('cdc_'));
+        if (cdcKeys.length > 0) {
+          signals.push('chromedriver_cdc');
+        }
+
+        // Selenium WebDriver specific properties
+        if ('__webdriver_evaluate' in window) signals.push('selenium_evaluate');
+        if ('__driver_evaluate' in window) signals.push('selenium_driver_evaluate');
+        if ('__webdriver_unwrapped' in window) signals.push('selenium_unwrapped');
+        if ('__driver_unwrapped' in window) signals.push('selenium_driver_unwrapped');
+        if ('__selenium_evaluate' in window) signals.push('selenium_direct');
+        if ('__fxdriver_evaluate' in window) signals.push('firefox_driver');
+        if ('__fxdriver_unwrapped' in window) signals.push('firefox_driver_unwrapped');
+
+        // Puppeteer-specific CDP artifacts
+        if ('__puppeteer_evaluation_script__' in window) signals.push('puppeteer_eval');
+
+        // Check for CDP Runtime.evaluate artifacts
+        // These appear when scripts are injected via CDP
+        if (document.__webdriver_script_fn) signals.push('cdp_script_injection');
+
+        // Check for modified navigator.webdriver getter
+        // Some tools try to hide webdriver but leave traces
+        try {
+          const descriptor = Object.getOwnPropertyDescriptor(navigator, 'webdriver');
+          if (descriptor && typeof descriptor.get === 'function') {
+            const getterStr = descriptor.get.toString();
+            if (getterStr.indexOf('[native code]') === -1) {
+              signals.push('webdriver_getter_modified');
+            }
+          }
+        } catch (e) {
+          // Skip if can't access descriptor
+        }
+
+        return {
+          detected: signals.length > 0,
+          signals: signals
+        };
+      } catch (e) {
+        return { detected: false, signals: [] };
+      }
     }
 
     _getCanvasHash() {

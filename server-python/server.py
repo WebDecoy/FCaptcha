@@ -65,6 +65,7 @@ class ThreatCategory(str, Enum):
     VISION_AI = "vision_ai"
     HEADLESS = "headless"
     AUTOMATION = "automation"
+    CDP = "cdp"
     BOT = "bot"
     CAPTCHA_FARM = "captcha_farm"
     BEHAVIORAL = "behavioral"
@@ -251,12 +252,14 @@ AUTOMATION_UA_PATTERNS = [
 ]
 
 WEIGHTS = {
-    ThreatCategory.VISION_AI: 0.20,
-    ThreatCategory.HEADLESS: 0.20,
-    ThreatCategory.AUTOMATION: 0.15,
-    ThreatCategory.BEHAVIORAL: 0.25,
+    ThreatCategory.VISION_AI: 0.15,
+    ThreatCategory.HEADLESS: 0.15,
+    ThreatCategory.AUTOMATION: 0.10,
+    ThreatCategory.CDP: 0.12,
+    ThreatCategory.BEHAVIORAL: 0.18,
     ThreatCategory.FINGERPRINT: 0.10,
     ThreatCategory.RATE_LIMIT: 0.10,
+    ThreatCategory.BOT: 0.10,
 }
 
 
@@ -437,6 +440,46 @@ def detect_automation(signals: Dict) -> List[Detection]:
         detections.append(Detection(
             ThreatCategory.AUTOMATION, 0.6, 0.6,
             "Mouse event timing unnaturally consistent"
+        ))
+
+    return detections
+
+
+def detect_cdp(signals: Dict) -> List[Detection]:
+    """Detect Chrome DevTools Protocol (CDP) automation artifacts."""
+    detections = []
+    env = signals.get("environmental", {})
+    cdp = env.get("cdp", {})
+
+    if not cdp.get("detected"):
+        return detections
+
+    signal_list = cdp.get("signals", [])
+    signal_count = len(signal_list)
+
+    if signal_count == 0:
+        return detections
+
+    # High-confidence signals
+    high_conf_signals = ['chromedriver_cdc', 'puppeteer_eval', 'cdp_script_injection']
+    has_high_conf = any(s in high_conf_signals for s in signal_list)
+
+    signals_joined = ', '.join(signal_list)
+
+    if has_high_conf:
+        detections.append(Detection(
+            ThreatCategory.CDP, 0.9, 0.95,
+            f"CDP automation detected: {signals_joined}"
+        ))
+    elif signal_count >= 2:
+        detections.append(Detection(
+            ThreatCategory.CDP, 0.8, 0.85,
+            f"Multiple CDP indicators: {signals_joined}"
+        ))
+    else:
+        detections.append(Detection(
+            ThreatCategory.CDP, 0.6, 0.7,
+            f"CDP indicator: {signals_joined}"
         ))
 
     return detections
@@ -692,6 +735,7 @@ def run_verification(
     detections.extend(detect_vision_ai(signals))
     detections.extend(detect_headless(signals, user_agent))
     detections.extend(detect_automation(signals))
+    detections.extend(detect_cdp(signals))
     detections.extend(detect_behavioral(signals))
     detections.extend(detect_fingerprint(signals, ip, site_key))
     detections.extend(detect_rate_abuse(ip, site_key))

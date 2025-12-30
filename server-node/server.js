@@ -187,7 +187,8 @@ const WEIGHTS = {
   vision_ai: 0.15,
   headless: 0.15,
   automation: 0.10,
-  behavioral: 0.20,
+  cdp: 0.12,
+  behavioral: 0.18,
   fingerprint: 0.10,
   rate_limit: 0.05,
   datacenter: 0.10,
@@ -378,6 +379,46 @@ function detectAutomation(signals) {
       category: 'automation', score: 0.6, confidence: 0.6,
       reason: 'Mouse event timing unnaturally consistent'
     });
+  }
+
+  return detections;
+}
+
+function detectCDP(signals) {
+  const detections = [];
+  const env = signals.environmental || {};
+  const cdp = env.cdp || {};
+
+  if (cdp.detected) {
+    const signalList = cdp.signals || [];
+    const signalCount = signalList.length;
+
+    // High-confidence signals
+    const highConfSignals = ['chromedriver_cdc', 'puppeteer_eval', 'cdp_script_injection'];
+    const hasHighConf = signalList.some(s => highConfSignals.includes(s));
+
+    if (hasHighConf) {
+      detections.push({
+        category: 'cdp',
+        score: 0.9,
+        confidence: 0.95,
+        reason: `CDP automation detected: ${signalList.join(', ')}`
+      });
+    } else if (signalCount >= 2) {
+      detections.push({
+        category: 'cdp',
+        score: 0.8,
+        confidence: 0.85,
+        reason: `Multiple CDP indicators: ${signalList.join(', ')}`
+      });
+    } else if (signalCount === 1) {
+      detections.push({
+        category: 'cdp',
+        score: 0.6,
+        confidence: 0.7,
+        reason: `CDP indicator: ${signalList.join(', ')}`
+      });
+    }
   }
 
   return detections;
@@ -626,6 +667,7 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
     ...detectVisionAI(signals),
     ...detectHeadless(signals, userAgent),
     ...detectAutomation(signals),
+    ...detectCDP(signals),
     ...detectBehavioral(signals),
     ...detectFingerprint(signals, ip, siteKey),
     ...detectRateAbuse(ip, siteKey)

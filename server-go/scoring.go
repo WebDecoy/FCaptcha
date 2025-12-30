@@ -22,6 +22,7 @@ const (
 	CategoryVisionAI    ThreatCategory = "vision_ai"
 	CategoryHeadless    ThreatCategory = "headless"
 	CategoryAutomation  ThreatCategory = "automation"
+	CategoryCDP         ThreatCategory = "cdp"
 	CategoryBot         ThreatCategory = "bot"
 	CategoryCaptchaFarm ThreatCategory = "captcha_farm"
 	CategoryBehavioral  ThreatCategory = "behavioral"
@@ -165,7 +166,8 @@ func NewScoringEngine(secretKey string) *ScoringEngine {
 			CategoryVisionAI:    0.15,
 			CategoryHeadless:    0.15,
 			CategoryAutomation:  0.10,
-			CategoryBehavioral:  0.20,
+			CategoryCDP:         0.12,
+			CategoryBehavioral:  0.18,
 			CategoryFingerprint: 0.10,
 			CategoryRateLimit:   0.05,
 			CategoryDatacenter:  0.10,
@@ -227,6 +229,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	detections = append(detections, e.detectVisionAI(signals)...)
 	detections = append(detections, e.detectHeadless(signals, userAgent)...)
 	detections = append(detections, e.detectAutomation(signals)...)
+	detections = append(detections, e.detectCDP(signals)...)
 	detections = append(detections, e.detectBehavioral(signals)...)
 	detections = append(detections, e.detectFingerprint(signals, ip, siteKey)...)
 	detections = append(detections, e.detectRateAbuse(ip, siteKey)...)
@@ -717,6 +720,82 @@ func (e *ScoringEngine) detectAutomation(signals map[string]interface{}) []Detec
 			Confidence: 0.6,
 			Reason:     "Mouse event timing unnaturally consistent",
 			Details:    map[string]interface{}{"eventDeltaVariance": eventVariance},
+		})
+	}
+
+	return results
+}
+
+func (e *ScoringEngine) detectCDP(signals map[string]interface{}) []DetectionResult {
+	results := make([]DetectionResult, 0)
+
+	env := getMap(signals, "environmental")
+	cdp := getMap(env, "cdp")
+
+	detected := getBool(cdp, "detected")
+	if !detected {
+		return results
+	}
+
+	signalsInterface := cdp["signals"]
+	signalList, ok := signalsInterface.([]interface{})
+	if !ok {
+		return results
+	}
+
+	// Convert to string slice
+	var signals_strs []string
+	for _, s := range signalList {
+		if str, ok := s.(string); ok {
+			signals_strs = append(signals_strs, str)
+		}
+	}
+
+	signalCount := len(signals_strs)
+	if signalCount == 0 {
+		return results
+	}
+
+	// High-confidence signals
+	highConfSignals := map[string]bool{
+		"chromedriver_cdc":   true,
+		"puppeteer_eval":     true,
+		"cdp_script_injection": true,
+	}
+
+	hasHighConf := false
+	for _, s := range signals_strs {
+		if highConfSignals[s] {
+			hasHighConf = true
+			break
+		}
+	}
+
+	signalsJoined := strings.Join(signals_strs, ", ")
+
+	if hasHighConf {
+		results = append(results, DetectionResult{
+			Category:   CategoryCDP,
+			Score:      0.9,
+			Confidence: 0.95,
+			Reason:     "CDP automation detected: " + signalsJoined,
+			Details:    map[string]interface{}{"signals": signals_strs},
+		})
+	} else if signalCount >= 2 {
+		results = append(results, DetectionResult{
+			Category:   CategoryCDP,
+			Score:      0.8,
+			Confidence: 0.85,
+			Reason:     "Multiple CDP indicators: " + signalsJoined,
+			Details:    map[string]interface{}{"signals": signals_strs},
+		})
+	} else {
+		results = append(results, DetectionResult{
+			Category:   CategoryCDP,
+			Score:      0.6,
+			Confidence: 0.7,
+			Reason:     "CDP indicator: " + signalsJoined,
+			Details:    map[string]interface{}{"signals": signals_strs},
 		})
 	}
 
