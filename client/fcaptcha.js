@@ -83,14 +83,14 @@
       };
     }
 
-    recordMouseUp(e) {
+    recordMouseUp(_e) {
       if (this.clickData) {
         this.clickData.upTime = performance.now();
         this.clickData.holdDuration = this.clickData.upTime - this.clickData.downTime;
       }
     }
 
-    recordScroll(e) {
+    recordScroll(_e) {
       this.scrollEvents.push({
         x: window.scrollX,
         y: window.scrollY,
@@ -504,7 +504,7 @@
       };
     }
 
-    _recordProgrammaticSubmit(form) {
+    _recordProgrammaticSubmit(_form) {
       const now = performance.now();
       this.submitData = {
         method: 'programmatic', // form.submit() called directly
@@ -517,7 +517,7 @@
       };
     }
 
-    _recordSubmit(e) {
+    _recordSubmit(_e) {
       const now = performance.now();
 
       // Check what triggered the submit
@@ -929,6 +929,7 @@
       const arr = [];
       for (let i = 0; i < 1000; i++) arr.push(i);
       results.arrayOps = performance.now() - start;
+      results.arrayLen = arr.length; // Ensure array is "used" to prevent optimization
 
       start = performance.now();
       let str = '';
@@ -1042,7 +1043,10 @@
 
       try {
         const response = await fetch(`${serverUrl}/api/pow/challenge?siteKey=${encodeURIComponent(siteKey || 'default')}`);
-        if (!response.ok) throw new Error('Challenge fetch failed');
+        if (!response.ok) {
+          console.warn('PoW challenge fetch failed (status ' + response.status + '), using local challenge');
+          return this._generateLocalChallenge();
+        }
         this.challenge = await response.json();
         return this.challenge;
       } catch (e) {

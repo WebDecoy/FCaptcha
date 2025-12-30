@@ -42,12 +42,10 @@ const powChallengeStore = {
     };
 
     // Sign the challenge
-    const sig = crypto.createHmac('sha256', SECRET_KEY)
+    challengeData.sig = crypto.createHmac('sha256', SECRET_KEY)
       .update(JSON.stringify(challengeData))
       .digest('hex')
       .slice(0, 16);
-
-    challengeData.sig = sig;
 
     // Store challenge
     this.challenges.set(challengeId, {
@@ -626,8 +624,7 @@ function generateToken(ip, siteKey, score) {
   };
 
   const payload = JSON.stringify(data, Object.keys(data).sort());
-  const sig = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex').slice(0, 16);
-  data.sig = sig;
+  data.sig = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex').slice(0, 16);
 
   return Buffer.from(JSON.stringify(data)).toString('base64url');
 }
