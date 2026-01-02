@@ -132,6 +132,7 @@ type ScoringEngine struct {
 	rateLimiter      *RateLimiter
 	fingerprintStore *FingerprintStore
 	powStore         *PoWChallengeStore
+	tokenStore       *TokenStore
 	weights          map[ThreatCategory]float64
 	uaPatterns       []*regexp.Regexp
 }
@@ -155,6 +156,48 @@ type FingerprintData struct {
 	IPs       map[string]bool
 }
 
+// TokenStore prevents token replay attacks
+type TokenStore struct {
+	mu         sync.RWMutex
+	usedTokens map[string]int64 // sig -> timestamp when used
+}
+
+func newTokenStore() *TokenStore {
+	return &TokenStore{
+		usedTokens: make(map[string]int64),
+	}
+}
+
+func (t *TokenStore) IsUsed(sig string) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	_, exists := t.usedTokens[sig]
+	return exists
+}
+
+func (t *TokenStore) MarkUsed(sig string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if _, exists := t.usedTokens[sig]; exists {
+		return false // Already used
+	}
+
+	t.usedTokens[sig] = time.Now().Unix()
+
+	// Cleanup old tokens (older than 10 min) periodically
+	if len(t.usedTokens) > 1000 && len(t.usedTokens)%100 == 0 {
+		cutoff := time.Now().Unix() - 600
+		for s, ts := range t.usedTokens {
+			if ts < cutoff {
+				delete(t.usedTokens, s)
+			}
+		}
+	}
+
+	return true
+}
+
 // NewScoringEngine creates a new engine
 func NewScoringEngine(secretKey string) *ScoringEngine {
 	return &ScoringEngine{
@@ -162,6 +205,7 @@ func NewScoringEngine(secretKey string) *ScoringEngine {
 		rateLimiter:      newRateLimiter(),
 		fingerprintStore: newFingerprintStore(),
 		powStore:         newPoWChallengeStore(),
+		tokenStore:       newTokenStore(),
 		weights: map[ThreatCategory]float64{
 			CategoryVisionAI:    0.15,
 			CategoryHeadless:    0.15,
@@ -428,7 +472,13 @@ func min(a, b int) int {
 }
 
 // VerifyToken verifies a previously issued token
+// Pass ip to verify the token was issued to the same IP (prevents token theft)
 func (e *ScoringEngine) VerifyToken(token string) map[string]interface{} {
+	return e.VerifyTokenWithIP(token, "")
+}
+
+// VerifyTokenWithIP verifies a token and optionally checks IP binding
+func (e *ScoringEngine) VerifyTokenWithIP(token, ip string) map[string]interface{} {
 	result := make(map[string]interface{})
 
 	decoded, err := base64.URLEncoding.DecodeString(token)
@@ -471,10 +521,33 @@ func (e *ScoringEngine) VerifyToken(token string) map[string]interface{} {
 		return result
 	}
 
+	// Check for token replay (single-use tokens)
+	if e.tokenStore.IsUsed(sig) {
+		result["valid"] = false
+		result["reason"] = "token_already_used"
+		return result
+	}
+
+	// Verify IP matches (if provided)
+	if ip != "" {
+		ipHash, _ := data["ip_hash"].(string)
+		h := sha256.Sum256([]byte(ip))
+		expectedIPHash := hex.EncodeToString(h[:])[:8]
+		if ipHash != expectedIPHash {
+			result["valid"] = false
+			result["reason"] = "ip_mismatch"
+			return result
+		}
+	}
+
+	// Mark token as used (prevents replay)
+	e.tokenStore.MarkUsed(sig)
+
 	result["valid"] = true
 	result["site_key"] = data["site_key"]
 	result["timestamp"] = data["timestamp"]
 	result["score"] = data["score"]
+	result["ip_hash"] = data["ip_hash"]
 	return result
 }
 

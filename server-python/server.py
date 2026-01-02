@@ -239,9 +239,31 @@ class PoWChallengeStore:
             self.used_solutions.clear()
 
 
+class TokenStore:
+    """Prevents token replay attacks by tracking used tokens."""
+    def __init__(self):
+        self.used_tokens: Dict[str, float] = {}  # sig -> timestamp when used
+
+    def is_used(self, sig: str) -> bool:
+        return sig in self.used_tokens
+
+    def mark_used(self, sig: str) -> bool:
+        if sig in self.used_tokens:
+            return False  # Already used
+        self.used_tokens[sig] = time.time()
+
+        # Cleanup old tokens periodically (tokens expire in 5 min anyway)
+        if len(self.used_tokens) > 1000 and len(self.used_tokens) % 100 == 0:
+            cutoff = time.time() - 600  # 10 minutes
+            self.used_tokens = {s: t for s, t in self.used_tokens.items() if t > cutoff}
+
+        return True
+
+
 rate_limiter = RateLimiter()
 fingerprint_store = FingerprintStore()
 pow_store = PoWChallengeStore()
+token_store = TokenStore()
 
 AUTOMATION_UA_PATTERNS = [
     re.compile(p, re.I) for p in [
@@ -674,7 +696,7 @@ def generate_token(ip: str, site_key: str, score: float) -> str:
     return base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
 
 
-def verify_token(token: str) -> Dict:
+def verify_token(token: str, ip: str = None) -> Dict:
     try:
         decoded = json.loads(base64.urlsafe_b64decode(token).decode())
 
@@ -683,17 +705,32 @@ def verify_token(token: str) -> Dict:
             return {"valid": False, "reason": "expired"}
 
         sig = decoded.pop("sig", "")
+        ip_hash = decoded.get("ip_hash", "")
         payload = json.dumps(decoded, sort_keys=True)
         expected_sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
 
         if not hmac.compare_digest(sig, expected_sig):
             return {"valid": False, "reason": "invalid_signature"}
 
+        # Check for token replay (single-use tokens)
+        if token_store.is_used(sig):
+            return {"valid": False, "reason": "token_already_used"}
+
+        # Verify IP matches (if provided)
+        if ip:
+            expected_ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:8]
+            if ip_hash != expected_ip_hash:
+                return {"valid": False, "reason": "ip_mismatch"}
+
+        # Mark token as used (prevents replay)
+        token_store.mark_used(sig)
+
         return {
             "valid": True,
             "site_key": decoded.get("site_key"),
             "timestamp": decoded.get("timestamp"),
-            "score": decoded.get("score")
+            "score": decoded.get("score"),
+            "ip_hash": ip_hash
         }
     except Exception as e:
         return {"valid": False, "reason": str(e)}
@@ -846,8 +883,10 @@ async def score(req: ScoreRequest, request: Request):
 
 
 @app.post("/api/token/verify")
-async def token_verify(req: TokenVerifyRequest):
-    return verify_token(req.token)
+async def token_verify(req: TokenVerifyRequest, request: Request):
+    # Extract client IP for verification
+    ip = request.headers.get("X-Real-IP") or request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.client.host
+    return verify_token(req.token, ip)
 
 
 @app.get("/api/pow/challenge")

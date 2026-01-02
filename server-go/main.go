@@ -231,7 +231,16 @@ func tokenVerifyHandler(engine *ScoringEngine) http.HandlerFunc {
 			return
 		}
 
-		result := engine.VerifyToken(req.Token)
+		// Extract client IP for verification
+		ip := r.RemoteAddr
+		if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+			ip = realIP
+		} else if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
+			parts := strings.Split(forwardedFor, ",")
+			ip = strings.TrimSpace(parts[0])
+		}
+
+		result := engine.VerifyTokenWithIP(req.Token, ip)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)

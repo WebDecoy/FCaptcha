@@ -171,6 +171,35 @@ const fingerprintStore = {
   }
 };
 
+// Token Store - prevents token replay attacks
+const tokenStore = {
+  usedTokens: new Set(),
+
+  // Mark a token as used (returns false if already used)
+  markUsed(tokenSig) {
+    if (this.usedTokens.has(tokenSig)) {
+      return false; // Already used
+    }
+    this.usedTokens.add(tokenSig);
+
+    // Cleanup old tokens periodically (tokens expire after 5 min anyway)
+    if (Math.random() < 0.1) this._cleanup();
+    return true;
+  },
+
+  isUsed(tokenSig) {
+    return this.usedTokens.has(tokenSig);
+  },
+
+  _cleanup() {
+    // In production with Redis, use TTL instead
+    // For in-memory, just clear if too large (tokens expire in 5 min)
+    if (this.usedTokens.size > 50000) {
+      this.usedTokens.clear();
+    }
+  }
+};
+
 // =============================================================================
 // Detection Patterns
 // =============================================================================
@@ -629,7 +658,7 @@ function generateToken(ip, siteKey, score) {
   return Buffer.from(JSON.stringify(data)).toString('base64url');
 }
 
-function verifyToken(token) {
+function verifyToken(token, ip = null) {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64url').toString());
 
@@ -648,11 +677,28 @@ function verifyToken(token) {
       return { valid: false, reason: 'invalid_signature' };
     }
 
+    // Check for token replay (single-use tokens)
+    if (tokenStore.isUsed(sig)) {
+      return { valid: false, reason: 'token_already_used' };
+    }
+
+    // Verify IP matches (if provided)
+    if (ip) {
+      const expectedIpHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8);
+      if (decoded.ip_hash !== expectedIpHash) {
+        return { valid: false, reason: 'ip_mismatch' };
+      }
+    }
+
+    // Mark token as used (prevents replay)
+    tokenStore.markUsed(sig);
+
     return {
       valid: true,
       site_key: decoded.site_key,
       timestamp: decoded.timestamp,
-      score: decoded.score
+      score: decoded.score,
+      ip_hash: decoded.ip_hash
     };
   } catch (e) {
     return { valid: false, reason: e.message };
@@ -816,7 +862,19 @@ app.post('/api/score', (req, res) => {
 
 app.post('/api/token/verify', (req, res) => {
   const { token } = req.body;
-  res.json(verifyToken(token));
+
+  // Extract client IP for verification
+  let ip = req.headers['x-real-ip'] || '';
+  if (!ip) {
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      ip = forwarded.split(',')[0].trim();
+    } else {
+      ip = req.socket.remoteAddress;
+    }
+  }
+
+  res.json(verifyToken(token, ip));
 });
 
 // PoW Challenge endpoint - client fetches this on page load
