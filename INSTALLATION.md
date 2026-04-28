@@ -147,7 +147,13 @@ gunicorn server:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:3000
 ```bash
 curl http://localhost:3000/health
 # {"status":"ok"}
+
+# The browser widget is served from the same origin by default:
+curl -I http://localhost:3000/fcaptcha.js
+# HTTP/1.1 200 OK
 ```
+
+By default, `server-python` serves `client/fcaptcha.js` at `/fcaptcha.js` so integrators that expose a single `serverUrl` to their clients (and load the widget from `<serverUrl>/fcaptcha.js`) work out of the box. Set `FCAPTCHA_SERVE_CLIENT=false` to opt out (e.g. when hosting the widget on a CDN), or `FCAPTCHA_CLIENT_PATH=/abs/path/to/fcaptcha.js` to override the default lookup when `server-python/` is deployed without the sibling `client/` directory.
 
 ---
 

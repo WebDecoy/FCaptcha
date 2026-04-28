@@ -18,6 +18,7 @@ from collections import defaultdict
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="FCaptcha", version="1.0.0")
@@ -30,6 +31,21 @@ app.add_middleware(
 )
 
 SECRET_KEY = os.getenv("FCAPTCHA_SECRET", "dev-secret-change-in-production")
+
+# Serve the browser widget alongside the API so deployments expose a single
+# origin to integrators (the implicit contract behind <serverUrl>/fcaptcha.js).
+# Set FCAPTCHA_SERVE_CLIENT=false to opt out — useful when hosting the widget
+# on a separate CDN / edge cache. Set FCAPTCHA_CLIENT_PATH=/abs/path/fcaptcha.js
+# to override the default lookup when server-python is deployed standalone.
+CLIENT_PATH = os.getenv(
+    "FCAPTCHA_CLIENT_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "client", "fcaptcha.js"),
+)
+
+if os.getenv("FCAPTCHA_SERVE_CLIENT", "true").lower() != "false":
+    @app.get("/fcaptcha.js")
+    async def fcaptcha_js():
+        return FileResponse(CLIENT_PATH, media_type="application/javascript")
 
 
 # =============================================================================
