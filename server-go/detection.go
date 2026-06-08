@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net"
@@ -8,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 // =============================================================================
@@ -121,8 +123,10 @@ func (e *ScoringEngine) CheckIPReputation(ip string) []DetectionResult {
 		})
 	}
 
-	// Check reverse DNS for VPN/proxy patterns
-	names, err := net.LookupAddr(ip)
+	// Check reverse DNS for VPN/proxy patterns (2s timeout to avoid blocking request handlers)
+	dnsCtx, dnsCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer dnsCancel()
+	names, err := net.DefaultResolver.LookupAddr(dnsCtx, ip)
 	if err == nil {
 		for _, name := range names {
 			for _, pattern := range vpnProxyPatterns {

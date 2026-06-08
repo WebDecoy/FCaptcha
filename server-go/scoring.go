@@ -549,17 +549,18 @@ func (e *ScoringEngine) VerifyPoWSolution(solution *PoWSolution, siteKey string,
 		return PoWVerifyResult{Valid: false, Reason: "insufficient_difficulty"}
 	}
 
-	// Atomic claim — guards against the race where two concurrent verifications
-	// both pass IsSolutionUsed above before either commits.
-	if !e.powStore.MarkSolutionUsed(solutionKey) {
+	// Atomic claim — called under powStore.mu, so operate directly on usedSolutions
+	// without going through MarkSolutionUsed/DeleteChallenge (which re-acquire the same lock).
+	if e.powStore.usedSolutions.Contains(solutionKey) {
 		return PoWVerifyResult{Valid: false, Reason: "solution_already_used"}
 	}
+	e.powStore.usedSolutions.Add(solutionKey, struct{}{})
 
 	// Calculate server-side elapsed time (un-spoofable)
 	serverElapsed := now - challenge.Timestamp
 
-	// Delete challenge (one-time use)
-	e.powStore.DeleteChallenge(solution.ChallengeID)
+	// Delete challenge (one-time use) — inline, lock already held
+	delete(e.powStore.challenges, solution.ChallengeID)
 
 	return PoWVerifyResult{Valid: true, Difficulty: challenge.Difficulty, ServerElapsed: serverElapsed, Nonce: challenge.Nonce}
 }

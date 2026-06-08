@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -74,9 +75,9 @@ func main() {
 	r := chi.NewRouter()
 
 	// Middleware
+	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.RealIP)
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	// CORS for widget
@@ -124,6 +125,13 @@ func main() {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+
+	// pprof debug server on localhost:3001 (not exposed externally)
+	go func() {
+		if err := http.ListenAndServe("127.0.0.1:3001", nil); err != nil {
+			log.Printf("pprof server error: %v", err)
+		}
+	}()
 
 	// Graceful shutdown
 	go func() {
