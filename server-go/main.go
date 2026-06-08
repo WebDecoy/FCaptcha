@@ -49,6 +49,17 @@ func resolveClientPath() string {
 	return ""
 }
 
+// pprofEnabled reports whether the optional pprof debug server should start,
+// based on FCAPTCHA_PPROF (1/true/yes/on, case-insensitive). Off by default.
+func pprofEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("FCAPTCHA_PPROF"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 func main() {
 	// Configuration
 	secretKey := os.Getenv("FCAPTCHA_SECRET")
@@ -126,12 +137,21 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// pprof debug server on localhost:3001 (not exposed externally)
-	go func() {
-		if err := http.ListenAndServe("127.0.0.1:3001", nil); err != nil {
-			log.Printf("pprof server error: %v", err)
+	// Optional pprof debug server, off by default. Enable with FCAPTCHA_PPROF=1
+	// (or true/yes/on). Binds to loopback unless FCAPTCHA_PPROF_ADDR overrides —
+	// keep it loopback-only, the pprof endpoints expose memory/goroutine state.
+	if pprofEnabled() {
+		pprofAddr := os.Getenv("FCAPTCHA_PPROF_ADDR")
+		if pprofAddr == "" {
+			pprofAddr = "127.0.0.1:3001"
 		}
-	}()
+		go func() {
+			log.Printf("pprof debug server listening on %s", pprofAddr)
+			if err := http.ListenAndServe(pprofAddr, nil); err != nil {
+				log.Printf("pprof server error: %v", err)
+			}
+		}()
+	}
 
 	// Graceful shutdown
 	go func() {
