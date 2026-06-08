@@ -1,13 +1,32 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
+
+// solvePoW brute-forces a nonce whose hash satisfies the challenge difficulty,
+// mirroring how VerifyPoWSolution recomputes the hash (prefix:nonce).
+func solvePoW(t *testing.T, c *PoWChallenge) *PoWSolution {
+	t.Helper()
+	target := strings.Repeat("0", c.Difficulty)
+	for nonce := 0; nonce < 1<<24; nonce++ {
+		sum := sha256.Sum256([]byte(c.Prefix + ":" + formatInt(nonce)))
+		h := hex.EncodeToString(sum[:])
+		if strings.HasPrefix(h, target) {
+			return &PoWSolution{ChallengeID: c.ID, Nonce: nonce, Hash: h}
+		}
+	}
+	t.Fatalf("failed to solve PoW within nonce budget")
+	return nil
+}
 
 // TestPoWStore_NoMassWipe verifies the regression that motivated this change:
 // the old store wiped usedSolutions wholesale once it crossed 10K entries,
@@ -141,5 +160,55 @@ func TestPoWStore_DeleteChallenge(t *testing.T) {
 	s.mu.RUnlock()
 	if exists {
 		t.Fatalf("DeleteChallenge did not remove entry")
+	}
+}
+
+// TestVerifyPoWSolution_ValidThenReplay drives a genuine, valid solution all the
+// way through VerifyPoWSolution. This path holds powStore.mu for its full
+// duration and previously called MarkSolutionUsed/DeleteChallenge, which
+// re-acquire the same non-reentrant mutex — a self-deadlock that no existing
+// test reached. The test runs verification under a deadline so a regression
+// fails fast instead of hanging the suite. It also asserts the solution is
+// replay-protected and the one-time challenge is consumed.
+func TestVerifyPoWSolution_ValidThenReplay(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	challenge := e.GeneratePoWChallenge("site-1", "203.0.113.5", false)
+	solution := solvePoW(t, challenge)
+
+	type outcome struct {
+		first  PoWVerifyResult
+		replay PoWVerifyResult
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		first := e.VerifyPoWSolution(solution, "site-1")
+		replay := e.VerifyPoWSolution(solution, "site-1")
+		done <- outcome{first: first, replay: replay}
+	}()
+
+	select {
+	case res := <-done:
+		if !res.first.Valid {
+			t.Fatalf("expected first verification to be valid, got reason %q", res.first.Reason)
+		}
+		// A successful verify consumes the one-time challenge, so a sequential
+		// replay is rejected with challenge_not_found (the solution_already_used
+		// path only wins a concurrent race before deletion). Either way it must
+		// not be accepted again.
+		if res.replay.Valid {
+			t.Fatalf("expected replay to be rejected, but it was accepted")
+		}
+		if res.replay.Reason != "challenge_not_found" {
+			t.Fatalf("expected replay reason challenge_not_found, got %q", res.replay.Reason)
+		}
+		// One-time challenge must be consumed after a successful verify.
+		e.powStore.mu.RLock()
+		_, exists := e.powStore.challenges[challenge.ID]
+		e.powStore.mu.RUnlock()
+		if exists {
+			t.Fatalf("challenge was not deleted after successful verification")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("VerifyPoWSolution deadlocked (re-acquiring powStore.mu while already held)")
 	}
 }
