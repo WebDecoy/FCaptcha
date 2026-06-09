@@ -13,7 +13,7 @@
   const FCaptcha = {
     // Keep in sync with server-node/package.json and server-python/server.py
     // when cutting a release; this string ships to integrators.
-    version: '1.10.1',
+    version: '1.10.2',
     widgets: new Map(),
     serverUrl: null,
   };

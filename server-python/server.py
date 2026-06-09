@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
-app = FastAPI(title="FCaptcha", version="1.10.1")
+app = FastAPI(title="FCaptcha", version="1.10.2")
 
 app.add_middleware(
     CORSMiddleware,
