@@ -476,8 +476,6 @@ fcaptcha/
 │   └── test-detection.js    # End-to-end detection test suite (runs against a live server)
 ├── demo/
 │   └── index.html           # Interactive demo page
-├── docs/
-│   └── PRD-ai-agent-detection.md  # AI-agent detection roadmap (shipped + planned phases)
 ├── docker/
 │   ├── Dockerfile           # Multi-stage build (Go binary + client + demo)
 │   └── docker-compose.yml   # Docker compose with Redis
@@ -529,7 +527,7 @@ Coverage spans bot user-agents, headless/CDP detection, declared AI agents, data
 
 ## Contributing
 
-Contributions welcome! Please read [ARCHITECTURE.md](ARCHITECTURE.md) first, and [docs/PRD-ai-agent-detection.md](docs/PRD-ai-agent-detection.md) for the AI-agent detection roadmap (phases 1–2 shipped; hosted-agent environment composites, accessibility-tree honeypots, cross-session correlation, and Web Bot Auth signature *verification* are still open).
+Contributions welcome! Please read [ARCHITECTURE.md](ARCHITECTURE.md) first. AI-agent detection is built out in phases — declared agents and input-event forensics have shipped; hosted-agent environment composites, accessibility-tree honeypots, cross-session correlation, and Web Bot Auth signature *verification* are still open.
 
 Areas that could use help:
 - Web Bot Auth signature verification (currently identifies signed requests; verifying against the agent's published JWKS would let you safely *allow* verified agents)
