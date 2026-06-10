@@ -13,20 +13,22 @@
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/WebDecoy/FCaptcha)
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template?referralCode=webdecoy&template=https://github.com/WebDecoy/FCaptcha)
 
-FCaptcha is a modern CAPTCHA system designed to detect everything: traditional bots, headless browsers, automation frameworks, CAPTCHA farms, and the new generation of vision-based AI agents.
+FCaptcha is a modern CAPTCHA system designed to detect everything: traditional bots, headless browsers, automation frameworks, CAPTCHA farms, and the new generation of AI agents — from vision models that screenshot-and-click to computer-use agents that drive a real browser over the Chrome DevTools Protocol.
 
 ## Features
 
 - **Single click or invisible** - Checkbox mode like Turnstile/reCAPTCHA v2, or invisible mode like reCAPTCHA v3
-- **Vision AI detection** - Specifically tuned to detect screenshot→API→click automation patterns
-- **Proof of Work** - Server-verified SHA-256 challenges that force compute cost on attackers
-- **Comprehensive bot detection** - Headless browsers, WebDriver, Puppeteer, Playwright, Selenium
-- **Behavioral analysis** - 40+ signals including micro-tremor, velocity variance, trajectory analysis
-- **Credential stuffing protection** - Form interaction analysis, timing detection, programmatic submit detection
-- **Self-hosted** - No external dependencies, run on your own infrastructure
-- **Privacy-first** - No persistent fingerprinting, no cross-site tracking
-- **Open algorithm** - Transparent scoring, fully auditable
-- **Multi-language servers** - Go, Python, or Node.js - pick your stack
+- **AI agent detection** - Catches vision agents (screenshot→API→click), DOM/CDP-driven agents (Claude in Chrome, Operator-style computer use), and synthetic input that reports `isTrusted: true` — via input-event forensics and LLM think-time cadence
+- **Declared-agent identification** - Flags self-declaring agents (ClaudeBot, GPTBot, ChatGPT-User, PerplexityBot, Bytespider…) and Web Bot Auth (RFC 9421) signed requests, surfaced as a distinct category so your app can choose to *allow* polite agents and block the rest
+- **Proof of Work** - Server-verified SHA-256 hashcash with 256-bit HMAC signing, per-challenge nonces, and signal commitment that binds the challenge to the collected signals
+- **Comprehensive bot detection** - Headless browsers, WebDriver, Puppeteer, Playwright, Selenium, plus CDP console-attach detection
+- **Behavioral biometrics** - 40+ signals including micro-tremor, velocity/acceleration curves, trajectory analysis, coalesced pointer events, and teleport-click detection
+- **Mobile-native** - Touch kinematics and passive device-sensor entropy, with accessibility exemptions for keyboard-only and touch users
+- **TLS fingerprinting** - JA3 (client-supplied) and JA4 (un-spoofable, from a trusted reverse proxy) matched against known automation tools
+- **Credential stuffing protection** - Form interaction analysis, timing, and programmatic submit/fill detection
+- **Self-hosted & privacy-first** - No external dependencies, no persistent fingerprinting, no cross-site tracking
+- **Open algorithm** - Transparent, confidence-weighted scoring across ~12 categories, fully auditable
+- **Multi-language servers** - Go, Python, or Node.js, kept in lockstep
 
 ## Quick Start
 
@@ -253,62 +255,81 @@ if (result.valid && result.score < 0.5) {
 
 ## How It Works
 
-FCaptcha collects signals across multiple categories:
+FCaptcha collects signals across many categories and blends them into a single confidence-weighted score (weights sum to 1.0 and are tunable per deployment). The major surfaces:
 
 ### Proof of Work (Invisible Layer)
 Before any verification, clients must solve a SHA-256 hashcash challenge:
 - **Challenge fetched on page load** - solving runs in the background across parallel Web Workers (one per ~2 CPU cores)
 - **Non-blocking** - users never see it, computation happens while they fill forms
-- **Server-verified** - one-time use, replay protected, signed challenges
+- **Hardened** - 256-bit HMAC-signed challenges, one-time use, replay-protected, with a server-generated per-challenge nonce the client must echo back
+- **Signal commitment** - the client hashes its collected signals into the PoW input (`prefix:signalsHash:nonce`) and the server verifies the signals weren't tampered with after solving
 - **Difficulty scaling** - datacenter IPs and high-rate requesters get harder puzzles
 - **Forces compute cost** - each attempt requires ~100-500ms of CPU time
 
 This makes credential stuffing expensive: even if a bot passes all other checks, it still burns compute for every attempt.
 
-### Behavioral Signals (40% weight)
-- Mouse trajectory, velocity, acceleration curves
+### Behavioral Biometrics
+- Mouse trajectory, velocity, and acceleration curves
 - Micro-tremor detection (humans have natural hand shake at 3-25Hz)
-- Click precision and approach patterns
-- Pre-click exploration behavior
-- Overshoot corrections
-- Straight-line ratio detection
+- Click precision, approach directness, pre-click exploration, overshoot corrections
+- **Input-event forensics** — coalesced pointer-event batches (real mice coalesce several hardware samples per frame; CDP-injected moves don't), `movementX/Y` vs. position-delta coherence, and teleport clicks (a click dispatched at coordinates with no approach trajectory)
+- **Think-time cadence** — the agent act → screenshot → inference → act loop leaves bursts of activity separated by multi-second perfect silence
+- **Mobile-native** — touch kinematics (multi-touch, force/radius variance) and passive device-sensor entropy, exempting genuine touch and keyboard-only users
 
-### Environmental Signals (35% weight)
-- WebDriver/automation framework detection (Selenium, Puppeteer, Playwright, PhantomJS, Nightmare, Watir)
-- Headless browser indicators
-- Canvas/WebGL/Audio fingerprinting
-- Plugin and browser feature checks
-- User-Agent pattern matching
+### Environmental & Automation
+- WebDriver / automation framework detection (Selenium, Puppeteer, Playwright, PhantomJS, Nightmare, Watir)
+- **CDP detection** — legacy ChromeDriver/Selenium globals plus a Runtime/DevTools console-attach probe that catches any attached protocol client, even when JS globals are scrubbed
+- Headless browser indicators, plugin/feature checks, UA ↔ platform consistency
+- Canvas / WebGL / Audio fingerprinting (session-scoped only)
+- **TLS fingerprinting** — JA3 (client-supplied) and JA4 (read from a trusted reverse-proxy header, un-spoofable by the client) matched against known automation tools
 
-### Temporal Signals (15% weight)
+### Temporal Signals
 - Proof of Work timing (reveals API round-trip latency)
-- Interaction timing patterns
-- Event sequence analysis
-- Page load to interaction timing
+- Interaction timing patterns and event-sequence analysis
+- Page-load-to-interaction timing
 
-### Form Interaction Signals (10% weight)
-- Programmatic form.submit() detection
-- Time from page load to submission
-- Events before submit (no events = bot)
-- Textarea keyboard analysis (paste detection, typing speed, rhythm)
+### Form Interaction
+- Programmatic `form.submit()` and programmatic-click detection
+- **Programmatic fill** — content that appears with zero keystrokes and zero pastes (Playwright `fill()` / `element.value=`)
+- Time from page load to submission; events-before-submit (no events = bot)
+- Textarea keystroke analysis — paste ratio, typing speed, rhythm/cadence, keydown/keyup ratio
 
-## Vision AI Detection
+### Declared Agents & Reputation
+- Self-identifying AI-agent user-agents (ClaudeBot, Claude-User, GPTBot, ChatGPT-User, OAI-SearchBot, PerplexityBot, Google-Extended, CCBot, Bytespider, meta-externalagent, Amazonbot, cohere-ai, …)
+- Web Bot Auth (RFC 9421 HTTP Message Signatures) signed-request identification
+- Datacenter / VPN / proxy IP reputation and reverse-DNS heuristics (with a 2s lookup timeout so request handlers never block)
 
-Modern AI agents work like this:
-1. Take screenshot
-2. Send to vision API (GPT-4V, Claude, etc.)
-3. Get click coordinates
-4. Execute click
+## AI Agent Detection
 
-This pattern has exploitable characteristics:
+FCaptcha targets three classes of modern AI agent, each with a different tell.
 
-| Signal | Human | Vision AI |
+### 1. Vision agents (screenshot → API → click)
+
+A vision agent takes a screenshot, sends it to a vision model (GPT-4V, Claude, etc.) for click coordinates, and executes the click. That pattern is exploitable:
+
+| Signal | Human | Vision agent |
 |--------|-------|-----------|
 | Mouse movement | Natural curves, micro-tremor | Smooth/linear paths |
 | Pre-click behavior | Exploration, hesitation | Direct path to target |
-| Click timing | Variable, 200-800ms | Consistent, often faster |
+| Click trajectory | Approach path to the target | Teleport — click with no preceding movement |
 | Coordinate precision | Slight variance | Pixel-perfect |
 | PoW timing | Consistent with local execution | Delayed by API round-trip |
+
+### 2. Computer-use / CDP agents (driving a real browser)
+
+Agents like Claude in Chrome (via `chrome.debugger`) or Operator-style tools (via Playwright/CDP) drive a *real* browser, so their input events report `isTrusted: true` and slip past global-based checks. Their **shape** still betrays them:
+
+| Signal | Human | CDP-driven agent |
+|--------|-------|-----------|
+| Coalesced pointer events | Multiple hardware samples per frame | Single-entry batches (synthetic) |
+| `movementX/Y` vs. position | Coherent | Incoherent / zero while position changes |
+| Activity cadence | Continuous, noisy idle | Bursts separated by multi-second silence (think time) |
+| Field entry | Per-character keystrokes | Programmatic fill — value set, no keys/pastes |
+| Protocol surface | None | DevTools/Runtime console consumer attached |
+
+### 3. Declared agents (the agentic web)
+
+Many legitimate agents and crawlers identify themselves — by user-agent (ClaudeBot, GPTBot, PerplexityBot, …) or by cryptographically signing requests with **Web Bot Auth** (RFC 9421). FCaptcha flags these as a distinct `declared_ai` category with high confidence and low default severity, so your application can apply policy — allow polite/verified agents, block undeclared automation — rather than treating every agent as an attacker.
 
 ## API Reference
 
@@ -324,9 +345,12 @@ Get a Proof of Work challenge. Called automatically by the client on page load.
   "prefix": "abc123:1703356800000:4",
   "difficulty": 4,
   "expiresAt": 1703357100000,
+  "nonce": "f1e2d3...",
   "sig": "def456..."
 }
 ```
+
+The `nonce` is generated per-challenge by the server; the client echoes it back in `signals.meta.challengeNonce` and the server verifies it, preventing challenge replay.
 
 Difficulty scales based on:
 - Datacenter IPs: +1 difficulty
@@ -340,11 +364,14 @@ Verify a checkbox CAPTCHA submission.
 {
   "siteKey": "your-site-key",
   "signals": { /* collected signals */ },
+  "signalsJson": "{...}",            // canonical serialization, hashed for signal commitment
   "powSolution": {
     "challengeId": "abc123...",
     "nonce": 68455,
-    "hash": "0000abc..."
-  }
+    "hash": "0000abc...",
+    "signalsHash": "9f86d0..."       // SHA-256 of signalsJson, bound into the PoW input
+  },
+  "powTiming": { "duration": 230, "iterations": 41000, "difficulty": 4 }
 }
 
 // Response
@@ -355,6 +382,8 @@ Verify a checkbox CAPTCHA submission.
   "recommendation": "allow"
 }
 ```
+
+`signalsJson` is sent alongside `signals` for deterministic hashing across languages; the server recomputes `SHA-256(signalsJson)` and checks it matches `powSolution.signalsHash`, so signals can't be swapped after the proof of work is solved. `powTiming` is sent separately (not inside the committed signals) to avoid a chicken-and-egg with PoW timing.
 
 ### POST /api/score
 Get a score for invisible mode.
@@ -409,6 +438,11 @@ Verify a previously issued token (server-side).
 | `FCAPTCHA_SECRET` | Secret key for token signing | (required) |
 | `PORT` | Server port | 3000 |
 | `REDIS_URL` | Redis URL for distributed state | (in-memory) |
+| `TRUSTED_JA4_HEADERS` | Comma-separated reverse-proxy header names carrying a JA4 TLS fingerprint (e.g. set by nginx/Cloudflare). Only these are trusted as un-spoofable | (none) |
+| `FCAPTCHA_CLIENT_PATH` | Explicit path to `client/fcaptcha.js` for same-origin widget serving | (auto-probed) |
+| `FCAPTCHA_SERVE_CLIENT` | (Python) Serve the widget at `/fcaptcha.js`; set `false` to host the client on a separate CDN | `true` |
+| `FCAPTCHA_PPROF` | (Go) Enable the pprof debug server (`1`/`true`/`yes`/`on`) | off |
+| `FCAPTCHA_PPROF_ADDR` | (Go) Listen address for pprof when enabled — keep it loopback-only | `127.0.0.1:3001` |
 
 ### Score Thresholds
 
@@ -425,31 +459,37 @@ fcaptcha/
 ├── client/
 │   └── fcaptcha.js          # Client-side widget, signal collection, parallel PoW Web Workers
 ├── server-go/
-│   ├── main.go              # Go HTTP server + static file serving
-│   ├── scoring.go           # Scoring engine + PoW verification
-│   ├── detection.go         # IP reputation, header analysis, browser checks
+│   ├── main.go              # Go HTTP server + same-origin widget serving
+│   ├── scoring.go           # Scoring engine, PoW verification, behavioral/vision/CDP detectors
+│   ├── detection.go         # IP reputation, headers, declared-AI, JA3/JA4, form analysis
+│   ├── scoring_test.go      # Go unit tests
 │   └── go.mod
 ├── server-python/
-│   ├── server.py            # Python/FastAPI server + PoW
-│   ├── detection.py         # Detection modules
+│   ├── server.py            # Python/FastAPI server + PoW + detectors
+│   ├── detection.py         # IP reputation, headers, declared-AI, JA3/JA4, form analysis
 │   └── requirements.txt
 ├── server-node/
-│   ├── server.js            # Node.js/Express server + PoW
-│   ├── detection.js         # Detection modules
+│   ├── server.js            # Node.js/Express server + PoW + detectors
+│   ├── detection.js         # IP reputation, headers, declared-AI, JA3/JA4, form analysis
 │   └── package.json
 ├── test/
-│   └── test-detection.js    # Comprehensive test suite (50 tests)
+│   └── test-detection.js    # End-to-end detection test suite (runs against a live server)
 ├── demo/
 │   └── index.html           # Interactive demo page
+├── docs/
+│   └── PRD-ai-agent-detection.md  # AI-agent detection roadmap (shipped + planned phases)
 ├── docker/
 │   ├── Dockerfile           # Multi-stage build (Go binary + client + demo)
 │   └── docker-compose.yml   # Docker compose with Redis
 ├── .github/workflows/
-│   └── docker-publish.yml   # GHCR publish on release
+│   ├── docker-publish.yml   # GHCR publish on release
+│   └── npm-publish.yml      # npm publish on release
 ├── .dockerignore
 ├── ARCHITECTURE.md          # Technical architecture documentation
 └── README.md
 ```
+
+> All three servers implement the same detection engine and must stay in sync. The Go scoring is unit-tested (`go test ./server-go/...`); `test/test-detection.js` exercises the full pipeline against a running server.
 
 ## Development
 
@@ -469,40 +509,37 @@ open demo/index.html
 
 ### Running Tests
 
+Go unit tests (no server required):
+
+```bash
+cd server-go && go test ./...
+```
+
+End-to-end detection suite (runs against a live server):
+
 ```bash
 # Start a server first (any language)
 cd server-node && node server.js &
 
-# Run the test suite
+# Run the suite
 node test/test-detection.js
-
-# Expected output: 50 tests, all passing
 ```
 
-The test suite covers:
-- Bot user-agent detection (10 tests)
-- Headless browser detection (3 tests)
-- Datacenter IP detection (9 tests)
-- HTTP header analysis (3 tests)
-- Browser consistency checks (4 tests)
-- Behavioral signal analysis (2 tests)
-- Vision AI detection (3 tests)
-- Form interaction analysis (6 tests)
-- Proof of Work (6 tests)
-- Token verification (2 tests)
-- Invisible mode scoring (2 tests)
+Coverage spans bot user-agents, headless/CDP detection, declared AI agents, datacenter/IP reputation, HTTP header and TLS (JA3/JA4) analysis, browser consistency, behavioral and input-event-forensics signals, vision/agent detection, form interaction (paste + programmatic fill), proof of work, token verification, and invisible-mode scoring.
 
 ## Contributing
 
-Contributions welcome! Please read the architecture docs first.
+Contributions welcome! Please read [ARCHITECTURE.md](ARCHITECTURE.md) first, and [docs/PRD-ai-agent-detection.md](docs/PRD-ai-agent-detection.md) for the AI-agent detection roadmap (phases 1–2 shipped; hosted-agent environment composites, accessibility-tree honeypots, cross-session correlation, and Web Bot Auth signature *verification* are still open).
 
 Areas that could use help:
+- Web Bot Auth signature verification (currently identifies signed requests; verifying against the agent's published JWKS would let you safely *allow* verified agents)
+- Cross-session / per-fingerprint behavioral correlation (the durable defense against source-patched browsers)
 - Machine learning-based scoring
-- Integration libraries (React, Vue, etc.)
-- Admin dashboard
-- External IP intelligence API integration (IPQualityScore, etc.)
+- Admin dashboard and analytics
 - WebAssembly-based PoW for better mobile performance
 - Redis-backed distributed state (currently in-memory)
+
+When adding or changing a detector, apply it to **all three** server implementations (Go, Python, Node) so they stay in sync.
 
 ## License
 
