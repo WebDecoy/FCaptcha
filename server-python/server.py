@@ -98,6 +98,7 @@ class ThreatCategory(str, Enum):
     BEHAVIORAL = "behavioral"
     FINGERPRINT = "fingerprint"
     RATE_LIMIT = "rate_limit"
+    DECLARED_AI = "declared_ai"
 
 
 @dataclass
@@ -317,7 +318,8 @@ WEIGHTS = {
     ThreatCategory.BEHAVIORAL: 0.18,
     ThreatCategory.FINGERPRINT: 0.08,
     ThreatCategory.RATE_LIMIT: 0.01,
-    ThreatCategory.BOT: 0.15,
+    ThreatCategory.BOT: 0.13,
+    ThreatCategory.DECLARED_AI: 0.02,
 }
 
 
@@ -966,7 +968,7 @@ def run_verification(
         check_ip_reputation, analyze_headers,
         check_browser_consistency, check_ja3_fingerprint,
         check_ja4_fingerprint, get_trusted_ja4_header_names, read_ja4_from_headers,
-        analyze_form_interaction
+        analyze_form_interaction, check_declared_ai_agent
     )
 
     detections = []
@@ -1049,6 +1051,12 @@ def run_verification(
     for d in check_browser_consistency(user_agent, signals):
         detections.append(Detection(
             ThreatCategory.BOT, d["score"], d["confidence"], d["reason"]
+        ))
+
+    # Flag declared/verified AI agents (self-identifying UA or Web Bot Auth signature)
+    for d in check_declared_ai_agent(user_agent, headers):
+        detections.append(Detection(
+            ThreatCategory.DECLARED_AI, d["score"], d["confidence"], d["reason"]
         ))
 
     # HTTP-level detectors

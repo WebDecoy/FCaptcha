@@ -242,7 +242,8 @@ const WEIGHTS = {
   rate_limit: 0.01,
   datacenter: 0.07,
   tor_vpn: 0.01,
-  bot: 0.15
+  bot: 0.13,
+  declared_ai: 0.02
 };
 
 // =============================================================================
@@ -1030,6 +1031,9 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
   // Add browser consistency checks
   const consistencyDetections = detection.checkBrowserConsistency(userAgent, signals);
   detections.push(...consistencyDetections);
+
+  // Flag declared/verified AI agents (self-identifying UA or Web Bot Auth signature)
+  detections.push(...detection.checkDeclaredAIAgent(userAgent, headers));
 
   // Add JA3 fingerprint check (client-supplied — spoofable)
   if (ja3Hash) {

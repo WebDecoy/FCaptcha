@@ -212,3 +212,65 @@ func TestVerifyPoWSolution_ValidThenReplay(t *testing.T) {
 		t.Fatalf("VerifyPoWSolution deadlocked (re-acquiring powStore.mu while already held)")
 	}
 }
+
+// TestCheckDeclaredAIAgent verifies self-identifying AI agents are flagged under
+// the declared_ai category, that ordinary browsers are not, and that Web Bot Auth
+// signed requests are detected.
+func TestCheckDeclaredAIAgent(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+
+	agentUAs := []string{
+		"Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+		"Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.1; +https://openai.com/gptbot",
+		"Mozilla/5.0 (compatible; PerplexityBot/1.0; +https://perplexity.ai/bot)",
+		"ChatGPT-User/1.0; +https://openai.com/bot",
+		"CCBot/2.0 (https://commoncrawl.org/faq/)",
+	}
+	for _, ua := range agentUAs {
+		got := e.CheckDeclaredAIAgent(ua, nil)
+		if len(got) == 0 || got[0].Category != CategoryDeclaredAI {
+			t.Errorf("expected declared_ai detection for UA %q, got %+v", ua, got)
+		}
+	}
+
+	humanUAs := []string{
+		"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+		"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+		"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Version/17.4 Mobile/15E148 Safari/604.1",
+	}
+	for _, ua := range humanUAs {
+		if got := e.CheckDeclaredAIAgent(ua, nil); len(got) != 0 {
+			t.Errorf("expected no declared_ai detection for human UA %q, got %+v", ua, got)
+		}
+	}
+
+	// Web Bot Auth signed request (RFC 9421) on an otherwise-normal UA.
+	headers := map[string]string{
+		"signature":       "sig1=:abc123:",
+		"signature-input": `sig1=("@authority" "signature-agent");keyid="k1";tag="web-bot-auth"`,
+		"signature-agent": `"https://agent.example"`,
+	}
+	got := e.CheckDeclaredAIAgent(humanUAs[0], headers)
+	foundWebBotAuth := false
+	for _, d := range got {
+		if d.Category == CategoryDeclaredAI && strings.Contains(d.Reason, "Web Bot Auth") {
+			foundWebBotAuth = true
+		}
+	}
+	if !foundWebBotAuth {
+		t.Errorf("expected Web Bot Auth detection from signature headers, got %+v", got)
+	}
+}
+
+// TestWeightsSumToOne guards the invariant that category weights sum to 1.0 so the
+// final score stays normalized when categories are added or rebalanced.
+func TestWeightsSumToOne(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	var sum float64
+	for _, w := range e.weights {
+		sum += w
+	}
+	if diff := sum - 1.0; diff > 1e-9 || diff < -1e-9 {
+		t.Fatalf("category weights must sum to 1.0, got %.6f", sum)
+	}
+}
