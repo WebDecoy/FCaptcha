@@ -32,6 +32,7 @@ const (
 	CategoryRateLimit   ThreatCategory = "rate_limit"
 	CategoryDatacenter  ThreatCategory = "datacenter"
 	CategoryTorVPN      ThreatCategory = "tor_vpn"
+	CategoryDeclaredAI  ThreatCategory = "declared_ai"
 )
 
 // DetectionResult from a single check
@@ -244,7 +245,8 @@ func NewScoringEngine(secretKey string) *ScoringEngine {
 			CategoryRateLimit:   0.01,
 			CategoryDatacenter:  0.07,
 			CategoryTorVPN:      0.01,
-			CategoryBot:         0.15,
+			CategoryBot:         0.13,
+			CategoryDeclaredAI:  0.02,
 		},
 		uaPatterns: compileUAPatterns(),
 	}
@@ -362,6 +364,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	// Network/infrastructure detectors
 	detections = append(detections, e.CheckIPReputation(ip)...)
 	detections = append(detections, e.CheckBrowserConsistency(userAgent, signals)...)
+	detections = append(detections, e.CheckDeclaredAIAgent(userAgent, headers)...)
 
 	// HTTP-level detectors
 	if headers != nil {

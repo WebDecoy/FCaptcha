@@ -107,6 +107,69 @@ const EXPECTED_BROWSER_HEADERS = new Set([
   'accept', 'accept-language', 'accept-encoding', 'user-agent'
 ]);
 
+// Self-identifying AI agents and crawlers. These agents are honest about who they
+// are, so matching is high-confidence but intentionally LOW-severity: operators
+// decide via policy whether to allow polite agents rather than hard-blocking.
+// Keep in sync with server-go and server-python.
+const DECLARED_AI_AGENT_PATTERNS = [
+  /\bClaudeBot\b/i,
+  /\bClaude-User\b/i,
+  /\bClaude-SearchBot\b/i,
+  /\banthropic-ai\b/i,
+  /\bGPTBot\b/i,
+  /\bChatGPT-User\b/i,
+  /\bOAI-SearchBot\b/i,
+  /\bPerplexityBot\b/i,
+  /\bPerplexity-User\b/i,
+  /\bGoogle-Extended\b/i,
+  /\bCCBot\b/i,
+  /\bBytespider\b/i,
+  /\bmeta-externalagent\b/i,
+  /\bAmazonbot\b/i,
+  /\bcohere-ai\b/i,
+  /\bDiffbot\b/i,
+  /\bYouBot\b/i
+];
+
+// checkDeclaredAIAgent flags self-identifying AI agents via the User-Agent and
+// detects Web Bot Auth signed requests (RFC 9421 HTTP Message Signatures). Both
+// are high-confidence identifications surfaced as the declared_ai category so
+// callers can apply an allow/block policy instead of relying on a hard score.
+function checkDeclaredAIAgent(userAgent, headers = {}) {
+  const detections = [];
+  const ua = userAgent || '';
+
+  for (const re of DECLARED_AI_AGENT_PATTERNS) {
+    const match = ua.match(re);
+    if (match) {
+      detections.push({
+        category: 'declared_ai',
+        score: 0.5,
+        confidence: 0.99,
+        reason: `Declared AI agent user-agent: ${match[0]}`,
+        details: { matched: match[0] }
+      });
+      break;
+    }
+  }
+
+  // Web Bot Auth: presence of HTTP Message Signature headers identifies a
+  // (claimed) verified agent. v1 detects/identifies only; signature verification
+  // against the agent's published JWKS is a follow-up before trusting it.
+  const h = headers || {};
+  if (h['signature'] && h['signature-input'] && h['signature-agent']) {
+    detections.push({
+      category: 'declared_ai',
+      score: 0.4,
+      confidence: 0.95,
+      reason: `Signed agent request (Web Bot Auth): ${h['signature-agent']}`,
+      details: { signatureAgent: h['signature-agent'], verified: false }
+    });
+  }
+
+  return detections;
+}
+
 function analyzeHeaders(headers) {
   const detections = [];
   const headersLower = {};
@@ -1044,6 +1107,7 @@ module.exports = {
   analyzeHeaders,
   parseUserAgent,
   checkBrowserConsistency,
+  checkDeclaredAIAgent,
   checkJA3Fingerprint,
   checkJA4Fingerprint,
   getTrustedJA4HeaderNames,

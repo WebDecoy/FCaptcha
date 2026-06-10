@@ -107,6 +107,68 @@ SUSPICIOUS_HEADERS = {
 
 EXPECTED_BROWSER_HEADERS = {"accept", "accept-language", "accept-encoding", "user-agent"}
 
+# Self-identifying AI agents and crawlers. These agents are honest about who they
+# are, so matching is high-confidence but intentionally LOW-severity: operators
+# decide via policy whether to allow polite agents rather than hard-blocking.
+# Keep in sync with server-go and server-node.
+DECLARED_AI_AGENT_PATTERNS = [
+    re.compile(r"\bClaudeBot\b", re.I),
+    re.compile(r"\bClaude-User\b", re.I),
+    re.compile(r"\bClaude-SearchBot\b", re.I),
+    re.compile(r"\banthropic-ai\b", re.I),
+    re.compile(r"\bGPTBot\b", re.I),
+    re.compile(r"\bChatGPT-User\b", re.I),
+    re.compile(r"\bOAI-SearchBot\b", re.I),
+    re.compile(r"\bPerplexityBot\b", re.I),
+    re.compile(r"\bPerplexity-User\b", re.I),
+    re.compile(r"\bGoogle-Extended\b", re.I),
+    re.compile(r"\bCCBot\b", re.I),
+    re.compile(r"\bBytespider\b", re.I),
+    re.compile(r"\bmeta-externalagent\b", re.I),
+    re.compile(r"\bAmazonbot\b", re.I),
+    re.compile(r"\bcohere-ai\b", re.I),
+    re.compile(r"\bDiffbot\b", re.I),
+    re.compile(r"\bYouBot\b", re.I),
+]
+
+
+def check_declared_ai_agent(user_agent: str, headers: Optional[Dict[str, str]] = None) -> List[Dict]:
+    """Flag self-identifying AI agents via the User-Agent and detect Web Bot Auth
+    signed requests (RFC 9421 HTTP Message Signatures). Both are high-confidence
+    identifications surfaced as the declared_ai category so callers can apply an
+    allow/block policy instead of relying on a hard score.
+    """
+    detections: List[Dict] = []
+    ua = user_agent or ""
+
+    for pattern in DECLARED_AI_AGENT_PATTERNS:
+        match = pattern.search(ua)
+        if match:
+            detections.append({
+                "category": "declared_ai",
+                "score": 0.5,
+                "confidence": 0.99,
+                "reason": f"Declared AI agent user-agent: {match.group(0)}",
+                "details": {"matched": match.group(0)},
+            })
+            break
+
+    # Web Bot Auth: presence of HTTP Message Signature headers identifies a
+    # (claimed) verified agent. v1 detects/identifies only; signature verification
+    # against the agent's published JWKS is a follow-up before trusting it.
+    h = headers or {}
+    if h.get("signature") and h.get("signature-input") and h.get("signature-agent"):
+        detections.append({
+            "category": "declared_ai",
+            "score": 0.4,
+            "confidence": 0.95,
+            "reason": f"Signed agent request (Web Bot Auth): {h.get('signature-agent')}",
+            "details": {"signatureAgent": h.get("signature-agent"), "verified": False},
+        })
+
+    return detections
+
+
 def analyze_headers(headers: Dict[str, str]) -> List[Dict]:
     """Analyze HTTP headers for bot indicators."""
     detections = []

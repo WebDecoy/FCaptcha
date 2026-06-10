@@ -108,6 +108,71 @@ func IsDatacenterIP(ipStr string) bool {
 	return false
 }
 
+// declaredAIAgentPatterns matches self-identifying AI agents and crawlers. These
+// agents are honest about who they are, so matching is high-confidence but
+// intentionally LOW-severity: operators decide via policy whether to allow polite
+// agents rather than hard-blocking. Keep in sync with server-node and server-python.
+var declaredAIAgentPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\bClaudeBot\b`),
+	regexp.MustCompile(`(?i)\bClaude-User\b`),
+	regexp.MustCompile(`(?i)\bClaude-SearchBot\b`),
+	regexp.MustCompile(`(?i)\banthropic-ai\b`),
+	regexp.MustCompile(`(?i)\bGPTBot\b`),
+	regexp.MustCompile(`(?i)\bChatGPT-User\b`),
+	regexp.MustCompile(`(?i)\bOAI-SearchBot\b`),
+	regexp.MustCompile(`(?i)\bPerplexityBot\b`),
+	regexp.MustCompile(`(?i)\bPerplexity-User\b`),
+	regexp.MustCompile(`(?i)\bGoogle-Extended\b`),
+	regexp.MustCompile(`(?i)\bCCBot\b`),
+	regexp.MustCompile(`(?i)\bBytespider\b`),
+	regexp.MustCompile(`(?i)\bmeta-externalagent\b`),
+	regexp.MustCompile(`(?i)\bAmazonbot\b`),
+	regexp.MustCompile(`(?i)\bcohere-ai\b`),
+	regexp.MustCompile(`(?i)\bDiffbot\b`),
+	regexp.MustCompile(`(?i)\bYouBot\b`),
+}
+
+// CheckDeclaredAIAgent flags self-identifying AI agents via the User-Agent and
+// detects Web Bot Auth signed requests (RFC 9421 HTTP Message Signatures). Both
+// are high-confidence identifications surfaced as the declared_ai category so
+// callers can apply an allow/block policy instead of relying on a hard score.
+func (e *ScoringEngine) CheckDeclaredAIAgent(userAgent string, headers map[string]string) []DetectionResult {
+	var detections []DetectionResult
+
+	for _, re := range declaredAIAgentPatterns {
+		if match := re.FindString(userAgent); match != "" {
+			detections = append(detections, DetectionResult{
+				Category:   CategoryDeclaredAI,
+				Score:      0.5,
+				Confidence: 0.99,
+				Reason:     "Declared AI agent user-agent: " + match,
+				Details:    map[string]interface{}{"matched": match},
+			})
+			break
+		}
+	}
+
+	// Web Bot Auth: presence of HTTP Message Signature headers identifies a
+	// (claimed) verified agent. v1 detects/identifies only; signature verification
+	// against the agent's published JWKS is a follow-up before trusting it.
+	if headers != nil {
+		_, hasSig := headers["signature"]
+		_, hasInput := headers["signature-input"]
+		sigAgent, hasAgent := headers["signature-agent"]
+		if hasSig && hasInput && hasAgent {
+			detections = append(detections, DetectionResult{
+				Category:   CategoryDeclaredAI,
+				Score:      0.4,
+				Confidence: 0.95,
+				Reason:     "Signed agent request (Web Bot Auth): " + sigAgent,
+				Details:    map[string]interface{}{"signatureAgent": sigAgent, "verified": false},
+			})
+		}
+	}
+
+	return detections
+}
+
 // CheckIPReputation returns detection results for IP-based threats
 func (e *ScoringEngine) CheckIPReputation(ip string) []DetectionResult {
 	var detections []DetectionResult
