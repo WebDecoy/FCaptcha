@@ -1081,6 +1081,19 @@ func (e *ScoringEngine) AnalyzeFormInteraction(formAnalysis map[string]interface
 			avgInterval := getFloat(stats, "avgKeyInterval")
 			intervalVariance := getFloat(stats, "keyIntervalVariance")
 			keydownUpRatio := getFloat(stats, "keydownUpRatio")
+			contentLength := int(getFloat(stats, "contentLength"))
+
+			// Programmatic fill: meaningful content appeared with zero keystrokes
+			// and zero pastes (e.g. Playwright fill() / element.value=). The
+			// length gate keeps this off browser autofill of short fields.
+			if contentLength > 8 && keyCount == 0 && pasteCount == 0 {
+				detections = append(detections, DetectionResult{
+					Category:   CategoryAutomation,
+					Score:      0.8,
+					Confidence: 0.75,
+					Reason:     fmt.Sprintf("Textarea %q filled programmatically (%d chars, no keystrokes or paste)", fieldId, contentLength),
+				})
+			}
 
 			// Check for paste-heavy input
 			if pasteCount > 0 && keyCount < 5 {

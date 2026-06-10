@@ -780,6 +780,41 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 		})
 	}
 
+	// Input-event forensics: teleport clicks and agent think-time cadence.
+	if fcs := getMap(behavioral, "inputForensics"); fcs != nil {
+		// A click dispatched at coordinates with no approach trajectory.
+		teleports := getFloat(fcs, "teleportClicks")
+		if teleports >= 1 && !isTouchUser {
+			results = append(results, DetectionResult{
+				Category:   CategoryVisionAI,
+				Score:      0.7,
+				Confidence: 0.7,
+				Reason:     fmt.Sprintf("Click injected with no pointer trajectory (%d teleport clicks)", int(teleports)),
+				Details:    map[string]interface{}{"teleportClicks": teleports},
+			})
+		}
+		// Bursts of activity separated by multi-second perfect silence — the
+		// agent act -> screenshot -> inference loop. Low confidence (slow humans
+		// idle too); requires silence to dominate the interaction. Keyboard-only
+		// users are exempt (their cadence is naturally bursty).
+		if !isKeyboardUser &&
+			getFloat(fcs, "cadenceEvents") >= 12 &&
+			getFloat(fcs, "cadenceSilentGaps") >= 3 &&
+			getFloat(fcs, "cadenceGapCV") > 2.5 &&
+			getFloat(fcs, "cadenceSilentRatio") > 0.6 {
+			results = append(results, DetectionResult{
+				Category:   CategoryVisionAI,
+				Score:      0.6,
+				Confidence: 0.5,
+				Reason:     "Interaction cadence matches agent act/think loop (bursts + dead air)",
+				Details: map[string]interface{}{
+					"silentGaps": getFloat(fcs, "cadenceSilentGaps"),
+					"gapCV":      getFloat(fcs, "cadenceGapCV"),
+				},
+			})
+		}
+	}
+
 	return results
 }
 
@@ -971,6 +1006,47 @@ func (e *ScoringEngine) detectCDP(signals map[string]interface{}) []DetectionRes
 	results := make([]DetectionResult, 0)
 
 	env := getMap(signals, "environmental")
+
+	// Input-event forensics: catch CDP-injected input that reports isTrusted:true
+	// and so evades the global-based checks below. Touch users are exempt — they
+	// don't generate the mouse-pointer batches these signals rely on.
+	behavioral := getMap(signals, "behavioral")
+	isTouchUser := getFloat(behavioral, "touchEvents") >= 3
+	if fcs := getMap(behavioral, "inputForensics"); fcs != nil && !isTouchUser {
+		// Real mice coalesce several hardware samples per animation frame; a
+		// stream of pointermoves that NEVER coalesced is synthetic injection.
+		if getFloat(fcs, "coalescedSamples") >= 20 && getFloat(fcs, "coalescedMax") <= 1 {
+			results = append(results, DetectionResult{
+				Category:   CategoryCDP,
+				Score:      0.8,
+				Confidence: 0.6,
+				Reason:     "Pointer moves never coalesced across many samples (synthetic/CDP input)",
+				Details:    map[string]interface{}{"coalescedSamples": getFloat(fcs, "coalescedSamples")},
+			})
+		}
+		// movementX/Y incoherent with actual position deltas across most moves.
+		if getFloat(fcs, "pointerMoveSamples") >= 20 && getFloat(fcs, "pointerMoveZeroRatio") > 0.9 {
+			results = append(results, DetectionResult{
+				Category:   CategoryCDP,
+				Score:      0.6,
+				Confidence: 0.5,
+				Reason:     "Pointer movement deltas incoherent with position (synthetic input)",
+				Details:    map[string]interface{}{"pointerMoveZeroRatio": getFloat(fcs, "pointerMoveZeroRatio")},
+			})
+		}
+	}
+
+	// CDP Runtime/DevTools console consumer attached. Low confidence: a developer
+	// with DevTools open also trips this, so it contributes rather than blocks.
+	if cdpRuntime := getMap(env, "cdpRuntime"); getBool(cdpRuntime, "consoleAttached") {
+		results = append(results, DetectionResult{
+			Category:   CategoryCDP,
+			Score:      0.6,
+			Confidence: 0.5,
+			Reason:     "CDP/DevTools console consumer attached (automation protocol or open DevTools)",
+		})
+	}
+
 	cdp := getMap(env, "cdp")
 
 	detected := getBool(cdp, "detected")

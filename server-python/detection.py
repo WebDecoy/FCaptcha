@@ -748,6 +748,18 @@ def analyze_form_interaction(form_analysis: Optional[Dict]) -> List[Dict]:
             avg_interval = stats.get("avgKeyInterval", 0)
             interval_variance = stats.get("keyIntervalVariance", 0)
             keydown_up_ratio = stats.get("keydownUpRatio", 1.0)
+            content_length = stats.get("contentLength", 0)
+
+            # Programmatic fill: meaningful content appeared with zero keystrokes
+            # and zero pastes (e.g. Playwright fill() / element.value=). The
+            # length gate keeps this off browser autofill of short fields.
+            if content_length > 8 and key_count == 0 and paste_count == 0:
+                detections.append({
+                    "category": "automation",
+                    "score": 0.8,
+                    "confidence": 0.75,
+                    "reason": f'Textarea "{field_id}" filled programmatically ({content_length} chars, no keystrokes or paste)'
+                })
 
             # Check for paste-heavy input (spam bots often paste content)
             if paste_count > 0 and key_count < 5:

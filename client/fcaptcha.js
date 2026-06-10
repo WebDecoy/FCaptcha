@@ -40,10 +40,38 @@
       this.lastMouseTime = null;
       this.lastVelocity = null;
       this.eventDeltas = [];
+
+      // --- Input-event forensics (AI-agent detection, PRD phase 2) ---
+      // Cross-input activity timeline for think-time cadence.
+      this._lastActivityT = null;
+      this._cadenceGaps = [];
+      this._teleportClicks = 0;
+      // Coalesced pointermove batches: real mice coalesce multiple hardware
+      // samples per frame; CDP-injected moves produce single-entry batches.
+      this._coalescedSamples = 0;
+      this._coalescedEmpty = 0;
+      this._coalescedSum = 0;
+      this._coalescedMax = 0;
+      // movementX/Y vs position-delta coherence (synthetic input is incoherent).
+      this._ptrLastX = null;
+      this._ptrLastY = null;
+      this._ptrMoveSamples = 0;
+      this._ptrMoveZero = 0;
+    }
+
+    // Record any user-input event on a single timeline so the server can spot
+    // the agent act -> screenshot -> think (dead air) -> act loop.
+    _markActivity(now) {
+      if (this._lastActivityT !== null) {
+        this._cadenceGaps.push(now - this._lastActivityT);
+        if (this._cadenceGaps.length > 1000) this._cadenceGaps.shift();
+      }
+      this._lastActivityT = now;
     }
 
     recordMouseMove(e) {
       const now = performance.now();
+      this._markActivity(now);
       const pos = { x: e.clientX, y: e.clientY, t: now };
 
       this.mousePositions.push(pos);
@@ -80,11 +108,20 @@
     }
 
     recordMouseDown(e) {
+      const now = performance.now();
+      this._markActivity(now);
+      // Teleport click: mousedown landing far from the last observed mouse
+      // position with no intervening movement = injected click (computer-use
+      // agents dispatch a click at coordinates without an approach path).
+      if (this.lastMousePos) {
+        const d = Math.hypot(e.clientX - this.lastMousePos.x, e.clientY - this.lastMousePos.y);
+        if (d > 150) this._teleportClicks++;
+      }
       this.clickData = {
         x: e.clientX,
         y: e.clientY,
         button: e.button,
-        downTime: performance.now()
+        downTime: now
       };
     }
 
@@ -96,23 +133,28 @@
     }
 
     recordScroll(_e) {
+      const now = performance.now();
+      this._markActivity(now);
       this.scrollEvents.push({
         x: window.scrollX,
         y: window.scrollY,
-        t: performance.now()
+        t: now
       });
       if (this.scrollEvents.length > 100) this.scrollEvents.shift();
     }
 
     recordKeyEvent(e) {
+      const now = performance.now();
+      this._markActivity(now);
       this.keyEvents.push({
         type: e.type,
         keyLength: e.key ? e.key.length : 0, // Don't store actual keys
-        t: performance.now()
+        t: now
       });
     }
 
     recordTouch(e) {
+      this._markActivity(performance.now());
       const touches = (e.touches && e.touches.length) ? e.touches : e.changedTouches;
       if (!touches || touches.length === 0) return;
       if (touches.length > 1) this.touchMultiTouchSeen = true;
@@ -135,10 +177,42 @@
     }
 
     recordPointer(e) {
+      const now = performance.now();
+      this._markActivity(now);
+
+      if (e.type === 'pointermove') {
+        // Coalesced-events batch size. Only mouse pointers; touch/pen coalesce
+        // differently and are scored via their own kinematics.
+        if (e.pointerType !== 'touch' && typeof e.getCoalescedEvents === 'function') {
+          let len = 1;
+          try {
+            const coalesced = e.getCoalescedEvents();
+            len = (coalesced && coalesced.length) ? coalesced.length : 1;
+          } catch (_err) { len = 1; }
+          this._coalescedSamples++;
+          if (len <= 1) this._coalescedEmpty++;
+          this._coalescedSum += len;
+          if (len > this._coalescedMax) this._coalescedMax = len;
+        }
+        // movementX/Y should be nonzero whenever the position actually changed.
+        if (e.pointerType !== 'touch' && this._ptrLastX !== null) {
+          const dx = e.clientX - this._ptrLastX;
+          const dy = e.clientY - this._ptrLastY;
+          if (dx !== 0 || dy !== 0) {
+            this._ptrMoveSamples++;
+            const mx = typeof e.movementX === 'number' ? e.movementX : 0;
+            const my = typeof e.movementY === 'number' ? e.movementY : 0;
+            if (mx === 0 && my === 0) this._ptrMoveZero++;
+          }
+        }
+        this._ptrLastX = e.clientX;
+        this._ptrLastY = e.clientY;
+      }
+
       this.pointerPoints.push({
         x: e.clientX,
         y: e.clientY,
-        t: performance.now(),
+        t: now,
         type: e.type,
         pressure: typeof e.pressure === 'number' ? e.pressure : 0,
         tiltX: typeof e.tiltX === 'number' ? e.tiltX : 0,
@@ -147,6 +221,38 @@
         pointerType: e.pointerType || 'unknown'
       });
       if (this.pointerPoints.length > 500) this.pointerPoints.shift();
+    }
+
+    // Aggregate the input-event forensics into a compact object consumed by the
+    // server's detectCDP / detectVisionAI. All thresholds live server-side.
+    _analyzeInputForensics() {
+      const gaps = this._cadenceGaps;
+      let silentGaps = 0;
+      let silentTime = 0;
+      let totalTime = 0;
+      for (const g of gaps) {
+        totalTime += g;
+        if (g > 1500) { silentGaps++; silentTime += g; }
+      }
+      const mean = gaps.length ? totalTime / gaps.length : 0;
+      let variance = 0;
+      if (gaps.length) {
+        variance = gaps.reduce((acc, g) => acc + (g - mean) * (g - mean), 0) / gaps.length;
+      }
+      const gapCV = mean > 0 ? Math.sqrt(variance) / mean : 0;
+      return {
+        coalescedSamples: this._coalescedSamples,
+        coalescedEmptyRatio: this._coalescedSamples ? this._coalescedEmpty / this._coalescedSamples : 0,
+        coalescedAvg: this._coalescedSamples ? this._coalescedSum / this._coalescedSamples : 0,
+        coalescedMax: this._coalescedMax,
+        pointerMoveSamples: this._ptrMoveSamples,
+        pointerMoveZeroRatio: this._ptrMoveSamples ? this._ptrMoveZero / this._ptrMoveSamples : 0,
+        cadenceEvents: gaps.length,
+        cadenceSilentGaps: silentGaps,
+        cadenceGapCV: gapCV,
+        cadenceSilentRatio: totalTime > 0 ? silentTime / totalTime : 0,
+        teleportClicks: this._teleportClicks
+      };
     }
 
     recordFocus(e) {
@@ -247,6 +353,7 @@
         focusEvents: this.focusEvents.length,
         clickData: this.clickData,
         interactionDuration: Date.now() - this.startTime,
+        inputForensics: this._analyzeInputForensics(),
         ...touchAnalysis,
         ...pointerAnalysis
       };
@@ -523,6 +630,7 @@
         scrollEvents: this.scrollEvents.length, keyEvents: this.keyEvents.length,
         touchEvents: this.touchEvents.length, focusEvents: this.focusEvents.length,
         clickData: this.clickData, interactionDuration: Date.now() - this.startTime,
+        inputForensics: this._analyzeInputForensics(),
         ...this._analyzeTouchPoints(this.touchEvents),
         ...this._analyzePointerPoints(this.pointerPoints)
       };
@@ -913,6 +1021,7 @@
         webdriver: this._detectWebdriver(),
         automationFlags: this._getAutomationFlags(),
         cdp: this._detectCDP(),
+        cdpRuntime: this._detectCDPRuntime(),
         playwright: this._detectPlaywright(),
 
         // Browser fingerprints
@@ -1047,6 +1156,28 @@
       } catch (e) {
         return { detected: false, signals: [] };
       }
+    }
+
+    // Detect an attached CDP Runtime/DevTools console consumer. When a client
+    // (DevTools, chrome.debugger, Playwright/Puppeteer over CDP) is attached and
+    // consuming console output, the host eagerly serializes logged objects,
+    // firing accessor traps that never fire for an ordinary visitor. Low
+    // confidence server-side: a developer with DevTools open also trips this.
+    _detectCDPRuntime() {
+      let consoleAttached = false;
+      try {
+        const bait = new Error();
+        Object.defineProperty(bait, 'message', {
+          configurable: true,
+          get() { consoleAttached = true; return ''; }
+        });
+        // debug level is hidden from the visible console by default, so this is
+        // silent for real users while still serialized by an attached consumer.
+        console.debug(bait);
+      } catch (_e) {
+        consoleAttached = false;
+      }
+      return { consoleAttached };
     }
 
     _detectCDP() {

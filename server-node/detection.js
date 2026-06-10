@@ -729,6 +729,18 @@ function analyzeFormInteraction(formAnalysis) {
   const textareaData = formAnalysis.textareaKeyboard;
   if (textareaData) {
     for (const [fieldId, stats] of Object.entries(textareaData)) {
+      // Programmatic fill: meaningful content appeared with zero keystrokes and
+      // zero pastes (e.g. Playwright fill() / element.value=). The length gate
+      // keeps this off browser autofill of short fields.
+      if ((stats.contentLength || 0) > 8 && (stats.keyCount || 0) === 0 && (stats.pasteCount || 0) === 0) {
+        detections.push({
+          category: 'automation',
+          score: 0.8,
+          confidence: 0.75,
+          reason: `Textarea "${fieldId}" filled programmatically (${stats.contentLength} chars, no keystrokes or paste)`
+        });
+      }
+
       // Check for paste-heavy input (spam bots often paste content)
       if (stats.pasteCount > 0 && stats.keyCount < 5) {
         detections.push({

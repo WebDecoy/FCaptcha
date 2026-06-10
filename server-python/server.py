@@ -421,6 +421,28 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
             "No exploratory mouse movement before click"
         ))
 
+    # Input-event forensics: teleport clicks and agent think-time cadence.
+    fcs = b.get("inputForensics")
+    if fcs:
+        teleports = fcs.get("teleportClicks", 0)
+        if teleports >= 1 and not is_touch_user:
+            detections.append(Detection(
+                ThreatCategory.VISION_AI, 0.7, 0.7,
+                f"Click injected with no pointer trajectory ({int(teleports)} teleport clicks)"
+            ))
+        # Bursts of activity separated by multi-second perfect silence — the agent
+        # act -> screenshot -> inference loop. Low confidence (slow humans idle too);
+        # requires silence to dominate. Keyboard-only users are exempt.
+        if (not is_keyboard_user
+                and fcs.get("cadenceEvents", 0) >= 12
+                and fcs.get("cadenceSilentGaps", 0) >= 3
+                and fcs.get("cadenceGapCV", 0) > 2.5
+                and fcs.get("cadenceSilentRatio", 0) > 0.6):
+            detections.append(Detection(
+                ThreatCategory.VISION_AI, 0.6, 0.5,
+                "Interaction cadence matches agent act/think loop (bursts + dead air)"
+            ))
+
     return detections
 
 
@@ -549,6 +571,34 @@ def detect_cdp(signals: Dict) -> List[Detection]:
     detections = []
     env = signals.get("environmental", {})
     cdp = env.get("cdp", {})
+
+    # Input-event forensics: catch CDP-injected input that reports isTrusted=true
+    # and so evades the global-based checks below. Touch users are exempt.
+    b = signals.get("behavioral", {})
+    is_touch_user = b.get("touchEvents", 0) >= 3
+    fcs = b.get("inputForensics")
+    if fcs and not is_touch_user:
+        # Real mice coalesce several hardware samples per frame; a stream of
+        # pointermoves that NEVER coalesced is synthetic injection.
+        if fcs.get("coalescedSamples", 0) >= 20 and fcs.get("coalescedMax", 0) <= 1:
+            detections.append(Detection(
+                ThreatCategory.CDP, 0.8, 0.6,
+                "Pointer moves never coalesced across many samples (synthetic/CDP input)"
+            ))
+        # movementX/Y incoherent with actual position deltas across most moves.
+        if fcs.get("pointerMoveSamples", 0) >= 20 and fcs.get("pointerMoveZeroRatio", 0) > 0.9:
+            detections.append(Detection(
+                ThreatCategory.CDP, 0.6, 0.5,
+                "Pointer movement deltas incoherent with position (synthetic input)"
+            ))
+
+    # CDP Runtime/DevTools console consumer attached. Low confidence: a developer
+    # with DevTools open also trips this, so it contributes rather than blocks.
+    if env.get("cdpRuntime", {}).get("consoleAttached"):
+        detections.append(Detection(
+            ThreatCategory.CDP, 0.6, 0.5,
+            "CDP/DevTools console consumer attached (automation protocol or open DevTools)"
+        ))
 
     if not cdp.get("detected"):
         return detections
