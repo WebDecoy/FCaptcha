@@ -274,3 +274,155 @@ func TestWeightsSumToOne(t *testing.T) {
 		t.Fatalf("category weights must sum to 1.0, got %.6f", sum)
 	}
 }
+
+// hasReasonContaining reports whether any detection's Reason contains sub.
+func hasReasonContaining(results []DetectionResult, sub string) bool {
+	for _, r := range results {
+		if strings.Contains(r.Reason, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDetectCDP_InputForensics covers the phase-2 synthetic-input signals:
+// coalesced-event absence, movement incoherence, and an attached CDP console.
+func TestDetectCDP_InputForensics(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+
+	// Synthetic: 30 pointermoves that never coalesced + incoherent movement.
+	synthetic := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"touchEvents": 0.0,
+			"inputForensics": map[string]interface{}{
+				"coalescedSamples":     30.0,
+				"coalescedMax":         1.0,
+				"pointerMoveSamples":   30.0,
+				"pointerMoveZeroRatio": 0.95,
+			},
+		},
+		"environmental": map[string]interface{}{
+			"cdpRuntime": map[string]interface{}{"consoleAttached": true},
+		},
+	}
+	got := e.detectCDP(synthetic)
+	if !hasReasonContaining(got, "never coalesced") {
+		t.Errorf("expected coalesced-absence detection, got %+v", got)
+	}
+	if !hasReasonContaining(got, "incoherent with position") {
+		t.Errorf("expected movement-incoherence detection, got %+v", got)
+	}
+	if !hasReasonContaining(got, "console consumer attached") {
+		t.Errorf("expected CDP console detection, got %+v", got)
+	}
+
+	// Real mouse: moves coalesced normally, movement coherent, no console.
+	human := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"touchEvents": 0.0,
+			"inputForensics": map[string]interface{}{
+				"coalescedSamples":     40.0,
+				"coalescedMax":         6.0,
+				"pointerMoveSamples":   40.0,
+				"pointerMoveZeroRatio": 0.02,
+			},
+		},
+		"environmental": map[string]interface{}{
+			"cdpRuntime": map[string]interface{}{"consoleAttached": false},
+		},
+	}
+	if got := e.detectCDP(human); len(got) != 0 {
+		t.Errorf("expected no CDP detections for human-like input, got %+v", got)
+	}
+
+	// Touch user must be exempt from the mouse-pointer signals.
+	touch := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"touchEvents": 12.0,
+			"inputForensics": map[string]interface{}{
+				"coalescedSamples": 30.0,
+				"coalescedMax":     1.0,
+			},
+		},
+	}
+	if got := e.detectCDP(touch); hasReasonContaining(got, "never coalesced") {
+		t.Errorf("touch user should be exempt from coalesced check, got %+v", got)
+	}
+}
+
+// TestDetectVisionAI_InputForensics covers teleport clicks and agent think-time
+// cadence, including the touch/keyboard exemptions.
+func TestDetectVisionAI_InputForensics(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+
+	teleport := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"totalPoints": 40.0, "trajectoryLength": 300.0, "approachPoints": 12.0,
+			"microTremorScore": 0.4, "touchEvents": 0.0, "keyEvents": 0.0,
+			"inputForensics": map[string]interface{}{"teleportClicks": 2.0},
+		},
+	}
+	if got := e.detectVisionAI(teleport); !hasReasonContaining(got, "teleport clicks") {
+		t.Errorf("expected teleport-click detection, got %+v", got)
+	}
+
+	cadence := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"totalPoints": 40.0, "trajectoryLength": 300.0, "approachPoints": 12.0,
+			"microTremorScore": 0.4, "touchEvents": 0.0, "keyEvents": 0.0,
+			"inputForensics": map[string]interface{}{
+				"cadenceEvents": 15.0, "cadenceSilentGaps": 4.0,
+				"cadenceGapCV": 3.0, "cadenceSilentRatio": 0.72,
+			},
+		},
+	}
+	if got := e.detectVisionAI(cadence); !hasReasonContaining(got, "act/think loop") {
+		t.Errorf("expected think-time cadence detection, got %+v", got)
+	}
+
+	// Human: one teleport-free click, continuous cadence — neither should fire.
+	human := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"totalPoints": 40.0, "trajectoryLength": 300.0, "approachPoints": 12.0,
+			"microTremorScore": 0.4, "touchEvents": 0.0, "keyEvents": 0.0,
+			"inputForensics": map[string]interface{}{
+				"teleportClicks": 0.0, "cadenceEvents": 30.0, "cadenceSilentGaps": 1.0,
+				"cadenceGapCV": 1.2, "cadenceSilentRatio": 0.1,
+			},
+		},
+	}
+	got := e.detectVisionAI(human)
+	if hasReasonContaining(got, "teleport clicks") || hasReasonContaining(got, "act/think loop") {
+		t.Errorf("human-like input should not trip input-forensics signals, got %+v", got)
+	}
+}
+
+// TestAnalyzeFormInteraction_ProgrammaticFill covers the fill()-style insertion
+// signal: content with zero keystrokes and zero pastes.
+func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+
+	filled := map[string]interface{}{
+		"textareaKeyboard": map[string]interface{}{
+			"comment": map[string]interface{}{
+				"contentLength": 50.0, "keyCount": 0.0, "pasteCount": 0.0,
+			},
+		},
+	}
+	if got := e.AnalyzeFormInteraction(filled); !hasReasonContaining(got, "filled programmatically") {
+		t.Errorf("expected programmatic-fill detection, got %+v", got)
+	}
+
+	// Genuinely typed content must not trip it.
+	typed := map[string]interface{}{
+		"textareaKeyboard": map[string]interface{}{
+			"comment": map[string]interface{}{
+				"contentLength": 50.0, "keyCount": 48.0, "pasteCount": 0.0,
+				"avgKeyInterval": 180.0, "keyIntervalVariance": 4000.0, "keydownUpRatio": 1.0,
+			},
+		},
+	}
+	if got := e.AnalyzeFormInteraction(typed); hasReasonContaining(got, "filled programmatically") {
+		t.Errorf("typed content should not trip programmatic-fill, got %+v", got)
+	}
+}

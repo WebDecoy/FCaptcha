@@ -281,7 +281,15 @@ if cs := getMap(behavioral, "coalescedStats"); cs != nil {
 }
 ```
 
-### 5.2 Pointer internals (pressure / movement coherence)
+### 5.2 Pointer internals (movement coherence)
+
+> **Implementation note (shipped in Phase 2):** the original draft below used
+> `pressure` constancy as a sub-signal. That was dropped — a real mouse hovering
+> (moving without a button held) reports `pressure === 0` on *every* move, so a
+> constant-pressure check false-positives on all mouse users. The shipped signal
+> keeps only **movement/position coherence**: the fraction of position-changing
+> moves where `movementX === 0 && movementY === 0` (`pointerMoveZeroRatio`),
+> fired conservatively (`>= 20` samples, ratio `> 0.9`, low confidence).
 
 ```javascript
 // client/fcaptcha.js — sample on pointermove/pointerdown
@@ -670,8 +678,8 @@ func (e *ScoringEngine) detectCorrelatedAutomation(fp string) []DetectionResult 
 
 | Phase | Scope | Effort | Risk |
 |---|---|---|---|
-| **P1** | §4 declared UAs + IP/ASN via enrichment; new category + policy knob | ~0.5 day | very low |
-| **P2** | §5 coalesced events + pointer internals + CDP side-effect; §6 teleport + cadence | ~2–3 days | medium (FP tuning) |
+| **P1** ✅ | §4 declared UAs (shipped v1.11.0); IP/ASN via enrichment + policy knob still pending | ~0.5 day | very low |
+| **P2** ✅ | §5 coalesced events + movement coherence + CDP side-effect; §6 teleport + cadence + programmatic fill | ~2–3 days | medium (FP tuning) |
 | **P3** | §7 software-GPU + hosted composite + client-hint coherence | ~1–2 days | low |
 | **P4** | §4.3 Web Bot Auth **signature verification** (JWKS fetch/cache) | ~2 days | low |
 | **P5** | §8 a11y honeypots (behind a flag; heavy FP testing first) | ~1 day | medium (a11y FP) |

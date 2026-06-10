@@ -337,6 +337,31 @@ function detectVisionAI(signals) {
     });
   }
 
+  // Input-event forensics: teleport clicks and agent think-time cadence.
+  const fcs = b.inputForensics;
+  if (fcs) {
+    const teleports = fcs.teleportClicks ?? 0;
+    if (teleports >= 1 && !isTouchUser) {
+      detections.push({
+        category: 'vision_ai', score: 0.7, confidence: 0.7,
+        reason: `Click injected with no pointer trajectory (${teleports} teleport clicks)`
+      });
+    }
+    // Bursts of activity separated by multi-second perfect silence — the agent
+    // act -> screenshot -> inference loop. Low confidence (slow humans idle too);
+    // requires silence to dominate. Keyboard-only users are exempt.
+    if (!isKeyboardUser &&
+        (fcs.cadenceEvents ?? 0) >= 12 &&
+        (fcs.cadenceSilentGaps ?? 0) >= 3 &&
+        (fcs.cadenceGapCV ?? 0) > 2.5 &&
+        (fcs.cadenceSilentRatio ?? 0) > 0.6) {
+      detections.push({
+        category: 'vision_ai', score: 0.6, confidence: 0.5,
+        reason: 'Interaction cadence matches agent act/think loop (bursts + dead air)'
+      });
+    }
+  }
+
   return detections;
 }
 
@@ -480,6 +505,38 @@ function detectCDP(signals) {
   const detections = [];
   const env = signals.environmental || {};
   const cdp = env.cdp || {};
+
+  // Input-event forensics: catch CDP-injected input that reports isTrusted:true
+  // and so evades the global-based checks below. Touch users are exempt.
+  const b = signals.behavioral || {};
+  const isTouchUser = (b.touchEvents ?? 0) >= 3;
+  const fcs = b.inputForensics;
+  if (fcs && !isTouchUser) {
+    // Real mice coalesce several hardware samples per frame; a stream of
+    // pointermoves that NEVER coalesced is synthetic injection.
+    if ((fcs.coalescedSamples ?? 0) >= 20 && (fcs.coalescedMax ?? 0) <= 1) {
+      detections.push({
+        category: 'cdp', score: 0.8, confidence: 0.6,
+        reason: 'Pointer moves never coalesced across many samples (synthetic/CDP input)'
+      });
+    }
+    // movementX/Y incoherent with actual position deltas across most moves.
+    if ((fcs.pointerMoveSamples ?? 0) >= 20 && (fcs.pointerMoveZeroRatio ?? 0) > 0.9) {
+      detections.push({
+        category: 'cdp', score: 0.6, confidence: 0.5,
+        reason: 'Pointer movement deltas incoherent with position (synthetic input)'
+      });
+    }
+  }
+
+  // CDP Runtime/DevTools console consumer attached. Low confidence: a developer
+  // with DevTools open also trips this, so it contributes rather than blocks.
+  if (env.cdpRuntime && env.cdpRuntime.consoleAttached) {
+    detections.push({
+      category: 'cdp', score: 0.6, confidence: 0.5,
+      reason: 'CDP/DevTools console consumer attached (automation protocol or open DevTools)'
+    });
+  }
 
   if (cdp.detected) {
     const signalList = cdp.signals || [];
