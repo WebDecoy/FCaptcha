@@ -21,8 +21,10 @@ const TRUSTED_JA4_HEADERS = detection.getTrustedJA4HeaderNames();
 // Verdict logging is off by default: a self-hosted FCaptcha emits no per-request
 // logs unless the operator opts in via FCAPTCHA_LOG_VERDICTS (1/true/yes/on).
 // When on, each /api/verify and /api/score logs one privacy-safe JSON line
-// (score, recommendation, category scores, detection reasons) for observability
-// and tuning. It deliberately omits IP, user agent, and raw signals.
+// (score, recommendation, category scores, and per-hit category/score/confidence)
+// for observability and tuning. It deliberately omits IP, user agent, raw
+// signals, and the free-text detection `reason`, which can interpolate
+// visitor-derived data (reverse-DNS hostname, UA/header fragments, field ids).
 const VERDICT_LOGGING_ENABLED = ['1', 'true', 'yes', 'on']
   .includes(String(process.env.FCAPTCHA_LOG_VERDICTS || '').trim().toLowerCase());
 
@@ -39,8 +41,7 @@ function logVerdict(endpoint, siteKey, result) {
     detections: (result.detections || []).map((d) => ({
       category: d.category,
       score: d.score,
-      confidence: d.confidence,
-      reason: d.reason
+      confidence: d.confidence
     }))
   }));
 }

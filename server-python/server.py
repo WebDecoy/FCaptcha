@@ -36,15 +36,25 @@ SECRET_KEY = os.getenv("FCAPTCHA_SECRET", "dev-secret-change-in-production")
 # Verdict logging is off by default: a self-hosted FCaptcha emits no per-request
 # logs unless the operator opts in via FCAPTCHA_LOG_VERDICTS (1/true/yes/on).
 # When on, each /api/verify and /api/score logs one privacy-safe JSON line
-# (score, recommendation, category scores, detection reasons) for observability
-# and tuning. It deliberately omits IP, user agent, and raw signals.
+# (score, recommendation, category scores, and per-hit category/score/confidence)
+# for observability and tuning. It deliberately omits IP, user agent, raw
+# signals, and the free-text detection reason, which can interpolate
+# visitor-derived data (reverse-DNS hostname, UA/header fragments, field ids).
 VERDICT_LOGGING_ENABLED = os.getenv("FCAPTCHA_LOG_VERDICTS", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def log_verdict(endpoint: str, site_key: str, result: Dict) -> None:
-    """Emit one privacy-safe JSON line describing a scoring outcome (no-op unless enabled)."""
+    """Emit one privacy-safe JSON line describing a scoring outcome (no-op unless enabled).
+
+    Logs only the detection category enum and numeric score/confidence — never
+    the free-text reason, which can carry visitor-derived data.
+    """
     if not VERDICT_LOGGING_ENABLED or not result:
         return
+    detections = [
+        {"category": d.get("category"), "score": d.get("score"), "confidence": d.get("confidence")}
+        for d in result.get("detections", [])
+    ]
     print(json.dumps({
         "event": "verdict",
         "endpoint": endpoint,
@@ -53,7 +63,7 @@ def log_verdict(endpoint: str, site_key: str, result: Dict) -> None:
         "score": result.get("score"),
         "recommendation": result.get("recommendation"),
         "categoryScores": result.get("categoryScores"),
-        "detections": result.get("detections", []),
+        "detections": detections,
     }), flush=True)
 
 # Serve the browser widget alongside the API so deployments expose a single

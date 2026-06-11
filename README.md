@@ -443,7 +443,7 @@ Verify a previously issued token (server-side).
 | `FCAPTCHA_SERVE_CLIENT` | (Python) Serve the widget at `/fcaptcha.js`; set `false` to host the client on a separate CDN | `true` |
 | `FCAPTCHA_PPROF` | (Go) Enable the pprof debug server (`1`/`true`/`yes`/`on`) | off |
 | `FCAPTCHA_PPROF_ADDR` | (Go) Listen address for pprof when enabled — keep it loopback-only | `127.0.0.1:3001` |
-| `FCAPTCHA_LOG_VERDICTS` | Log one privacy-safe JSON line per `/api/verify` and `/api/score` (score, recommendation, category scores, detection reasons). Omits IP, user agent, and raw signals. For observability/tuning (`1`/`true`/`yes`/`on`) | off |
+| `FCAPTCHA_LOG_VERDICTS` | Log one privacy-safe JSON line per `/api/verify` and `/api/score` (score, recommendation, category scores, and per-hit category/score/confidence). Omits IP, user agent, raw signals, and free-text detection reasons. For observability/tuning (`1`/`true`/`yes`/`on`) | off |
 
 ### Score Thresholds
 

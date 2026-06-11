@@ -63,9 +63,13 @@ func pprofEnabled() bool {
 // verdictLoggingEnabled is set once at startup from FCAPTCHA_LOG_VERDICTS.
 // Off by default: a self-hosted FCaptcha emits no per-request logs unless the
 // operator opts in. When on, each /api/verify and /api/score request logs one
-// privacy-safe JSON line (score, recommendation, category scores, detection
-// reasons) so operators can observe and tune detection. It deliberately omits
-// IP address, user agent, and raw signal payloads — no visitor data is logged.
+// privacy-safe JSON line (score, recommendation, category scores, and per-hit
+// category/score/confidence) so operators can observe and tune detection.
+//
+// It deliberately omits IP address, user agent, and raw signal payloads — and
+// notably the free-text detection Reason, which can interpolate visitor-derived
+// data (reverse-DNS hostname, UA/header fragments, client field ids). Only the
+// detection category enum and numeric score/confidence are logged.
 var verdictLoggingEnabled bool
 
 // verdictLog writes pure JSON lines (no timestamp prefix) so they pipe cleanly
@@ -84,7 +88,7 @@ func logVerdictsEnabled() bool {
 
 // logVerdict emits one privacy-safe JSON line describing a scoring outcome.
 // No-op unless verdict logging is enabled. Intentionally omits IP, user agent,
-// and raw signals.
+// raw signals, and the free-text detection Reason (which can carry visitor data).
 func logVerdict(endpoint, siteKey string, result *VerificationResult) {
 	if !verdictLoggingEnabled || result == nil {
 		return
@@ -95,7 +99,6 @@ func logVerdict(endpoint, siteKey string, result *VerificationResult) {
 			"category":   string(d.Category),
 			"score":      d.Score,
 			"confidence": d.Confidence,
-			"reason":     d.Reason,
 		})
 	}
 	line, err := json.Marshal(map[string]interface{}{
