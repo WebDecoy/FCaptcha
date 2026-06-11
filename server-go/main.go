@@ -60,11 +60,75 @@ func pprofEnabled() bool {
 	}
 }
 
+// verdictLoggingEnabled is set once at startup from FCAPTCHA_LOG_VERDICTS.
+// Off by default: a self-hosted FCaptcha emits no per-request logs unless the
+// operator opts in. When on, each /api/verify and /api/score request logs one
+// privacy-safe JSON line (score, recommendation, category scores, detection
+// reasons) so operators can observe and tune detection. It deliberately omits
+// IP address, user agent, and raw signal payloads — no visitor data is logged.
+var verdictLoggingEnabled bool
+
+// verdictLog writes pure JSON lines (no timestamp prefix) so they pipe cleanly
+// into jq / log processors. The host platform supplies its own timestamps.
+var verdictLog = log.New(os.Stdout, "", 0)
+
+// logVerdictsEnabled reads FCAPTCHA_LOG_VERDICTS (1/true/yes/on, case-insensitive).
+func logVerdictsEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("FCAPTCHA_LOG_VERDICTS"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+// logVerdict emits one privacy-safe JSON line describing a scoring outcome.
+// No-op unless verdict logging is enabled. Intentionally omits IP, user agent,
+// and raw signals.
+func logVerdict(endpoint, siteKey string, result *VerificationResult) {
+	if !verdictLoggingEnabled || result == nil {
+		return
+	}
+	detections := make([]map[string]interface{}, 0, len(result.Detections))
+	for _, d := range result.Detections {
+		detections = append(detections, map[string]interface{}{
+			"category":   string(d.Category),
+			"score":      d.Score,
+			"confidence": d.Confidence,
+			"reason":     d.Reason,
+		})
+	}
+	line, err := json.Marshal(map[string]interface{}{
+		"event":          "verdict",
+		"endpoint":       endpoint,
+		"siteKey":        siteKey,
+		"success":        result.Success,
+		"score":          result.Score,
+		"recommendation": result.Recommendation,
+		"categoryScores": result.CategoryScores,
+		"detections":     detections,
+	})
+	if err != nil {
+		return
+	}
+	verdictLog.Println(string(line))
+}
+
 func main() {
+	// Route stdlib logs to stdout. Go's log package defaults to stderr, which
+	// some hosts (e.g. Railway) classify as error-level — making routine startup
+	// and warning lines look like failures. Operational logs belong on stdout.
+	log.SetOutput(os.Stdout)
+
 	// Configuration
 	secretKey := os.Getenv("FCAPTCHA_SECRET")
 	if secretKey == "" {
 		secretKey = "dev-secret-change-in-production"
+	}
+
+	verdictLoggingEnabled = logVerdictsEnabled()
+	if verdictLoggingEnabled {
+		log.Printf("verdict logging enabled (FCAPTCHA_LOG_VERDICTS); emitting privacy-safe JSON per verify/score")
 	}
 
 	port := os.Getenv("PORT")
@@ -288,6 +352,8 @@ func verifyHandler(engine *ScoringEngine) http.HandlerFunc {
 			result.Detections = append(extraDetections, result.Detections...)
 		}
 
+		logVerdict("verify", req.SiteKey, result)
+
 		// Convert detections
 		detections := make([]DetectionInfo, 0, len(result.Detections))
 		for _, d := range result.Detections {
@@ -390,6 +456,8 @@ func invisibleScoreHandler(engine *ScoringEngine) http.HandlerFunc {
 		if len(scoreExtraDetections) > 0 {
 			result.Detections = append(scoreExtraDetections, result.Detections...)
 		}
+
+		logVerdict("score", req.SiteKey, result)
 
 		resp := map[string]interface{}{
 			"success":        result.Success,

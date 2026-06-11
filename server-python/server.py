@@ -33,6 +33,29 @@ app.add_middleware(
 
 SECRET_KEY = os.getenv("FCAPTCHA_SECRET", "dev-secret-change-in-production")
 
+# Verdict logging is off by default: a self-hosted FCaptcha emits no per-request
+# logs unless the operator opts in via FCAPTCHA_LOG_VERDICTS (1/true/yes/on).
+# When on, each /api/verify and /api/score logs one privacy-safe JSON line
+# (score, recommendation, category scores, detection reasons) for observability
+# and tuning. It deliberately omits IP, user agent, and raw signals.
+VERDICT_LOGGING_ENABLED = os.getenv("FCAPTCHA_LOG_VERDICTS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def log_verdict(endpoint: str, site_key: str, result: Dict) -> None:
+    """Emit one privacy-safe JSON line describing a scoring outcome (no-op unless enabled)."""
+    if not VERDICT_LOGGING_ENABLED or not result:
+        return
+    print(json.dumps({
+        "event": "verdict",
+        "endpoint": endpoint,
+        "siteKey": site_key,
+        "success": result.get("success"),
+        "score": result.get("score"),
+        "recommendation": result.get("recommendation"),
+        "categoryScores": result.get("categoryScores"),
+        "detections": result.get("detections", []),
+    }), flush=True)
+
 # Serve the browser widget alongside the API so deployments expose a single
 # origin to integrators (the implicit contract behind <serverUrl>/fcaptcha.js).
 # Set FCAPTCHA_SERVE_CLIENT=false to opt out — useful when hosting the widget
@@ -1197,6 +1220,7 @@ async def verify(req: VerifyRequest, request: Request):
     headers = {k.lower(): v for k, v in request.headers.items()}
 
     result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming)
+    log_verdict("verify", req.siteKey, result)
     return result
 
 
@@ -1208,6 +1232,7 @@ async def score(req: ScoreRequest, request: Request):
     headers = {k.lower(): v for k, v in request.headers.items()}
 
     result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming)
+    log_verdict("score", req.siteKey, result)
     return {
         "success": result["success"],
         "score": result["score"],

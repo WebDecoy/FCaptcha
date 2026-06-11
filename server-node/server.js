@@ -18,6 +18,33 @@ const SECRET_KEY = process.env.FCAPTCHA_SECRET || 'dev-secret-change-in-producti
 const PORT = process.env.PORT || 3000;
 const TRUSTED_JA4_HEADERS = detection.getTrustedJA4HeaderNames();
 
+// Verdict logging is off by default: a self-hosted FCaptcha emits no per-request
+// logs unless the operator opts in via FCAPTCHA_LOG_VERDICTS (1/true/yes/on).
+// When on, each /api/verify and /api/score logs one privacy-safe JSON line
+// (score, recommendation, category scores, detection reasons) for observability
+// and tuning. It deliberately omits IP, user agent, and raw signals.
+const VERDICT_LOGGING_ENABLED = ['1', 'true', 'yes', 'on']
+  .includes(String(process.env.FCAPTCHA_LOG_VERDICTS || '').trim().toLowerCase());
+
+function logVerdict(endpoint, siteKey, result) {
+  if (!VERDICT_LOGGING_ENABLED || !result) return;
+  console.log(JSON.stringify({
+    event: 'verdict',
+    endpoint,
+    siteKey,
+    success: result.success,
+    score: result.score,
+    recommendation: result.recommendation,
+    categoryScores: result.categoryScores,
+    detections: (result.detections || []).map((d) => ({
+      category: d.category,
+      score: d.score,
+      confidence: d.confidence,
+      reason: d.reason
+    }))
+  }));
+}
+
 // Serve the browser widget alongside the API so deployments expose a single
 // origin to integrators (the implicit contract behind <serverUrl>/fcaptcha.js).
 // Set FCAPTCHA_SERVE_CLIENT=false to opt out — useful when hosting the widget
@@ -1168,6 +1195,7 @@ app.post('/api/verify', (req, res) => {
   }
 
   const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming);
+  logVerdict('verify', siteKey, result);
   res.json(result);
 });
 
@@ -1191,6 +1219,7 @@ app.post('/api/score', (req, res) => {
   }
 
   const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming);
+  logVerdict('score', siteKey, result);
   res.json({
     success: result.success,
     score: result.score,
