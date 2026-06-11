@@ -40,21 +40,41 @@ SECRET_KEY = os.getenv("FCAPTCHA_SECRET", "dev-secret-change-in-production")
 # for observability and tuning. It deliberately omits IP, user agent, raw
 # signals, and the free-text detection reason, which can interpolate
 # visitor-derived data (reverse-DNS hostname, UA/header fragments, field ids).
-VERDICT_LOGGING_ENABLED = os.getenv("FCAPTCHA_LOG_VERDICTS", "").strip().lower() in ("1", "true", "yes", "on")
+#
+# FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW additionally includes that free-text reason.
+# Separate and off by default because reasons can carry visitor-derived data —
+# only enable in trusted debugging contexts with no privacy obligations.
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+VERDICT_LOGGING_ENABLED = _env_flag("FCAPTCHA_LOG_VERDICTS")
+VERDICT_LOG_INCLUDE_RAW = _env_flag("FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW")
+if VERDICT_LOGGING_ENABLED and VERDICT_LOG_INCLUDE_RAW:
+    print(
+        "WARNING: FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW enabled — verdict logs include "
+        "free-text detection reasons that may contain visitor-derived data "
+        "(hostnames, UA/header fragments, field ids). Do not enable where you have "
+        "privacy obligations.",
+        flush=True,
+    )
 
 
 def log_verdict(endpoint: str, site_key: str, result: Dict) -> None:
     """Emit one privacy-safe JSON line describing a scoring outcome (no-op unless enabled).
 
-    Logs only the detection category enum and numeric score/confidence — never
-    the free-text reason, which can carry visitor-derived data.
+    Logs the detection category enum and numeric score/confidence. The free-text
+    reason (which can carry visitor-derived data) is included only when
+    FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW is set.
     """
     if not VERDICT_LOGGING_ENABLED or not result:
         return
-    detections = [
-        {"category": d.get("category"), "score": d.get("score"), "confidence": d.get("confidence")}
-        for d in result.get("detections", [])
-    ]
+    detections = []
+    for d in result.get("detections", []):
+        det = {"category": d.get("category"), "score": d.get("score"), "confidence": d.get("confidence")}
+        if VERDICT_LOG_INCLUDE_RAW:
+            det["reason"] = d.get("reason")
+        detections.append(det)
     print(json.dumps({
         "event": "verdict",
         "endpoint": endpoint,

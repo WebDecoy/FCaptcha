@@ -25,8 +25,17 @@ const TRUSTED_JA4_HEADERS = detection.getTrustedJA4HeaderNames();
 // for observability and tuning. It deliberately omits IP, user agent, raw
 // signals, and the free-text detection `reason`, which can interpolate
 // visitor-derived data (reverse-DNS hostname, UA/header fragments, field ids).
-const VERDICT_LOGGING_ENABLED = ['1', 'true', 'yes', 'on']
-  .includes(String(process.env.FCAPTCHA_LOG_VERDICTS || '').trim().toLowerCase());
+//
+// FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW additionally includes that free-text reason.
+// Separate and off by default because reasons can carry visitor-derived data —
+// only enable in trusted debugging contexts with no privacy obligations.
+const envFlag = (name) => ['1', 'true', 'yes', 'on']
+  .includes(String(process.env[name] || '').trim().toLowerCase());
+const VERDICT_LOGGING_ENABLED = envFlag('FCAPTCHA_LOG_VERDICTS');
+const VERDICT_LOG_INCLUDE_RAW = envFlag('FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW');
+if (VERDICT_LOGGING_ENABLED && VERDICT_LOG_INCLUDE_RAW) {
+  console.warn('WARNING: FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW enabled — verdict logs include free-text detection reasons that may contain visitor-derived data (hostnames, UA/header fragments, field ids). Do not enable where you have privacy obligations.');
+}
 
 function logVerdict(endpoint, siteKey, result) {
   if (!VERDICT_LOGGING_ENABLED || !result) return;
@@ -38,11 +47,11 @@ function logVerdict(endpoint, siteKey, result) {
     score: result.score,
     recommendation: result.recommendation,
     categoryScores: result.categoryScores,
-    detections: (result.detections || []).map((d) => ({
-      category: d.category,
-      score: d.score,
-      confidence: d.confidence
-    }))
+    detections: (result.detections || []).map((d) => {
+      const det = { category: d.category, score: d.score, confidence: d.confidence };
+      if (VERDICT_LOG_INCLUDE_RAW) det.reason = d.reason;
+      return det;
+    })
   }));
 }
 

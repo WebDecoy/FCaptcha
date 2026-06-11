@@ -66,19 +66,26 @@ func pprofEnabled() bool {
 // privacy-safe JSON line (score, recommendation, category scores, and per-hit
 // category/score/confidence) so operators can observe and tune detection.
 //
-// It deliberately omits IP address, user agent, and raw signal payloads — and
-// notably the free-text detection Reason, which can interpolate visitor-derived
+// It deliberately omits IP address, user agent, and raw signal payloads — and by
+// default the free-text detection Reason, which can interpolate visitor-derived
 // data (reverse-DNS hostname, UA/header fragments, client field ids). Only the
 // detection category enum and numeric score/confidence are logged.
 var verdictLoggingEnabled bool
+
+// verdictLogIncludeRaw additionally includes the free-text detection Reason in
+// each logged verdict. Off by default and separate from verdictLoggingEnabled
+// because reasons can carry visitor-derived data; only enable it in trusted,
+// debugging contexts with no privacy obligations. Controlled by
+// FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW.
+var verdictLogIncludeRaw bool
 
 // verdictLog writes pure JSON lines (no timestamp prefix) so they pipe cleanly
 // into jq / log processors. The host platform supplies its own timestamps.
 var verdictLog = log.New(os.Stdout, "", 0)
 
-// logVerdictsEnabled reads FCAPTCHA_LOG_VERDICTS (1/true/yes/on, case-insensitive).
-func logVerdictsEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("FCAPTCHA_LOG_VERDICTS"))) {
+// envFlagEnabled reports whether an env var is set truthy (1/true/yes/on, case-insensitive).
+func envFlagEnabled(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
 	case "1", "true", "yes", "on":
 		return true
 	default:
@@ -87,19 +94,23 @@ func logVerdictsEnabled() bool {
 }
 
 // logVerdict emits one privacy-safe JSON line describing a scoring outcome.
-// No-op unless verdict logging is enabled. Intentionally omits IP, user agent,
-// raw signals, and the free-text detection Reason (which can carry visitor data).
+// No-op unless verdict logging is enabled. Omits IP, user agent, and raw signals;
+// the free-text detection Reason is included only when verdictLogIncludeRaw is set.
 func logVerdict(endpoint, siteKey string, result *VerificationResult) {
 	if !verdictLoggingEnabled || result == nil {
 		return
 	}
 	detections := make([]map[string]interface{}, 0, len(result.Detections))
 	for _, d := range result.Detections {
-		detections = append(detections, map[string]interface{}{
+		det := map[string]interface{}{
 			"category":   string(d.Category),
 			"score":      d.Score,
 			"confidence": d.Confidence,
-		})
+		}
+		if verdictLogIncludeRaw {
+			det["reason"] = d.Reason
+		}
+		detections = append(detections, det)
 	}
 	line, err := json.Marshal(map[string]interface{}{
 		"event":          "verdict",
@@ -129,9 +140,13 @@ func main() {
 		secretKey = "dev-secret-change-in-production"
 	}
 
-	verdictLoggingEnabled = logVerdictsEnabled()
+	verdictLoggingEnabled = envFlagEnabled("FCAPTCHA_LOG_VERDICTS")
+	verdictLogIncludeRaw = envFlagEnabled("FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW")
 	if verdictLoggingEnabled {
 		log.Printf("verdict logging enabled (FCAPTCHA_LOG_VERDICTS); emitting privacy-safe JSON per verify/score")
+		if verdictLogIncludeRaw {
+			log.Printf("WARNING: FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW enabled — verdict logs include free-text detection reasons that may contain visitor-derived data (hostnames, UA/header fragments, field ids). Do not enable where you have privacy obligations.")
+		}
 	}
 
 	port := os.Getenv("PORT")
