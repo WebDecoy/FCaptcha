@@ -33,6 +33,59 @@ app.add_middleware(
 
 SECRET_KEY = os.getenv("FCAPTCHA_SECRET", "dev-secret-change-in-production")
 
+# Verdict logging is off by default: a self-hosted FCaptcha emits no per-request
+# logs unless the operator opts in via FCAPTCHA_LOG_VERDICTS (1/true/yes/on).
+# When on, each /api/verify and /api/score logs one privacy-safe JSON line
+# (score, recommendation, category scores, and per-hit category/score/confidence)
+# for observability and tuning. It deliberately omits IP, user agent, raw
+# signals, and the free-text detection reason, which can interpolate
+# visitor-derived data (reverse-DNS hostname, UA/header fragments, field ids).
+#
+# FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW additionally includes that free-text reason.
+# Separate and off by default because reasons can carry visitor-derived data —
+# only enable in trusted debugging contexts with no privacy obligations.
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+VERDICT_LOGGING_ENABLED = _env_flag("FCAPTCHA_LOG_VERDICTS")
+VERDICT_LOG_INCLUDE_RAW = _env_flag("FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW")
+if VERDICT_LOGGING_ENABLED and VERDICT_LOG_INCLUDE_RAW:
+    print(
+        "WARNING: FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW enabled — verdict logs include "
+        "free-text detection reasons that may contain visitor-derived data "
+        "(hostnames, UA/header fragments, field ids). Do not enable where you have "
+        "privacy obligations.",
+        flush=True,
+    )
+
+
+def log_verdict(endpoint: str, site_key: str, result: Dict) -> None:
+    """Emit one privacy-safe JSON line describing a scoring outcome (no-op unless enabled).
+
+    Logs the detection category enum and numeric score/confidence. The free-text
+    reason (which can carry visitor-derived data) is included only when
+    FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW is set.
+    """
+    if not VERDICT_LOGGING_ENABLED or not result:
+        return
+    detections = []
+    for d in result.get("detections", []):
+        det = {"category": d.get("category"), "score": d.get("score"), "confidence": d.get("confidence")}
+        if VERDICT_LOG_INCLUDE_RAW:
+            det["reason"] = d.get("reason")
+        detections.append(det)
+    print(json.dumps({
+        "event": "verdict",
+        "endpoint": endpoint,
+        "siteKey": site_key,
+        "success": result.get("success"),
+        "score": result.get("score"),
+        "recommendation": result.get("recommendation"),
+        "categoryScores": result.get("categoryScores"),
+        "detections": detections,
+    }), flush=True)
+
 # Serve the browser widget alongside the API so deployments expose a single
 # origin to integrators (the implicit contract behind <serverUrl>/fcaptcha.js).
 # Set FCAPTCHA_SERVE_CLIENT=false to opt out — useful when hosting the widget
@@ -1197,6 +1250,7 @@ async def verify(req: VerifyRequest, request: Request):
     headers = {k.lower(): v for k, v in request.headers.items()}
 
     result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming)
+    log_verdict("verify", req.siteKey, result)
     return result
 
 
@@ -1208,6 +1262,7 @@ async def score(req: ScoreRequest, request: Request):
     headers = {k.lower(): v for k, v in request.headers.items()}
 
     result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming)
+    log_verdict("score", req.siteKey, result)
     return {
         "success": result["success"],
         "score": result["score"],
