@@ -1,4 +1,4 @@
-module github.com/fcaptcha/server
+module github.com/WebDecoy/FCaptcha/server-go
 
 go 1.21
 
