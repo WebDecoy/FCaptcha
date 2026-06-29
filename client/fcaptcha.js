@@ -1023,6 +1023,7 @@
         cdp: this._detectCDP(),
         cdpRuntime: this._detectCDPRuntime(),
         playwright: this._detectPlaywright(),
+        stealthArtifacts: this._detectStealthArtifacts(),
 
         // Browser fingerprints
         canvasHash: this._getCanvasHash(),
@@ -1051,12 +1052,13 @@
 
     // Async detections collected separately
     async collectAsync() {
-      const [speechInfo, webrtcInfo, workerConsistency] = await Promise.all([
+      const [speechInfo, webrtcInfo, workerConsistency, permissionProbe] = await Promise.all([
         this._getSpeechInfo(),
         this._getWebRTCInfo(),
-        this._checkWorkerConsistency()
+        this._checkWorkerConsistency(),
+        this._checkPermissionContradiction()
       ]);
-      return { speechInfo, webrtcInfo, workerConsistency };
+      return { speechInfo, webrtcInfo, workerConsistency, permissionProbe };
     }
 
     _detectWebdriver() {
@@ -1155,6 +1157,78 @@
         return { detected: signals.length > 0, signals };
       } catch (e) {
         return { detected: false, signals: [] };
+      }
+    }
+
+    // Detect stealth-automation patch artifacts. A genuine browser keeps its
+    // built-in functions native and internally consistent. Anti-detection
+    // tooling (puppeteer-extra-stealth, patchright, etc.) overrides natives to
+    // spoof fingerprints and then hides the overrides — leaving traces a real
+    // user never produces. Returns a list of signal strings; the server scores
+    // only the false-positive-safe ones (see server detectStealthArtifacts).
+    _detectStealthArtifacts() {
+      const signals = [];
+      try {
+        // Pristine reference to the native toString. Used to stringify other
+        // functions so a patched Function.prototype.toString can't mask them.
+        const fnToString = Function.prototype.toString;
+        const isNative = (fn) => {
+          if (typeof fn !== 'function') return true; // not a function: ignore
+          try {
+            return /\{\s*\[native code\]\s*\}/.test(fnToString.call(fn));
+          } catch (e) {
+            // A throwing toString is itself anomalous, but be conservative.
+            return true;
+          }
+        };
+
+        // 1. FP-SAFE: Function.prototype.toString itself must be native.
+        //    Stealth tooling proxies it to make its other overrides look native
+        //    — essentially the signature move of anti-detection frameworks.
+        //    Real browsers (and privacy extensions) leave it untouched.
+        if (!isNative(fnToString)) signals.push('tostring_proxied');
+
+        // 2. Observability only (NOT scored server-side): native functions that
+        //    stealth tooling commonly overrides. Legitimate privacy/anti-
+        //    fingerprint extensions also patch some of these (canvas/webgl), so
+        //    they are collected for analysis but never affect the verdict.
+        const watched = {
+          'permissions_query': navigator.permissions && navigator.permissions.query,
+          'webgl_getparameter': typeof WebGLRenderingContext !== 'undefined' && WebGLRenderingContext.prototype.getParameter,
+          'canvas_todataurl': typeof HTMLCanvasElement !== 'undefined' && HTMLCanvasElement.prototype.toDataURL,
+        };
+        for (const name in watched) {
+          const fn = watched[name];
+          if (fn && !isNative(fn)) signals.push('patched_' + name);
+        }
+      } catch (e) {
+        // Never let collection throw.
+      }
+      return { signals };
+    }
+
+    // FP-SAFE permission-state contradiction. In a real browser, when
+    // Notification.permission is "denied" the Permissions API must also report
+    // "denied". Headless/stealth Chromium classically reports "denied" while the
+    // Permissions API still says "prompt" (or stealth tooling patches query to
+    // paper over it but misses an edge) — a state a genuine browser can't reach.
+    async _checkPermissionContradiction() {
+      try {
+        if (typeof Notification === 'undefined' || !navigator.permissions || !navigator.permissions.query) {
+          return { supported: false };
+        }
+        const notif = Notification.permission;
+        let queryState = null;
+        try {
+          const status = await navigator.permissions.query({ name: 'notifications' });
+          queryState = status && status.state;
+        } catch (e) {
+          return { supported: false };
+        }
+        const contradiction = notif === 'denied' && queryState === 'prompt';
+        return { supported: true, notificationPermission: notif, queryState, contradiction };
+      } catch (e) {
+        return { supported: false };
       }
     }
 

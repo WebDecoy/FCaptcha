@@ -185,6 +185,65 @@ async function testHeadlessBrowserDetection() {
   assertDetection(noPluginsResult, 'headless', true, 'Detects no browser plugins');
 }
 
+async function testStealthArtifactDetection() {
+  log('\n[Stealth Patch Artifact Detection]', colors.cyan);
+
+  const chromeHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9',
+  };
+  // Benign env shared by the positive cases so the ONLY headless signal is the
+  // stealth artifact under test (avoids plugins=0 etc. firing headless too).
+  const benignEnv = {
+    automationFlags: { plugins: 3, languages: true, chrome: true },
+    webglInfo: { renderer: 'ANGLE (NVIDIA, GeForce RTX 3060 Direct3D11)' },
+  };
+
+  // Function.prototype.toString proxied -> stealth automation patch
+  const toStringResult = await makeRequest('/api/verify', {
+    headers: chromeHeaders,
+    body: { siteKey: 'test', signals: { environmental: {
+      ...benignEnv,
+      stealthArtifacts: { signals: ['tostring_proxied'] },
+    } } }
+  });
+  assertDetection(toStringResult, 'headless', true, 'Detects proxied Function.prototype.toString');
+
+  // Notification.permission "denied" vs Permissions API "prompt" -> impossible state
+  const permResult = await makeRequest('/api/verify', {
+    headers: chromeHeaders,
+    body: { siteKey: 'test', signals: { environmental: {
+      ...benignEnv,
+      permissionProbe: { supported: true, notificationPermission: 'denied', queryState: 'prompt', contradiction: true },
+    } } }
+  });
+  assertDetection(permResult, 'headless', true, 'Detects Notification/Permissions API contradiction');
+
+  // FP-safety: privacy-extension-style native patches (patched_*) and a
+  // consistent human session must NOT raise the score — these artifacts are
+  // collected for observability but intentionally never scored.
+  const privacyExtResult = await makeRequest('/api/verify', {
+    headers: chromeHeaders,
+    body: {
+      siteKey: 'test',
+      signals: {
+        environmental: {
+          ...benignEnv,
+          stealthArtifacts: { signals: ['patched_canvas_todataurl', 'patched_webgl_getparameter'] },
+          permissionProbe: { supported: true, notificationPermission: 'default', queryState: 'prompt', contradiction: false },
+        },
+        behavioral: {
+          totalPoints: 80, trajectoryLength: 350, velocityVariance: 0.8,
+          microTremorScore: 0.4, approachPoints: 20, approachDirectness: 0.6,
+          overshootCorrections: 2, directionChanges: 8, interactionDuration: 3500,
+          mouseEventRate: 45,
+        },
+      }
+    }
+  });
+  assertScore(privacyExtResult, 0, 0.3, 'Privacy-extension native patches do not raise score (FP-safe)');
+}
+
 async function testDatacenterIPDetection() {
   log('\n[Datacenter IP Detection]', colors.cyan);
 
@@ -2059,6 +2118,7 @@ async function runTests() {
   await testFormAnalysis();
   await testAdvancedDetections();
   await testPlaywrightDetection();
+  await testStealthArtifactDetection();
   await testMissingPoWHardFail();
   await testTightenedExemptions();
   await testMobileSensorDetection();

@@ -495,6 +495,39 @@ function detectHeadless(signals, userAgent) {
   return detections;
 }
 
+// Flags anti-detection patch traces collected by the client. FALSE-POSITIVE-
+// SAFE: a genuine browser never produces these (internal contradictions /
+// native-function tampering, not environment-shape heuristics that would
+// misfire on real Linux/VPN users). Targets stealth agents (e.g. Manus AI)
+// driving real-but-patched Chromium. Only the two FP-safe signals are scored;
+// the client also collects privacy-extension-ambiguous artifacts (patched_*)
+// for observability that are intentionally NOT scored. Keep in sync with Go/Py.
+function detectStealthArtifacts(signals) {
+  const detections = [];
+  const env = signals.environmental || {};
+
+  // Function.prototype.toString proxied — the signature move of stealth
+  // frameworks (used to make their other native overrides look untouched).
+  const artifactSignals = (env.stealthArtifacts && env.stealthArtifacts.signals) || [];
+  if (artifactSignals.includes('tostring_proxied')) {
+    detections.push({
+      category: 'headless', score: 0.9, confidence: 0.85,
+      reason: 'Function.prototype.toString is proxied (stealth automation patch)'
+    });
+  }
+
+  // Notification.permission === 'denied' while the Permissions API reports
+  // 'prompt': a state a real browser cannot reach (classic headless tell).
+  if (env.permissionProbe && env.permissionProbe.contradiction === true) {
+    detections.push({
+      category: 'headless', score: 0.85, confidence: 0.85,
+      reason: 'Notification permission contradicts Permissions API (headless/stealth tell)'
+    });
+  }
+
+  return detections;
+}
+
 function detectAutomation(signals) {
   const detections = [];
   const env = signals.environmental || {};
@@ -1098,6 +1131,7 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
   detections.push(
     ...detectVisionAI(signals),
     ...detectHeadless(signals, userAgent),
+    ...detectStealthArtifacts(signals),
     ...detectAutomation(signals),
     ...detectCDP(signals),
     ...detectBehavioral(signals),
