@@ -580,6 +580,40 @@ def detect_headless(signals: Dict, user_agent: str) -> List[Detection]:
     return detections
 
 
+def detect_stealth_artifacts(signals: Dict) -> List[Detection]:
+    """Flag anti-detection patch traces collected by the client.
+
+    FALSE-POSITIVE-SAFE: a genuine browser never produces these — they are
+    internal contradictions / native-function tampering, not environment-shape
+    heuristics (which would misfire on real Linux/VPN users). Targets stealth
+    agents (e.g. Manus AI) driving real-but-patched Chromium. Only the two
+    FP-safe signals are scored; the client also collects privacy-extension-
+    ambiguous artifacts (patched_*) for observability that are intentionally NOT
+    scored. Keep in sync with server-go and server-node.
+    """
+    detections = []
+    env = signals.get("environmental", {})
+
+    # Function.prototype.toString proxied — the signature move of stealth
+    # frameworks (used to make their other native overrides look untouched).
+    artifact_signals = (env.get("stealthArtifacts") or {}).get("signals", []) or []
+    if "tostring_proxied" in artifact_signals:
+        detections.append(Detection(
+            ThreatCategory.HEADLESS, 0.9, 0.85,
+            "Function.prototype.toString is proxied (stealth automation patch)"
+        ))
+
+    # Notification.permission == "denied" while the Permissions API reports
+    # "prompt": a state a real browser cannot reach (classic headless tell).
+    if (env.get("permissionProbe") or {}).get("contradiction") is True:
+        detections.append(Detection(
+            ThreatCategory.HEADLESS, 0.85, 0.85,
+            "Notification permission contradicts Permissions API (headless/stealth tell)"
+        ))
+
+    return detections
+
+
 def detect_automation(signals: Dict) -> List[Detection]:
     detections = []
     env = signals.get("environmental", {})
@@ -1135,6 +1169,7 @@ def run_verification(
     # Behavioral detectors
     detections.extend(detect_vision_ai(signals))
     detections.extend(detect_headless(signals, user_agent))
+    detections.extend(detect_stealth_artifacts(signals))
     detections.extend(detect_automation(signals))
     detections.extend(detect_cdp(signals))
     detections.extend(detect_behavioral(signals))

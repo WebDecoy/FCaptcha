@@ -352,6 +352,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	// Behavioral detectors
 	detections = append(detections, e.detectVisionAI(signals)...)
 	detections = append(detections, e.detectHeadless(signals, userAgent)...)
+	detections = append(detections, e.detectStealthArtifacts(signals)...)
 	detections = append(detections, e.detectAutomation(signals)...)
 	detections = append(detections, e.detectCDP(signals)...)
 	detections = append(detections, e.detectBehavioral(signals)...)
@@ -939,6 +940,54 @@ func (e *ScoringEngine) detectHeadless(signals map[string]interface{}, userAgent
 				}
 			}
 		}
+	}
+
+	return results
+}
+
+// detectStealthArtifacts flags anti-detection patch traces collected by the
+// client. These are FALSE-POSITIVE-SAFE: a genuine browser never produces them,
+// because they are internal contradictions / native-function tampering rather
+// than environment-shape heuristics (which would misfire on real Linux/VPN
+// users). Targets stealth-automation agents (e.g. Manus AI) running real but
+// patched Chromium. Only the two FP-safe signals are scored; the client also
+// collects privacy-extension-ambiguous artifacts (patched_*) for observability
+// that are intentionally NOT scored here. Keep in sync with server-node/python.
+func (e *ScoringEngine) detectStealthArtifacts(signals map[string]interface{}) []DetectionResult {
+	results := make([]DetectionResult, 0)
+
+	env := getMap(signals, "environmental")
+	if env == nil {
+		return results
+	}
+
+	// Function.prototype.toString proxied — the signature move of stealth
+	// frameworks (used to make their other native overrides look untouched).
+	if artifacts := getMap(env, "stealthArtifacts"); artifacts != nil {
+		if list, ok := artifacts["signals"].([]interface{}); ok {
+			for _, s := range list {
+				if str, ok := s.(string); ok && str == "tostring_proxied" {
+					results = append(results, DetectionResult{
+						Category:   CategoryHeadless,
+						Score:      0.9,
+						Confidence: 0.85,
+						Reason:     "Function.prototype.toString is proxied (stealth automation patch)",
+					})
+					break
+				}
+			}
+		}
+	}
+
+	// Notification.permission == "denied" while the Permissions API reports
+	// "prompt": a state a real browser cannot reach (classic headless tell).
+	if probe := getMap(env, "permissionProbe"); getBool(probe, "contradiction") {
+		results = append(results, DetectionResult{
+			Category:   CategoryHeadless,
+			Score:      0.85,
+			Confidence: 0.85,
+			Reason:     "Notification permission contradicts Permissions API (headless/stealth tell)",
+		})
 	}
 
 	return results
