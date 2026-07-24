@@ -132,10 +132,18 @@ var declaredAIAgentPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bYouBot\b`),
 }
 
-// CheckDeclaredAIAgent flags self-identifying AI agents via the User-Agent and
-// detects Web Bot Auth signed requests (RFC 9421 HTTP Message Signatures). Both
-// are high-confidence identifications surfaced as the declared_ai category so
-// callers can apply an allow/block policy instead of relying on a hard score.
+// CheckDeclaredAIAgent flags self-identifying AI agents via the User-Agent as
+// the declared_ai category, so callers can apply an allow/block policy instead
+// of relying on a hard score.
+//
+// Web Bot Auth signed requests (RFC 9421 HTTP Message Signatures) used to be
+// detected here by header presence alone. That moved to CheckWebBotAuth, which
+// cryptographically verifies the signature against the agent's published key
+// directory — a presence check can't tell a real signer from three spoofed
+// headers. Verification needs the accurately-reconstructed request (authority,
+// path, scheme), which only the HTTP layer has, so it runs in the handler; the
+// headers argument is retained for signature parity with the Node/Python
+// servers, whose checkDeclaredAIAgent still performs the presence check.
 func (e *ScoringEngine) CheckDeclaredAIAgent(userAgent string, headers map[string]string) []DetectionResult {
 	var detections []DetectionResult
 
@@ -149,24 +157,6 @@ func (e *ScoringEngine) CheckDeclaredAIAgent(userAgent string, headers map[strin
 				Details:    map[string]interface{}{"matched": match},
 			})
 			break
-		}
-	}
-
-	// Web Bot Auth: presence of HTTP Message Signature headers identifies a
-	// (claimed) verified agent. v1 detects/identifies only; signature verification
-	// against the agent's published JWKS is a follow-up before trusting it.
-	if headers != nil {
-		_, hasSig := headers["signature"]
-		_, hasInput := headers["signature-input"]
-		sigAgent, hasAgent := headers["signature-agent"]
-		if hasSig && hasInput && hasAgent {
-			detections = append(detections, DetectionResult{
-				Category:   CategoryDeclaredAI,
-				Score:      0.4,
-				Confidence: 0.95,
-				Reason:     "Signed agent request (Web Bot Auth): " + sigAgent,
-				Details:    map[string]interface{}{"signatureAgent": sigAgent, "verified": false},
-			})
 		}
 	}
 

@@ -9,6 +9,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 const path = require('path');
 const detection = require('./detection');
+const webbotauth = require('./webbotauth');
 
 const app = express();
 app.use(cors());
@@ -1044,8 +1045,24 @@ function verifyToken(token, ip = null) {
   }
 }
 
-function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash = null, powSolution = null, signalsJson = null, powTiming = null) {
-  const detections = [];
+// verifyWebBotAuth runs Web Bot Auth verification and never throws into the
+// request path: any unexpected error degrades to no detection (fail open), so a
+// verification bug can't turn a scoring request into a 500.
+async function verifyWebBotAuth(req) {
+  try {
+    return await webbotauth.checkWebBotAuth(req);
+  } catch (e) {
+    console.error('[webbotauth] verification error:', e && e.message);
+    return [];
+  }
+}
+
+// preDetections are detections computed by the caller (the route handler) that
+// require the raw request — currently Web Bot Auth signature verification, which
+// needs the accurately-reconstructed signed request. They are seeded into the
+// detection set so they participate in scoring like any other detection.
+function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash = null, powSolution = null, signalsJson = null, powTiming = null, preDetections = []) {
+  const detections = Array.isArray(preDetections) ? [...preDetections] : [];
 
   // Verify signal commitment (signalsJson hash must match powSolution.signalsHash)
   const clientSignalsHash = powSolution?.signalsHash || null;
@@ -1218,7 +1235,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.post('/api/verify', (req, res) => {
+app.post('/api/verify', async (req, res) => {
   const { siteKey, signals, powSolution, signalsJson, powTiming } = req.body;
   let ip = req.headers['x-real-ip'] || '';
   if (!ip) {
@@ -1238,12 +1255,15 @@ app.post('/api/verify', (req, res) => {
     headers[key.toLowerCase()] = Array.isArray(value) ? value[0] : value;
   }
 
-  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming);
+  // Web Bot Auth verification needs the raw request; its verdict is scored.
+  const webBotAuth = await verifyWebBotAuth(req);
+
+  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth);
   logVerdict('verify', siteKey, result);
   res.json(result);
 });
 
-app.post('/api/score', (req, res) => {
+app.post('/api/score', async (req, res) => {
   const { siteKey, signals, action, powSolution, signalsJson, powTiming } = req.body;
   let ip = req.headers['x-real-ip'] || '';
   if (!ip) {
@@ -1262,7 +1282,10 @@ app.post('/api/score', (req, res) => {
     headers[key.toLowerCase()] = Array.isArray(value) ? value[0] : value;
   }
 
-  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming);
+  // Web Bot Auth verification needs the raw request; its verdict is scored.
+  const webBotAuth = await verifyWebBotAuth(req);
+
+  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth);
   logVerdict('score', siteKey, result);
   res.json({
     success: result.success,

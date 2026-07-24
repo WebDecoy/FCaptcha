@@ -1,3 +1,5 @@
+github.com/WebDecoy/web-bot-auth v0.2.0 h1:0O30qxxYjMTUToSXCMO43gvhLOIB/Mdb2MppSKKs/U8=
+github.com/WebDecoy/web-bot-auth v0.2.0/go.mod h1:Vjih4b1Xzxi3whR7J3Fnfy2wBZDytvHLI0H1hqZV1Bo=
 github.com/go-chi/chi/v5 v5.0.11 h1:BnpYbFZ3T3S1WMpD79r7R5ThWX40TaFB7L31Y8xqSwA=
 github.com/go-chi/chi/v5 v5.0.11/go.mod h1:DslCQbL2OYiznFReuXYUmQ2hGd1aDpCnlMNITLSKoi8=
 github.com/go-chi/cors v1.2.1 h1:xEC8UT3Rlp2QuWNEr4Fs/c2EAGVKBwy/1vHx3bppil4=

@@ -131,10 +131,16 @@ const DECLARED_AI_AGENT_PATTERNS = [
   /\bYouBot\b/i
 ];
 
-// checkDeclaredAIAgent flags self-identifying AI agents via the User-Agent and
-// detects Web Bot Auth signed requests (RFC 9421 HTTP Message Signatures). Both
-// are high-confidence identifications surfaced as the declared_ai category so
-// callers can apply an allow/block policy instead of relying on a hard score.
+// checkDeclaredAIAgent flags self-identifying AI agents via the User-Agent as
+// the declared_ai category, so callers can apply an allow/block policy instead
+// of relying on a hard score.
+//
+// Web Bot Auth signed requests (RFC 9421 HTTP Message Signatures) used to be
+// detected here by header presence alone. That moved to webbotauth.js, which
+// cryptographically verifies the signature against the agent's published key
+// directory — a presence check can't tell a real signer from three spoofed
+// headers. Verification needs the raw request, so it runs in the route handler;
+// the headers argument is retained for signature parity with the Go server.
 function checkDeclaredAIAgent(userAgent, headers = {}) {
   const detections = [];
   const ua = userAgent || '';
@@ -151,20 +157,6 @@ function checkDeclaredAIAgent(userAgent, headers = {}) {
       });
       break;
     }
-  }
-
-  // Web Bot Auth: presence of HTTP Message Signature headers identifies a
-  // (claimed) verified agent. v1 detects/identifies only; signature verification
-  // against the agent's published JWKS is a follow-up before trusting it.
-  const h = headers || {};
-  if (h['signature'] && h['signature-input'] && h['signature-agent']) {
-    detections.push({
-      category: 'declared_ai',
-      score: 0.4,
-      confidence: 0.95,
-      reason: `Signed agent request (Web Bot Auth): ${h['signature-agent']}`,
-      details: { signatureAgent: h['signature-agent'], verified: false }
-    });
   }
 
   return detections;

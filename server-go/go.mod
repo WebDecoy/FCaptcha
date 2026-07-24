@@ -1,6 +1,6 @@
 module github.com/WebDecoy/FCaptcha/server-go
 
-go 1.21
+go 1.23
 
 require (
 	github.com/go-chi/chi/v5 v5.0.11
@@ -8,3 +8,5 @@ require (
 )
 
 require github.com/hashicorp/golang-lru/v2 v2.0.7
+
+require github.com/WebDecoy/web-bot-auth v0.2.0

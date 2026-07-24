@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -14,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	webbotauth "github.com/WebDecoy/web-bot-auth"
+	"github.com/WebDecoy/web-bot-auth/httpsig"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
@@ -172,7 +175,14 @@ type ScoringEngine struct {
 	tokenStore       *TokenStore
 	weights          map[ThreatCategory]float64
 	uaPatterns       []*regexp.Regexp
+	webBotAuth       *webbotauth.Verifier
 }
+
+// webBotAuthTimeout bounds the whole Web Bot Auth verification, including the
+// one-time SSRF-guarded fetch of an agent's key directory. The verifier caches
+// directories, so only the first request for a new signer pays this cost; keep
+// it short so a slow or hostile directory can never stall the scoring path.
+const webBotAuthTimeout = 3 * time.Second
 
 // RateLimiter tracks request rates
 type RateLimiter struct {
@@ -249,6 +259,13 @@ func NewScoringEngine(secretKey string) *ScoringEngine {
 			CategoryDeclaredAI:  0.02,
 		},
 		uaPatterns: compileUAPatterns(),
+		// Open directories: FCaptcha wants to attempt verification of ANY
+		// claimed agent identity — the interesting outcome is a signature that
+		// claims an identity and fails to prove it. An allowlist would silently
+		// skip unknown spoofers. The default fetch client is SSRF-guarded
+		// (https-only, refuses loopback/private/link-local, size-capped,
+		// re-validated per redirect hop) and caches directories.
+		webBotAuth: webbotauth.NewVerifier(webbotauth.WithOpenDirectories()),
 	}
 }
 
@@ -295,9 +312,14 @@ func compileUAPatterns() []*regexp.Regexp {
 	return compiled
 }
 
-// VerifyWithHeaders performs full verification with HTTP headers
-func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash string, powSolution ...*PoWSolution) *VerificationResult {
-	detections := make([]DetectionResult, 0)
+// VerifyWithHeaders performs full verification with HTTP headers. preDetections
+// are detections computed by the caller (the HTTP layer) that require the raw
+// request — currently Web Bot Auth signature verification, which needs the
+// accurately-reconstructed signed request. They are seeded into the detection
+// set so they participate in scoring like any engine-produced detection.
+func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash string, preDetections []DetectionResult, powSolution ...*PoWSolution) *VerificationResult {
+	detections := make([]DetectionResult, 0, len(preDetections)+8)
+	detections = append(detections, preDetections...)
 
 	// Verify PoW if provided
 	var pow *PoWSolution
@@ -427,7 +449,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 
 // Verify performs full verification (backward compatible)
 func (e *ScoringEngine) Verify(signals map[string]interface{}, ip, siteKey, userAgent string) *VerificationResult {
-	return e.VerifyWithHeaders(signals, ip, siteKey, userAgent, nil, "", nil)
+	return e.VerifyWithHeaders(signals, ip, siteKey, userAgent, nil, "", nil, nil)
 }
 
 // GenerateChallenge creates a new PoW challenge (legacy)
@@ -1561,6 +1583,142 @@ func (e *ScoringEngine) detectRateAbuse(ip, siteKey string) []DetectionResult {
 // ============================================================
 // Score Calculation
 // ============================================================
+
+// =============================================================================
+// Web Bot Auth (RFC 9421 HTTP Message Signatures) verification
+// =============================================================================
+
+// CheckWebBotAuth cryptographically verifies a Web Bot Auth signed request and
+// maps the outcome to detections. The request must be reconstructed from the
+// real *http.Request (see webbotauth.RequestFromHTTP) so the signature base is
+// accurate — a header-map approximation could mis-derive the authority and make
+// a genuine signature fail crypto verification, false-positiving a real agent.
+//
+// Outcomes:
+//   - verified   → declared_ai (verified:true, high confidence): a trustworthy
+//     signed identity, e.g. OpenAI Operator. A policy signal, not a hard block.
+//   - forged     → bot (low confidence, contributory): the request claimed an
+//     agent identity and the signature failed cryptographic verification. Only
+//     a genuine crypto failure counts; see webBotAuthForged.
+//   - otherwise  → fail open to a presence-only declared_ai signal identical to
+//     the pre-verification behavior. A directory we could not fetch (network,
+//     timeout, SSRF-blocked) is not proof of spoofing, so it must not accuse.
+func (e *ScoringEngine) CheckWebBotAuth(ctx context.Context, req *httpsig.Request) []DetectionResult {
+	agent := displayAgent(req.Header.Get("signature-agent"))
+
+	// Verifier unavailable (construction failed): preserve presence detection.
+	if e.webBotAuth == nil {
+		return []DetectionResult{webBotAuthPresence(agent)}
+	}
+
+	res := e.webBotAuth.Verify(ctx, req)
+	if res.Agent != "" {
+		agent = res.Agent
+	}
+	return classifyWebBotAuth(res, agent)
+}
+
+// classifyWebBotAuth turns a verification Result into detections. It is pure (no
+// I/O) so the verdict policy is unit-testable without a live key directory.
+func classifyWebBotAuth(res *webbotauth.Result, agent string) []DetectionResult {
+	switch res.Status {
+	case webbotauth.StatusVerified:
+		return []DetectionResult{webBotAuthVerified(agent, res.KeyID, string(res.Algorithm))}
+	case webbotauth.StatusInvalid:
+		if webBotAuthForged(res.Errors) {
+			return []DetectionResult{webBotAuthForgedDetection(agent, res.Errors)}
+		}
+		// Structural or fetch failure: could not complete verification through
+		// no fault of the signature. Fail open to presence-only.
+		return []DetectionResult{webBotAuthPresence(agent)}
+	default: // StatusNoSignature
+		return nil
+	}
+}
+
+// webBotAuthVerified is the detection for a cryptographically verified signed
+// agent: declared_ai, verified:true — a trustworthy identity and a policy
+// signal, not a hard block.
+func webBotAuthVerified(agent, keyID, algorithm string) DetectionResult {
+	return DetectionResult{
+		Category:   CategoryDeclaredAI,
+		Score:      0.5,
+		Confidence: 0.99,
+		Reason:     "Verified AI agent (Web Bot Auth): " + agent,
+		Details: map[string]interface{}{
+			"signatureAgent": agent,
+			"verified":       true,
+			"keyId":          keyID,
+			"algorithm":      algorithm,
+		},
+	}
+}
+
+// webBotAuthForgedDetection is the detection for a signature that failed
+// cryptographic verification: a contributory (low-confidence) bot signal.
+func webBotAuthForgedDetection(agent string, errs []error) DetectionResult {
+	return DetectionResult{
+		Category:   CategoryBot,
+		Score:      0.5,
+		Confidence: 0.5,
+		Reason:     "Forged Web Bot Auth signature (crypto verification failed): " + agent,
+		Details: map[string]interface{}{
+			"signatureAgent": agent,
+			"verified":       false,
+			"errors":         errStrings(errs),
+		},
+	}
+}
+
+// webBotAuthForged reports whether a StatusInvalid result failed because the
+// signature itself did not verify against the key — the one outcome that is
+// affirmative evidence of a forged identity claim. Everything else a
+// StatusInvalid can mean (unreachable/blocked directory, key absent, expired,
+// malformed) is deliberately excluded so transient or benign failures never
+// accuse a legitimate signer. Matched on the library's stable crypto-failure
+// wording; when in doubt this returns false (fail open, no false accusation).
+func webBotAuthForged(errs []error) bool {
+	for _, err := range errs {
+		if err != nil && strings.Contains(err.Error(), "signature verification failed") {
+			return true
+		}
+	}
+	return false
+}
+
+// webBotAuthPresence is the pre-verification detection: signature headers are
+// present but unverified. declared_ai, verified:false — an identification, not
+// an accusation.
+func webBotAuthPresence(agent string) DetectionResult {
+	return DetectionResult{
+		Category:   CategoryDeclaredAI,
+		Score:      0.4,
+		Confidence: 0.95,
+		Reason:     "Signed agent request (Web Bot Auth, unverified): " + agent,
+		Details:    map[string]interface{}{"signatureAgent": agent, "verified": false},
+	}
+}
+
+// displayAgent normalizes a Signature-Agent header value for display: the wire
+// form is an RFC 8941 string (quoted) or dictionary member, e.g. `"https://a"`.
+func displayAgent(raw string) string {
+	s := strings.TrimSpace(raw)
+	s = strings.Trim(s, `"`)
+	if s == "" {
+		return "unknown"
+	}
+	return s
+}
+
+func errStrings(errs []error) []string {
+	out := make([]string, 0, len(errs))
+	for _, err := range errs {
+		if err != nil {
+			out = append(out, err.Error())
+		}
+	}
+	return out
+}
 
 func (e *ScoringEngine) calculateCategoryScores(detections []DetectionResult) map[string]float64 {
 	categoryTotals := make(map[ThreatCategory]struct {

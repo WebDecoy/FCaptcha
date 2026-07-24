@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	webbotauth "github.com/WebDecoy/web-bot-auth"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -294,6 +295,35 @@ type DetectionInfo struct {
 	Reason     string  `json:"reason"`
 }
 
+// webBotAuthDetections cryptographically verifies a Web Bot Auth signed request
+// and returns the resulting detections, or nil when the request carries no
+// signature. Verification runs here, in the HTTP layer, because it needs the
+// real *http.Request to rebuild the signature base accurately (see
+// ScoringEngine.CheckWebBotAuth). Injected into the detection list the same way
+// signal-commitment detections are.
+func webBotAuthDetections(engine *ScoringEngine, r *http.Request) []DetectionResult {
+	// Cheap gate: skip the work (and any directory fetch) unless the signature
+	// pair is present. Signature-Agent may legitimately be absent when the key
+	// is pre-shared, but these two are always required.
+	if r.Header.Get("Signature") == "" || r.Header.Get("Signature-Input") == "" {
+		return nil
+	}
+
+	// Reconstruct the scheme the client signed. Behind a TLS-terminating proxy
+	// (e.g. Railway) r.TLS is nil though the client signed an https target, so
+	// trust X-Forwarded-Proto when present.
+	scheme := "https"
+	if xfp := r.Header.Get("X-Forwarded-Proto"); xfp != "" {
+		scheme = strings.ToLower(strings.TrimSpace(strings.Split(xfp, ",")[0]))
+	} else if r.TLS == nil {
+		scheme = "http"
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), webBotAuthTimeout)
+	defer cancel()
+	return engine.CheckWebBotAuth(ctx, webbotauth.RequestFromHTTP(r, webbotauth.WithScheme(scheme)))
+}
+
 func verifyHandler(engine *ScoringEngine) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req VerifyRequest
@@ -363,7 +393,12 @@ func verifyHandler(engine *ScoringEngine) http.HandlerFunc {
 			}
 		}
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, req.PowSolution)
+		// Web Bot Auth: verify signed-agent requests against the signer's key
+		// directory. Needs the real request, so it runs here, not in scoring;
+		// passed as preDetections so the verified/forged verdict is scored.
+		webBotAuth := webBotAuthDetections(engine, r)
+
+		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, webBotAuth, req.PowSolution)
 
 		// Add signal commitment detections to results
 		if len(extraDetections) > 0 {
@@ -470,7 +505,10 @@ func invisibleScoreHandler(engine *ScoringEngine) http.HandlerFunc {
 			}
 		}
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, req.PowSolution)
+		// Web Bot Auth: verify signed-agent requests (see verifyHandler).
+		webBotAuth := webBotAuthDetections(engine, r)
+
+		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, webBotAuth, req.PowSolution)
 		if len(scoreExtraDetections) > 0 {
 			result.Detections = append(scoreExtraDetections, result.Detections...)
 		}
