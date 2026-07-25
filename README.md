@@ -19,7 +19,7 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 
 - **Single click or invisible** - Checkbox mode like Turnstile/reCAPTCHA v2, or invisible mode like reCAPTCHA v3
 - **AI agent detection** - Catches vision agents (screenshot→API→click), DOM/CDP-driven agents (Claude in Chrome, Operator-style computer use), and synthetic input that reports `isTrusted: true` — via input-event forensics and LLM think-time cadence
-- **Declared-agent identification** - Flags self-declaring agents (ClaudeBot, GPTBot, ChatGPT-User, PerplexityBot, Bytespider…) and Web Bot Auth (RFC 9421) signed requests, surfaced as a distinct category so your app can choose to *allow* polite agents and block the rest
+- **Declared & verified agents** - Flags self-declaring agents (ClaudeBot, GPTBot, ChatGPT-User, PerplexityBot, Bytespider…) and *cryptographically verifies* Web Bot Auth (RFC 9421) signed requests against the agent's published key directory, surfaced as a distinct category so your app can *allow* polite/verified agents and block the rest
 - **Proof of Work** - Server-verified SHA-256 hashcash with 256-bit HMAC signing, per-challenge nonces, and signal commitment that binds the challenge to the collected signals
 - **Comprehensive bot detection** - Headless browsers, WebDriver, Puppeteer, Playwright, Selenium, plus CDP console-attach detection
 - **Behavioral biometrics** - 40+ signals including micro-tremor, velocity/acceleration curves, trajectory analysis, coalesced pointer events, and teleport-click detection
@@ -296,7 +296,7 @@ This makes credential stuffing expensive: even if a bot passes all other checks,
 
 ### Declared Agents & Reputation
 - Self-identifying AI-agent user-agents (ClaudeBot, Claude-User, GPTBot, ChatGPT-User, OAI-SearchBot, PerplexityBot, Google-Extended, CCBot, Bytespider, meta-externalagent, Amazonbot, cohere-ai, …)
-- Web Bot Auth (RFC 9421 HTTP Message Signatures) signed-request identification
+- Web Bot Auth (RFC 9421 HTTP Message Signatures) — cryptographic signature verification against the agent's published key directory (verified / forged / unverified), Go + Node
 - Datacenter / VPN / proxy IP reputation and reverse-DNS heuristics (with a 2s lookup timeout so request handlers never block)
 
 ## AI Agent Detection
@@ -329,7 +329,13 @@ Agents like Claude in Chrome (via `chrome.debugger`) or Operator-style tools (vi
 
 ### 3. Declared agents (the agentic web)
 
-Many legitimate agents and crawlers identify themselves — by user-agent (ClaudeBot, GPTBot, PerplexityBot, …) or by cryptographically signing requests with **Web Bot Auth** (RFC 9421). FCaptcha flags these as a distinct `declared_ai` category with high confidence and low default severity, so your application can apply policy — allow polite/verified agents, block undeclared automation — rather than treating every agent as an attacker.
+Many legitimate agents and crawlers identify themselves — by user-agent (ClaudeBot, GPTBot, PerplexityBot, …) or by cryptographically signing requests with **Web Bot Auth** (RFC 9421). FCaptcha verifies those signatures against the agent's published key directory:
+
+- **verified** → a distinct `declared_ai` category (high confidence, low default severity) — a trustworthy identity your app can *allow* by policy.
+- **forged** (signature fails cryptographic verification) → a contributory bot signal — affirmative evidence of a spoofed identity claim.
+- **unverified** (unreachable/blocked directory, timeout) → fails open to a presence-only signal; a directory it couldn't fetch is never treated as proof of spoofing.
+
+So declared and verified agents get policy handling instead of being treated as attackers, and a bot can't buy leniency just by attaching three unsigned headers. (Go + Node verify cryptographically; the Python server still identifies by header presence.)
 
 ## API Reference
 
@@ -529,10 +535,10 @@ Coverage spans bot user-agents, headless/CDP detection, declared AI agents, data
 
 ## Contributing
 
-Contributions welcome! Please read [ARCHITECTURE.md](ARCHITECTURE.md) first. AI-agent detection is built out in phases — declared agents and input-event forensics have shipped; hosted-agent environment composites, accessibility-tree honeypots, cross-session correlation, and Web Bot Auth signature *verification* are still open.
+Contributions welcome! Please read [ARCHITECTURE.md](ARCHITECTURE.md) first. AI-agent detection is built out in phases — declared agents, input-event forensics, and Web Bot Auth signature verification have shipped; hosted-agent environment composites, accessibility-tree honeypots, and cross-session correlation are still open.
 
 Areas that could use help:
-- Web Bot Auth signature verification (currently identifies signed requests; verifying against the agent's published JWKS would let you safely *allow* verified agents)
+- Web Bot Auth verification for the Python server (Go and Node verify cryptographically against the agent's published key directory; Python still identifies by header presence — no maintained Python library yet)
 - Cross-session / per-fingerprint behavioral correlation (the durable defense against source-patched browsers)
 - Machine learning-based scoring
 - Admin dashboard and analytics
