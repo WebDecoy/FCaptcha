@@ -6,7 +6,7 @@
 ![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python)
 ![Node](https://img.shields.io/badge/Node-20+-339933?logo=node.js)
-![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker)
+[![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker)](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha)
 
 **[Try the Live Demo](https://webdecoy.com/product/fcaptcha-demo/)**
 
