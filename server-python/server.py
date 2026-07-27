@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from clientip import ProxyTrust
+from sitekeys import SiteKeyGuard
 
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
 app = FastAPI(title="FCaptcha", version="1.16.0")
@@ -30,6 +31,12 @@ app = FastAPI(title="FCaptcha", version="1.16.0")
 # the TLS-fingerprint headers. See clientip.py.
 PROXY_TRUST = ProxyTrust.from_env()
 print(f"Trusted proxies: {PROXY_TRUST.describe()}", flush=True)
+
+# site_key is client-supplied and validated against no registry, yet it is the
+# first component of every rate-limit, fingerprint and challenge partition key.
+# See sitekeys.py.
+SITE_KEYS = SiteKeyGuard.from_env()
+print(f"Site keys: {SITE_KEYS.describe()}", flush=True)
 
 app.add_middleware(
     CORSMiddleware,
@@ -1304,6 +1311,8 @@ def collect_headers(request: Request) -> Dict[str, str]:
 @app.post("/api/verify")
 async def verify(req: VerifyRequest, request: Request):
     ip = PROXY_TRUST.client_ip(request)
+    # Bound the state an unvalidated site_key can allocate (sitekeys.py).
+    req.siteKey = SITE_KEYS.normalize(req.siteKey, ip)
     user_agent = request.headers.get("User-Agent", "")
     ja3_hash = PROXY_TRUST.trusted_header(request, "X-JA3-Hash")
 
@@ -1318,6 +1327,8 @@ async def verify(req: VerifyRequest, request: Request):
 @app.post("/api/score")
 async def score(req: ScoreRequest, request: Request):
     ip = PROXY_TRUST.client_ip(request)
+    # Bound the state an unvalidated site_key can allocate (sitekeys.py).
+    req.siteKey = SITE_KEYS.normalize(req.siteKey, ip)
     user_agent = request.headers.get("User-Agent", "")
     ja3_hash = PROXY_TRUST.trusted_header(request, "X-JA3-Hash")
     headers = collect_headers(request)
@@ -1345,6 +1356,7 @@ async def pow_challenge(request: Request, siteKey: str = "default"):
     from detection import is_datacenter_ip
 
     ip = PROXY_TRUST.client_ip(request)
+    siteKey = SITE_KEYS.normalize(siteKey, ip)
     is_datacenter = is_datacenter_ip(ip)
 
     challenge = pow_store.generate(siteKey, ip, is_datacenter)

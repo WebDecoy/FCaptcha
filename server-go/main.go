@@ -173,6 +173,12 @@ func main() {
 	proxyTrust := ProxyTrustFromEnv()
 	log.Printf("trusted proxies: %s", proxyTrust.Describe())
 
+	// siteKey is client-supplied and validated against no registry, yet it is
+	// the first component of every rate-limit, fingerprint and challenge
+	// partition key. See sitekeys.go.
+	siteKeys := SiteKeyGuardFromEnv()
+	log.Printf("site keys: %s", siteKeys.Describe())
+
 	// Middleware
 	//
 	// Deliberately no middleware.RealIP: it overwrites r.RemoteAddr from
@@ -215,10 +221,10 @@ func main() {
 
 	// Routes
 	r.Get("/health", healthHandler)
-	r.Post("/api/verify", verifyHandler(engine, proxyTrust))
-	r.Post("/api/score", invisibleScoreHandler(engine, proxyTrust))
+	r.Post("/api/verify", verifyHandler(engine, proxyTrust, siteKeys))
+	r.Post("/api/score", invisibleScoreHandler(engine, proxyTrust, siteKeys))
 	r.Post("/api/token/verify", tokenVerifyHandler(engine, proxyTrust))
-	r.Get("/api/pow/challenge", powChallengeHandler(engine, proxyTrust))
+	r.Get("/api/pow/challenge", powChallengeHandler(engine, proxyTrust, siteKeys))
 	r.Get("/api/challenge", challengeHandler(engine))
 
 	// Server
@@ -334,7 +340,7 @@ func webBotAuthDetections(engine *ScoringEngine, r *http.Request) []DetectionRes
 	return engine.CheckWebBotAuth(ctx, webbotauth.RequestFromHTTP(r, webbotauth.WithScheme(scheme)))
 }
 
-func verifyHandler(engine *ScoringEngine, trust *ProxyTrust) http.HandlerFunc {
+func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGuard) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req VerifyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -343,6 +349,8 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust) http.HandlerFunc {
 		}
 
 		ip := trust.ClientIP(r)
+		// Bound the state an unvalidated siteKey can allocate (sitekeys.go).
+		req.SiteKey = siteKeys.Normalize(req.SiteKey, ip)
 
 		userAgent := r.Header.Get("User-Agent")
 
@@ -448,7 +456,7 @@ type InvisibleScoreRequest struct {
 	PowTiming   *PowTiming             `json:"powTiming,omitempty"`
 }
 
-func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust) http.HandlerFunc {
+func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGuard) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req InvisibleScoreRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -457,6 +465,8 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust) http.Handle
 		}
 
 		ip := trust.ClientIP(r)
+		// Bound the state an unvalidated siteKey can allocate (sitekeys.go).
+		req.SiteKey = siteKeys.Normalize(req.SiteKey, ip)
 
 		userAgent := r.Header.Get("User-Agent")
 
@@ -564,14 +574,10 @@ type PoWChallengeResponse struct {
 	Sig         string `json:"sig"`
 }
 
-func powChallengeHandler(engine *ScoringEngine, trust *ProxyTrust) http.HandlerFunc {
+func powChallengeHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGuard) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		siteKey := r.URL.Query().Get("siteKey")
-		if siteKey == "" {
-			siteKey = "default"
-		}
-
 		ip := trust.ClientIP(r)
+		siteKey := siteKeys.Normalize(r.URL.Query().Get("siteKey"), ip)
 
 		isDatacenter := IsDatacenterIP(ip)
 		challenge := engine.GeneratePoWChallenge(siteKey, ip, isDatacenter)
