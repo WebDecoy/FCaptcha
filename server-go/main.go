@@ -168,8 +168,18 @@ func main() {
 	// Setup router
 	r := chi.NewRouter()
 
+	// Which peers may speak for another client. Must be resolved before the
+	// handlers are mounted; see clientip.go.
+	proxyTrust := ProxyTrustFromEnv()
+	log.Printf("trusted proxies: %s", proxyTrust.Describe())
+
 	// Middleware
-	r.Use(middleware.RealIP)
+	//
+	// Deliberately no middleware.RealIP: it overwrites r.RemoteAddr from
+	// X-Forwarded-For/X-Real-IP for every caller, which would hand a spoofed
+	// address to the datacenter, Tor/VPN and rate-limit checks and leave no
+	// un-forged source to fall back on. ProxyTrust.ClientIP does the same job
+	// gated on the peer.
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
@@ -205,10 +215,10 @@ func main() {
 
 	// Routes
 	r.Get("/health", healthHandler)
-	r.Post("/api/verify", verifyHandler(engine))
-	r.Post("/api/score", invisibleScoreHandler(engine))
-	r.Post("/api/token/verify", tokenVerifyHandler(engine))
-	r.Get("/api/pow/challenge", powChallengeHandler(engine))
+	r.Post("/api/verify", verifyHandler(engine, proxyTrust))
+	r.Post("/api/score", invisibleScoreHandler(engine, proxyTrust))
+	r.Post("/api/token/verify", tokenVerifyHandler(engine, proxyTrust))
+	r.Get("/api/pow/challenge", powChallengeHandler(engine, proxyTrust))
 	r.Get("/api/challenge", challengeHandler(engine))
 
 	// Server
@@ -324,7 +334,7 @@ func webBotAuthDetections(engine *ScoringEngine, r *http.Request) []DetectionRes
 	return engine.CheckWebBotAuth(ctx, webbotauth.RequestFromHTTP(r, webbotauth.WithScheme(scheme)))
 }
 
-func verifyHandler(engine *ScoringEngine) http.HandlerFunc {
+func verifyHandler(engine *ScoringEngine, trust *ProxyTrust) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req VerifyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -332,14 +342,7 @@ func verifyHandler(engine *ScoringEngine) http.HandlerFunc {
 			return
 		}
 
-		ip := r.RemoteAddr
-		if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-			ip = realIP
-		} else if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
-			// Take the first IP in the chain
-			parts := strings.Split(forwardedFor, ",")
-			ip = strings.TrimSpace(parts[0])
-		}
+		ip := trust.ClientIP(r)
 
 		userAgent := r.Header.Get("User-Agent")
 
@@ -351,8 +354,10 @@ func verifyHandler(engine *ScoringEngine) http.HandlerFunc {
 			}
 		}
 
-		// JA3 hash (if provided by reverse proxy like nginx or Cloudflare)
-		ja3Hash := r.Header.Get("X-JA3-Hash")
+		// JA3 hash, as computed by a reverse proxy like nginx or Cloudflare.
+		// Only honoured from a trusted proxy — a client that can state its own
+		// TLS fingerprint would just claim a stock Chrome one.
+		ja3Hash := trust.TrustedHeader(r, "X-JA3-Hash")
 
 		// Verify signal commitment
 		signals := req.Signals
@@ -443,7 +448,7 @@ type InvisibleScoreRequest struct {
 	PowTiming   *PowTiming             `json:"powTiming,omitempty"`
 }
 
-func invisibleScoreHandler(engine *ScoringEngine) http.HandlerFunc {
+func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req InvisibleScoreRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -451,10 +456,7 @@ func invisibleScoreHandler(engine *ScoringEngine) http.HandlerFunc {
 			return
 		}
 
-		ip := r.RemoteAddr
-		if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-			ip = realIP
-		}
+		ip := trust.ClientIP(r)
 
 		userAgent := r.Header.Get("User-Agent")
 
@@ -465,7 +467,7 @@ func invisibleScoreHandler(engine *ScoringEngine) http.HandlerFunc {
 				scoreHeaders[strings.ToLower(key)] = values[0]
 			}
 		}
-		ja3 := r.Header.Get("X-JA3-Hash")
+		ja3 := trust.TrustedHeader(r, "X-JA3-Hash")
 
 		// Verify signal commitment
 		signals := req.Signals
@@ -534,7 +536,7 @@ type TokenVerifyRequest struct {
 	Secret string `json:"secret"`
 }
 
-func tokenVerifyHandler(engine *ScoringEngine) http.HandlerFunc {
+func tokenVerifyHandler(engine *ScoringEngine, trust *ProxyTrust) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req TokenVerifyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -543,13 +545,7 @@ func tokenVerifyHandler(engine *ScoringEngine) http.HandlerFunc {
 		}
 
 		// Extract client IP for verification
-		ip := r.RemoteAddr
-		if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-			ip = realIP
-		} else if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
-			parts := strings.Split(forwardedFor, ",")
-			ip = strings.TrimSpace(parts[0])
-		}
+		ip := trust.ClientIP(r)
 
 		result := engine.VerifyTokenWithIP(req.Token, ip)
 
@@ -568,20 +564,14 @@ type PoWChallengeResponse struct {
 	Sig         string `json:"sig"`
 }
 
-func powChallengeHandler(engine *ScoringEngine) http.HandlerFunc {
+func powChallengeHandler(engine *ScoringEngine, trust *ProxyTrust) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		siteKey := r.URL.Query().Get("siteKey")
 		if siteKey == "" {
 			siteKey = "default"
 		}
 
-		ip := r.RemoteAddr
-		if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
-			ip = realIP
-		} else if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
-			parts := strings.Split(forwardedFor, ",")
-			ip = strings.TrimSpace(parts[0])
-		}
+		ip := trust.ClientIP(r)
 
 		isDatacenter := IsDatacenterIP(ip)
 		challenge := engine.GeneratePoWChallenge(siteKey, ip, isDatacenter)

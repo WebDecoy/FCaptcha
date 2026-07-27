@@ -1,6 +1,6 @@
 {
   "name": "@webdecoy/fcaptcha",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "Open source CAPTCHA with PoW, bot detection, and Vision AI protection",
   "main": "index.js",
   "exports": {
@@ -11,7 +11,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test:webbotauth": "node webbotauth.test.js"
+    "test:webbotauth": "node webbotauth.test.js",
+    "test:clientip": "node clientip.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -21,8 +21,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from clientip import ProxyTrust
+
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
-app = FastAPI(title="FCaptcha", version="1.15.0")
+app = FastAPI(title="FCaptcha", version="1.16.0")
+
+# Which peers may speak for another client via X-Forwarded-For / X-Real-IP and
+# the TLS-fingerprint headers. See clientip.py.
+PROXY_TRUST = ProxyTrust.from_env()
+print(f"Trusted proxies: {PROXY_TRUST.describe()}", flush=True)
 
 app.add_middleware(
     CORSMiddleware,
@@ -1275,14 +1282,33 @@ async def health():
     return {"status": "ok"}
 
 
+def collect_headers(request: Request) -> Dict[str, str]:
+    """Lowercase the request headers for the detectors, dropping the
+    TLS-fingerprint headers when the peer is not a proxy we trust.
+
+    TRUSTED_JA4_HEADERS is an allowlist of header *names*, which says nothing
+    about who set them - without this gate a client could send cf-ja4 itself and
+    present a clean fingerprint.
+    """
+    from detection import get_trusted_ja4_header_names
+
+    peer_trusted = PROXY_TRUST.peer_trusted(request)
+    ja4_headers = () if peer_trusted else tuple(get_trusted_ja4_header_names())
+    return {
+        k.lower(): v
+        for k, v in request.headers.items()
+        if k.lower() not in ja4_headers
+    }
+
+
 @app.post("/api/verify")
 async def verify(req: VerifyRequest, request: Request):
-    ip = request.headers.get("X-Real-IP") or request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.client.host
+    ip = PROXY_TRUST.client_ip(request)
     user_agent = request.headers.get("User-Agent", "")
-    ja3_hash = request.headers.get("X-JA3-Hash", "")
+    ja3_hash = PROXY_TRUST.trusted_header(request, "X-JA3-Hash")
 
     # Collect headers for analysis
-    headers = {k.lower(): v for k, v in request.headers.items()}
+    headers = collect_headers(request)
 
     result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming)
     log_verdict("verify", req.siteKey, result)
@@ -1291,10 +1317,10 @@ async def verify(req: VerifyRequest, request: Request):
 
 @app.post("/api/score")
 async def score(req: ScoreRequest, request: Request):
-    ip = request.headers.get("X-Real-IP") or request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.client.host
+    ip = PROXY_TRUST.client_ip(request)
     user_agent = request.headers.get("User-Agent", "")
-    ja3_hash = request.headers.get("X-JA3-Hash", "")
-    headers = {k.lower(): v for k, v in request.headers.items()}
+    ja3_hash = PROXY_TRUST.trusted_header(request, "X-JA3-Hash")
+    headers = collect_headers(request)
 
     result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming)
     log_verdict("score", req.siteKey, result)
@@ -1310,7 +1336,7 @@ async def score(req: ScoreRequest, request: Request):
 @app.post("/api/token/verify")
 async def token_verify(req: TokenVerifyRequest, request: Request):
     # Extract client IP for verification
-    ip = request.headers.get("X-Real-IP") or request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.client.host
+    ip = PROXY_TRUST.client_ip(request)
     return verify_token(req.token, ip)
 
 
@@ -1318,7 +1344,7 @@ async def token_verify(req: TokenVerifyRequest, request: Request):
 async def pow_challenge(request: Request, siteKey: str = "default"):
     from detection import is_datacenter_ip
 
-    ip = request.headers.get("X-Real-IP") or request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.client.host
+    ip = PROXY_TRUST.client_ip(request)
     is_datacenter = is_datacenter_ip(ip)
 
     challenge = pow_store.generate(siteKey, ip, is_datacenter)

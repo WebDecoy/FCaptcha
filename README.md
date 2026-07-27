@@ -444,13 +444,47 @@ Verify a previously issued token (server-side).
 | `FCAPTCHA_SECRET` | Secret key for token signing | (required) |
 | `PORT` | Server port | 3000 |
 | `REDIS_URL` | Redis URL for distributed state | (in-memory) |
-| `TRUSTED_JA4_HEADERS` | Comma-separated reverse-proxy header names carrying a JA4 TLS fingerprint (e.g. set by nginx/Cloudflare). Only these are trusted as un-spoofable | (none) |
+| `TRUSTED_PROXIES` | Comma-separated CIDRs/IPs of peers allowed to set `X-Forwarded-For`, `X-Real-IP` and the TLS-fingerprint headers. `*` trusts every peer, `none` trusts none. See [Trusted proxies](#trusted-proxies) | loopback + private ranges |
+| `TRUSTED_JA4_HEADERS` | Comma-separated reverse-proxy header names carrying a JA4 TLS fingerprint (e.g. set by nginx/Cloudflare). Only these names are read, and only from a peer in `TRUSTED_PROXIES` | (none) |
 | `FCAPTCHA_CLIENT_PATH` | Explicit path to `client/fcaptcha.js` for same-origin widget serving | (auto-probed) |
 | `FCAPTCHA_SERVE_CLIENT` | (Python) Serve the widget at `/fcaptcha.js`; set `false` to host the client on a separate CDN | `true` |
 | `FCAPTCHA_PPROF` | (Go) Enable the pprof debug server (`1`/`true`/`yes`/`on`) | off |
 | `FCAPTCHA_PPROF_ADDR` | (Go) Listen address for pprof when enabled — keep it loopback-only | `127.0.0.1:3001` |
 | `FCAPTCHA_LOG_VERDICTS` | Log one privacy-safe JSON line per `/api/verify` and `/api/score` (score, recommendation, category scores, and per-hit category/score/confidence). Omits IP, user agent, raw signals, and free-text detection reasons. For observability/tuning (`1`/`true`/`yes`/`on`) | off |
 | `FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW` | Also include the free-text detection `reason` in verdict logs. **Reasons can contain visitor-derived data** (reverse-DNS hostnames, UA/header fragments, form field ids) — only enable in trusted debugging contexts with no privacy obligations. Requires `FCAPTCHA_LOG_VERDICTS` | off |
+
+### Trusted proxies
+
+Every IP-derived check — datacenter ranges, Tor/VPN, rate limiting, token IP
+binding, PoW difficulty — is only as good as the address the server is handed.
+`X-Forwarded-For` and `X-Real-IP` are set by whoever opened the connection, so
+FCaptcha reads them **only when the peer is in `TRUSTED_PROXIES`**. Any other
+caller is attributed to its socket address, and a forged header is ignored. The
+same gate covers `X-JA3-Hash` and any header named in `TRUSTED_JA4_HEADERS`.
+
+The default — loopback plus the private and link-local ranges — covers nginx on
+`127.0.0.1`, a sidecar proxy, and an in-cluster ingress with no configuration,
+while a server exposed directly to the internet sees public peers and therefore
+ignores their headers.
+
+Set it explicitly when your proxy reaches FCaptcha from an address outside those
+ranges — a Cloudflare Tunnel, a load balancer in another VPC, or a PaaS edge
+(Railway's is in `100.0.0.0/8`):
+
+```bash
+TRUSTED_PROXIES=100.0.0.0/8 ./fcaptcha-server
+```
+
+If you get this wrong in the *unsafe* direction nothing breaks visibly, so
+FCaptcha logs it: a peer that sends forwarding headers but is not trusted
+produces a one-time warning naming the address to add. Check your logs after
+deploying — an unlisted proxy means every visitor is being attributed to it,
+which quietly ruins rate limiting and IP reputation.
+
+`*` trusts every peer and restores the spoofing bypass — use it only when an edge
+you control always overwrites the headers. `none` (or an empty value) always uses
+the socket address. Each server logs the resolved set on startup. Full details in
+[INSTALLATION.md](INSTALLATION.md#trusted-proxies).
 
 ### Score Thresholds
 
@@ -470,15 +504,21 @@ fcaptcha/
 │   ├── main.go              # Go HTTP server + same-origin widget serving
 │   ├── scoring.go           # Scoring engine, PoW verification, behavioral/vision/CDP detectors
 │   ├── detection.go         # IP reputation, headers, declared-AI, JA3/JA4, form analysis
+│   ├── clientip.go          # Trusted-proxy client IP resolution (TRUSTED_PROXIES)
 │   ├── scoring_test.go      # Go unit tests
+│   ├── clientip_test.go     # Trusted-proxy unit tests
 │   └── go.mod
 ├── server-python/
 │   ├── server.py            # Python/FastAPI server + PoW + detectors
 │   ├── detection.py         # IP reputation, headers, declared-AI, JA3/JA4, form analysis
+│   ├── clientip.py          # Trusted-proxy client IP resolution (TRUSTED_PROXIES)
+│   ├── test_clientip.py     # Trusted-proxy unit tests
 │   └── requirements.txt
 ├── server-node/
 │   ├── server.js            # Node.js/Express server + PoW + detectors
 │   ├── detection.js         # IP reputation, headers, declared-AI, JA3/JA4, form analysis
+│   ├── clientip.js          # Trusted-proxy client IP resolution (TRUSTED_PROXIES)
+│   ├── clientip.test.js     # Trusted-proxy unit tests
 │   └── package.json
 ├── test/
 │   └── test-detection.js    # End-to-end detection test suite (runs against a live server)
