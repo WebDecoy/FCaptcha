@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from clientip import ProxyTrust
 
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
-app = FastAPI(title="FCaptcha", version="1.15.0")
+app = FastAPI(title="FCaptcha", version="1.16.0")
 
 # Which peers may speak for another client via X-Forwarded-For / X-Real-IP and
 # the TLS-fingerprint headers. See clientip.py.
