@@ -11,7 +11,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test:webbotauth": "node webbotauth.test.js"
+    "test:webbotauth": "node webbotauth.test.js",
+    "test:clientip": "node clientip.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

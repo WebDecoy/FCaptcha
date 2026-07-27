@@ -342,6 +342,12 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+This layout needs no `TRUSTED_PROXIES` setting: nginx reaches FCaptcha over
+`127.0.0.1`, which is trusted by default, so the `X-Real-IP` it sets is honoured.
+Make sure FCaptcha itself only listens on loopback — if port 3000 is also
+reachable from the internet, callers bypass nginx and set that header
+themselves. See [Trusted proxies](#trusted-proxies).
+
 ### 3. Reverse Proxy with Caddy (Simpler)
 
 ```bash
@@ -430,6 +436,81 @@ export REDIS_URL=redis://localhost:6379
 | `PORT` | No | 3000 | Server port |
 | `REDIS_URL` | No | - | Redis URL for distributed state |
 | `NODE_ENV` | No | development | Set to `production` for Node.js |
+| `TRUSTED_PROXIES` | No | loopback + private ranges | Peers allowed to set `X-Forwarded-For` / `X-Real-IP` / TLS-fingerprint headers. See [Trusted proxies](#trusted-proxies) |
+
+### Trusted proxies
+
+Every IP-derived check — datacenter ranges, Tor/VPN, rate limiting, token IP
+binding, PoW difficulty — is only as good as the address the server is handed.
+`X-Forwarded-For` and `X-Real-IP` are set by whoever opened the connection, so
+FCaptcha reads them **only when the peer is in `TRUSTED_PROXIES`**. Any other
+caller is attributed to its socket address, and a forged header is ignored.
+
+`TRUSTED_PROXIES` takes a comma-separated list of CIDRs and bare IPs:
+
+| Value | Meaning |
+|-------|---------|
+| *unset* | Loopback plus the private and link-local ranges (`127.0.0.0/8`, `::1/128`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `fe80::/10`, `fc00::/7`) |
+| `10.0.0.0/8,203.0.113.7` | Only these peers |
+| `*` | Every peer. Correct **only** when an edge you control always overwrites the headers — otherwise this restores the spoofing bypass |
+| `none` (or empty) | No peer; always use the socket address |
+
+The default covers the usual setups — nginx on `127.0.0.1`, a sidecar proxy, an
+in-cluster ingress, Railway, Fly — with no configuration. Set it explicitly when
+your proxy reaches FCaptcha from a public address (for example a Cloudflare
+Tunnel or a load balancer in another VPC), and list only that proxy's ranges.
+
+The server logs the resolved set on startup:
+
+```
+Trusted proxies: 127.0.0.0/8, ::1/128, 10.0.0.0/8, ...
+```
+
+If FCaptcha is reachable directly as well as through your proxy, restrict it at
+the firewall — a trusted-proxy list cannot help if an attacker can connect from
+inside a trusted range.
+
+### Checking your deployment
+
+The failure to watch for is not a bypass — it is the quiet opposite. If your
+reverse proxy's address is *not* in the trust set, FCaptcha ignores the
+`X-Real-IP` it sets and attributes **every visitor to the proxy**. Rate limiting
+then throttles all traffic as one client and IP reputation becomes meaningless.
+
+FCaptcha logs this the first time it happens, naming the address to add:
+
+```
+warning: ignoring forwarding headers from untrusted peer 100.64.3.7. If that is
+your reverse proxy, add it to TRUSTED_PROXIES — until then every visitor is
+attributed to 100.64.3.7. If not, a client is spoofing them and they are
+correctly ignored.
+```
+
+Check the logs after deploying. If that warning names your proxy, add its range.
+If it names random internet addresses, that is spoofing being correctly blocked.
+
+**Docker.** Two cases, and they behave differently:
+
+| Setup | Peer the container sees | Result |
+|-------|-------------------------|--------|
+| Proxy container on the same compose network | its bridge address, e.g. `172.17.0.4` | inside `172.16.0.0/12`, trusted — works with no config |
+| Published port (`docker run -p 3000:3000`) | depends on the Docker platform; Docker Desktop rewrites it to a fixed **public-looking** address | not trusted, so forwarding headers are ignored |
+
+The second case is safe but lossy: if an external proxy sits in front of a
+published port, its `X-Real-IP` is dropped. Either put the proxy on the same
+Docker network (preferred) or add whatever address the warning above names.
+
+**PaaS (Railway, Fly, Render, Heroku).** These route through an edge proxy whose
+address is often **outside** RFC 1918 — Railway's, for example, is in
+`100.0.0.0/8`. The defaults will not cover it, so set it explicitly:
+
+```bash
+TRUSTED_PROXIES=100.0.0.0/8   # Railway
+```
+
+That is safe on a PaaS precisely because the container is not directly
+reachable: the platform's proxy is the only possible peer. Confirm against the
+startup log and the warning above rather than assuming.
 
 ### PoW Difficulty Levels
 

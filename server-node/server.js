@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const path = require('path');
 const detection = require('./detection');
 const webbotauth = require('./webbotauth');
+const { ProxyTrust } = require('./clientip');
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,14 @@ app.use(express.json());
 const SECRET_KEY = process.env.FCAPTCHA_SECRET || 'dev-secret-change-in-production';
 const PORT = process.env.PORT || 3000;
 const TRUSTED_JA4_HEADERS = detection.getTrustedJA4HeaderNames();
+
+// Which peers may speak for another client via X-Forwarded-For / X-Real-IP and
+// the TLS-fingerprint headers. See clientip.js.
+const PROXY_TRUST = ProxyTrust.fromEnv();
+
+// Express's own `trust proxy` would re-derive req.ip from the same headers on
+// its own terms; IP resolution goes through PROXY_TRUST.clientIP exclusively.
+app.set('trust proxy', false);
 
 // Verdict logging is off by default: a self-hosted FCaptcha emits no per-request
 // logs unless the operator opts in via FCAPTCHA_LOG_VERDICTS (1/true/yes/on).
@@ -1235,25 +1244,31 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.post('/api/verify', async (req, res) => {
-  const { siteKey, signals, powSolution, signalsJson, powTiming } = req.body;
-  let ip = req.headers['x-real-ip'] || '';
-  if (!ip) {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-      ip = forwarded.split(',')[0].trim();
-    } else {
-      ip = req.socket.remoteAddress;
-    }
-  }
-  const userAgent = req.headers['user-agent'] || '';
-  const ja3Hash = req.headers['x-ja3-hash'] || null;
-
-  // Collect headers for analysis
+// collectHeaders lowercases the request headers for the detectors, dropping the
+// TLS-fingerprint headers when the peer is not a proxy we trust. TRUSTED_JA4_HEADERS
+// is an allowlist of header *names*, which says nothing about who set them — without
+// this gate a client could send cf-ja4 itself and present a clean fingerprint.
+function collectHeaders(req) {
+  const peerTrusted = PROXY_TRUST.peerTrusted(req);
   const headers = {};
   for (const [key, value] of Object.entries(req.headers)) {
-    headers[key.toLowerCase()] = Array.isArray(value) ? value[0] : value;
+    const name = key.toLowerCase();
+    if (!peerTrusted && TRUSTED_JA4_HEADERS.includes(name)) continue;
+    headers[name] = Array.isArray(value) ? value[0] : value;
   }
+  return headers;
+}
+
+app.post('/api/verify', async (req, res) => {
+  const { siteKey, signals, powSolution, signalsJson, powTiming } = req.body;
+  const ip = PROXY_TRUST.clientIP(req);
+  const userAgent = req.headers['user-agent'] || '';
+  // Only honoured from a trusted proxy: a client that can state its own TLS
+  // fingerprint would just claim a stock Chrome one.
+  const ja3Hash = PROXY_TRUST.trustedHeader(req, 'x-ja3-hash') || null;
+
+  // Collect headers for analysis
+  const headers = collectHeaders(req);
 
   // Web Bot Auth verification needs the raw request; its verdict is scored.
   const webBotAuth = await verifyWebBotAuth(req);
@@ -1265,17 +1280,9 @@ app.post('/api/verify', async (req, res) => {
 
 app.post('/api/score', async (req, res) => {
   const { siteKey, signals, action, powSolution, signalsJson, powTiming } = req.body;
-  let ip = req.headers['x-real-ip'] || '';
-  if (!ip) {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-      ip = forwarded.split(',')[0].trim();
-    } else {
-      ip = req.socket.remoteAddress;
-    }
-  }
+  const ip = PROXY_TRUST.clientIP(req);
   const userAgent = req.headers['user-agent'] || '';
-  const ja3Hash = req.headers['x-ja3-hash'] || null;
+  const ja3Hash = PROXY_TRUST.trustedHeader(req, 'x-ja3-hash') || null;
 
   const headers = {};
   for (const [key, value] of Object.entries(req.headers)) {
@@ -1300,15 +1307,7 @@ app.post('/api/token/verify', (req, res) => {
   const { token } = req.body;
 
   // Extract client IP for verification
-  let ip = req.headers['x-real-ip'] || '';
-  if (!ip) {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-      ip = forwarded.split(',')[0].trim();
-    } else {
-      ip = req.socket.remoteAddress;
-    }
-  }
+  const ip = PROXY_TRUST.clientIP(req);
 
   res.json(verifyToken(token, ip));
 });
@@ -1317,15 +1316,7 @@ app.post('/api/token/verify', (req, res) => {
 app.get('/api/pow/challenge', (req, res) => {
   const siteKey = req.query.siteKey || 'default';
 
-  let ip = req.headers['x-real-ip'] || '';
-  if (!ip) {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) {
-      ip = forwarded.split(',')[0].trim();
-    } else {
-      ip = req.socket.remoteAddress;
-    }
-  }
+  const ip = PROXY_TRUST.clientIP(req);
 
   // Difficulty scaling based on IP reputation
   let difficulty = 4; // Default: ~100-500ms on average hardware
@@ -1373,4 +1364,5 @@ app.get('/api/challenge', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`FCaptcha server running on port ${PORT}`);
+  console.log(`Trusted proxies: ${PROXY_TRUST.describe()}`);
 });

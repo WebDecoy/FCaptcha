@@ -11,6 +11,7 @@
 
 const crypto = require('crypto');
 const detection = require('./detection');
+const { ProxyTrust } = require('./clientip');
 
 // =============================================================================
 // PoW Challenge Store (can be extended with Redis)
@@ -719,28 +720,25 @@ class ScoringEngine {
 
 function createMiddleware(options = {}) {
   const engine = new ScoringEngine(options);
+  const proxyTrust = options.trustedProxies !== undefined
+    ? new ProxyTrust(options.trustedProxies)
+    : ProxyTrust.fromEnv();
 
   return {
     engine,
+    proxyTrust,
 
-    // Middleware to extract IP from request
-    getIP: (req) => {
-      let ip = req.headers['x-real-ip'] || '';
-      if (!ip) {
-        const forwarded = req.headers['x-forwarded-for'];
-        if (forwarded) {
-          ip = forwarded.split(',')[0].trim();
-        } else {
-          ip = req.socket?.remoteAddress || '127.0.0.1';
-        }
-      }
-      return ip;
-    },
+    // Middleware to extract IP from request. Forwarding headers are honoured
+    // only from a peer in the trusted-proxy set (TRUSTED_PROXIES, or the
+    // private/loopback defaults) — otherwise any caller could claim a clean
+    // residential IP and skip the datacenter, Tor/VPN and rate-limit checks.
+    // Pass options.trustedProxies to override the env for this instance.
+    getIP: (req) => proxyTrust.clientIP(req),
 
     // Challenge route handler
     challengeHandler: (req, res) => {
       const siteKey = req.query.siteKey || 'default';
-      const ip = options.getIP ? options.getIP(req) : module.exports.createMiddleware({}).getIP(req);
+      const ip = options.getIP ? options.getIP(req) : proxyTrust.clientIP(req);
       const challenge = engine.generateChallenge(siteKey, ip);
 
       res.json({
@@ -755,7 +753,7 @@ function createMiddleware(options = {}) {
     // Verify route handler
     verifyHandler: (req, res) => {
       const { siteKey, signals, powSolution } = req.body;
-      const ip = options.getIP ? options.getIP(req) : module.exports.createMiddleware({}).getIP(req);
+      const ip = options.getIP ? options.getIP(req) : proxyTrust.clientIP(req);
       const userAgent = req.headers['user-agent'] || '';
 
       const headers = {};
