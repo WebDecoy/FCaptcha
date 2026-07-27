@@ -592,3 +592,57 @@ func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {
 		t.Errorf("typed content should not trip programmatic-fill, got %+v", got)
 	}
 }
+
+// Web Bot Auth protocol-00 parity with server-node/webbotauth.js.
+//
+// The Go module (WebDecoy/web-bot-auth v0.2.0) already parses the protocol-00
+// Signature-Agent dictionary and honors the `type` parameter, so Go never had
+// the parse regression Node did. What Go lacked was the signature-lifetime
+// ceiling, which lives here in the scoring layer because it is verdict policy,
+// not parsing.
+func TestWebBotAuthLifetimeCeiling(t *testing.T) {
+	created := time.Now().Add(-time.Minute)
+
+	verifiedWithLifetime := func(d time.Duration) []DetectionResult {
+		return classifyWebBotAuth(&webbotauth.Result{
+			Status:    webbotauth.StatusVerified,
+			Agent:     "https://agent.example",
+			KeyID:     "thumb123",
+			Algorithm: "ed25519",
+			Created:   created,
+			Expires:   created.Add(d),
+		}, "https://agent.example")
+	}
+
+	// A normal short-lived signature still earns the verified verdict.
+	if got := verifiedWithLifetime(5 * time.Minute); got[0].Details["verified"] != true {
+		t.Errorf("5m signature should verify, got %+v", got[0].Details)
+	}
+
+	// Exactly at the ceiling is still acceptable.
+	if got := verifiedWithLifetime(maxWebBotAuthLifetime); got[0].Details["verified"] != true {
+		t.Errorf("24h signature should verify, got %+v", got[0].Details)
+	}
+
+	// Past the ceiling: drops to presence-only. Not forged — an over-long TTL is
+	// not proof of spoofing, and the draft says RECOMMENDED, not MUST.
+	over := verifiedWithLifetime(maxWebBotAuthLifetime + time.Second)
+	if len(over) != 1 {
+		t.Fatalf("expected one detection, got %+v", over)
+	}
+	if over[0].Details["verified"] == true {
+		t.Errorf("48h+ signature must not earn verified, got %+v", over[0].Details)
+	}
+	if over[0].Category != CategoryDeclaredAI {
+		t.Errorf("over-long signature should stay declared_ai (presence), got %s", over[0].Category)
+	}
+
+	// Zero timestamps (library did not populate them) must not be read as a
+	// zero-length lifetime or as an infinite one — leave the verdict alone.
+	noTimes := classifyWebBotAuth(&webbotauth.Result{
+		Status: webbotauth.StatusVerified, Agent: "https://agent.example",
+	}, "https://agent.example")
+	if noTimes[0].Details["verified"] != true {
+		t.Errorf("absent timestamps should not suppress verification, got %+v", noTimes[0].Details)
+	}
+}

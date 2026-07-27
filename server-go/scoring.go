@@ -1620,9 +1620,24 @@ func (e *ScoringEngine) CheckWebBotAuth(ctx context.Context, req *httpsig.Reques
 
 // classifyWebBotAuth turns a verification Result into detections. It is pure (no
 // I/O) so the verdict policy is unit-testable without a live key directory.
+// maxWebBotAuthLifetime bounds how far out a signature's `expires` may sit.
+// draft-meunier-webbotauth-httpsig-protocol-00 RECOMMENDS no more than 24h. The
+// library already rejects an *already-expired* signature; nothing upstream caps
+// how long a live one may remain replayable, which is what this adds.
+//
+// Because the draft says RECOMMENDED and not MUST, an over-long window is not
+// treated as forgery — the request simply drops to presence-only, the same
+// verdict as any other non-cryptographic failure. Mirrors
+// MAX_SIGNATURE_LIFETIME_S in server-node/webbotauth.js.
+const maxWebBotAuthLifetime = 24 * time.Hour
+
 func classifyWebBotAuth(res *webbotauth.Result, agent string) []DetectionResult {
 	switch res.Status {
 	case webbotauth.StatusVerified:
+		if !res.Created.IsZero() && !res.Expires.IsZero() &&
+			res.Expires.Sub(res.Created) > maxWebBotAuthLifetime {
+			return []DetectionResult{webBotAuthPresence(agent)}
+		}
 		return []DetectionResult{webBotAuthVerified(agent, res.KeyID, string(res.Algorithm))}
 	case webbotauth.StatusInvalid:
 		if webBotAuthForged(res.Errors) {
