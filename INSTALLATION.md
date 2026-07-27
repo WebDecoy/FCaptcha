@@ -489,16 +489,34 @@ correctly ignored.
 Check the logs after deploying. If that warning names your proxy, add its range.
 If it names random internet addresses, that is spoofing being correctly blocked.
 
-**Docker.** Two cases, and they behave differently:
+**Docker.** Three cases, measured:
 
 | Setup | Peer the container sees | Result |
 |-------|-------------------------|--------|
 | Proxy container on the same compose network | its bridge address, e.g. `172.17.0.4` | inside `172.16.0.0/12`, trusted — works with no config |
-| Published port (`docker run -p 3000:3000`) | depends on the Docker platform; Docker Desktop rewrites it to a fixed **public-looking** address | not trusted, so forwarding headers are ignored |
+| Published port on Docker Desktop (macOS/Windows) | the VM gateway, `192.168.65.1` | inside `192.168.0.0/16`, so **trusted** |
+| Published port on Linux | Docker's DNAT normally preserves the caller's real address | public callers are untrusted, as intended |
 
-The second case is safe but lossy: if an external proxy sits in front of a
-published port, its `X-Real-IP` is dropped. Either put the proxy on the same
-Docker network (preferred) or add whatever address the warning above names.
+The middle row is the one to watch. Docker Desktop NATs published-port traffic
+through its VM gateway, so **every** caller arrives from a private, trusted
+address and can forge forwarding headers. That is harmless for local
+development, but if you ever expose such a port to the internet, turn the
+default off:
+
+```bash
+docker run -p 3000:3000 -e TRUSTED_PROXIES=none ghcr.io/webdecoy/fcaptcha
+```
+
+Do not infer your own case from this table — confirm it. Start the container,
+send a request, and read the log line it prints:
+
+```bash
+docker logs <container> | grep -E 'trusted proxies|from '
+```
+
+The request log shows the peer address the server actually saw. If that address
+is inside the trust set and is *not* your reverse proxy, forwarding headers are
+forgeable and you want `TRUSTED_PROXIES=none`.
 
 **PaaS (Railway, Fly, Render, Heroku).** These route through an edge proxy whose
 address is often **outside** RFC 1918. Railway's, for example, is in the RFC 6598
