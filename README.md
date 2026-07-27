@@ -469,10 +469,10 @@ ignores their headers.
 
 Set it explicitly when your proxy reaches FCaptcha from an address outside those
 ranges — a Cloudflare Tunnel, a load balancer in another VPC, or a PaaS edge
-(Railway's is in `100.0.0.0/8`):
+(Railway's is in the RFC 6598 CGNAT block):
 
 ```bash
-TRUSTED_PROXIES=100.0.0.0/8 ./fcaptcha-server
+TRUSTED_PROXIES=100.64.0.0/10 ./fcaptcha-server   # Railway
 ```
 
 If you get this wrong in the *unsafe* direction nothing breaks visibly, so

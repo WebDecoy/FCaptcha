@@ -501,14 +501,20 @@ published port, its `X-Real-IP` is dropped. Either put the proxy on the same
 Docker network (preferred) or add whatever address the warning above names.
 
 **PaaS (Railway, Fly, Render, Heroku).** These route through an edge proxy whose
-address is often **outside** RFC 1918 — Railway's, for example, is in
-`100.0.0.0/8`. The defaults will not cover it, so set it explicitly:
+address is often **outside** RFC 1918. Railway's, for example, is in the RFC 6598
+carrier-grade NAT block — observed peers are `100.64.0.x`. The defaults will not
+cover it, so set it explicitly:
 
 ```bash
-TRUSTED_PROXIES=100.0.0.0/8   # Railway
+TRUSTED_PROXIES=100.64.0.0/10   # Railway
 ```
 
-That is safe on a PaaS precisely because the container is not directly
+Railway's own guidance says only "the `100.0.0.0/8` range", which is looser than
+what it actually uses and would trust ~64 million publicly-routable addresses.
+`100.64.0.0/10` is the real CGNAT block and is the safer setting; if the warning
+above ever names a `100.x` peer outside it, widen to `100.0.0.0/8`.
+
+This is safe on a PaaS precisely because the container is not directly
 reachable: the platform's proxy is the only possible peer. Confirm against the
 startup log and the warning above rather than assuming.
 
