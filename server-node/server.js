@@ -11,6 +11,7 @@ const path = require('path');
 const detection = require('./detection');
 const webbotauth = require('./webbotauth');
 const { ProxyTrust } = require('./clientip');
+const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
 
 const app = express();
 app.use(cors());
@@ -23,6 +24,12 @@ const TRUSTED_JA4_HEADERS = detection.getTrustedJA4HeaderNames();
 // Which peers may speak for another client via X-Forwarded-For / X-Real-IP and
 // the TLS-fingerprint headers. See clientip.js.
 const PROXY_TRUST = ProxyTrust.fromEnv();
+
+// siteKey is client-supplied and validated against no registry, yet it is the
+// first component of every rate-limit, fingerprint and challenge partition key.
+// SITE_KEYS bounds how many distinct values one IP may allocate state for. See
+// limits.js — the cap is unconditional; FCAPTCHA_SITE_KEYS adds an allowlist.
+const SITE_KEYS = SiteKeyGuard.fromEnv();
 
 // Express's own `trust proxy` would re-derive req.ip from the same headers on
 // its own terms; IP resolution goes through PROXY_TRUST.clientIP exclusively.
@@ -85,8 +92,8 @@ if (process.env.FCAPTCHA_SERVE_CLIENT !== 'false') {
 
 // PoW Challenge Store
 const powChallengeStore = {
-  challenges: new Map(),
-  usedSolutions: new Set(),
+  challenges: new BoundedMap(),
+  usedSolutions: new BoundedSet(),
 
   // Generate a new challenge
   generate(siteKey, ip, difficulty = 4) {
@@ -177,20 +184,15 @@ const powChallengeStore = {
 
   _cleanup() {
     const now = Date.now();
-    for (const [id, challenge] of this.challenges) {
-      if (now > challenge.expiresAt) {
-        this.challenges.delete(id);
-      }
-    }
-    // Cleanup old solutions (keep last hour)
-    if (this.usedSolutions.size > 10000) {
-      this.usedSolutions.clear();
-    }
+    this.challenges.prune((challenge) => now <= challenge.expiresAt);
+    // usedSolutions is a BoundedSet: it evicts its own oldest entries as it
+    // fills. The previous code cleared the whole replay guard once it passed a
+    // threshold, which an attacker could force in order to replay a solution.
   }
 };
 
 const rateLimiter = {
-  requests: new Map(),
+  requests: new BoundedMap(),
 
   check(key, windowSeconds = 60, maxRequests = 10) {
     const now = Date.now();
@@ -211,8 +213,8 @@ const rateLimiter = {
 };
 
 const fingerprintStore = {
-  fingerprints: new Map(),
-  ipFingerprints: new Map(),
+  fingerprints: new BoundedMap(),
+  ipFingerprints: new BoundedMap(),
 
   record(fp, ip, siteKey) {
     const key = `${siteKey}:${fp}`;
@@ -242,7 +244,7 @@ const fingerprintStore = {
 
 // Token Store - prevents token replay attacks
 const tokenStore = {
-  usedTokens: new Set(),
+  usedTokens: new BoundedSet(),
 
   // Mark a token as used (returns false if already used)
   markUsed(tokenSig) {
@@ -261,11 +263,9 @@ const tokenStore = {
   },
 
   _cleanup() {
-    // In production with Redis, use TTL instead
-    // For in-memory, just clear if too large (tokens expire in 5 min)
-    if (this.usedTokens.size > 50000) {
-      this.usedTokens.clear();
-    }
+    // In production with Redis, use TTL instead. In memory usedTokens is a
+    // BoundedSet, so it evicts its oldest entries rather than clearing wholesale
+    // — clearing would let an attacker who forced the threshold replay a token.
   }
 };
 
@@ -1260,8 +1260,10 @@ function collectHeaders(req) {
 }
 
 app.post('/api/verify', async (req, res) => {
-  const { siteKey, signals, powSolution, signalsJson, powTiming } = req.body;
+  const { siteKey: rawSiteKey, signals, powSolution, signalsJson, powTiming } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
+  // Bound the state an unvalidated siteKey can allocate (limits.js).
+  const siteKey = SITE_KEYS.normalize(rawSiteKey, ip);
   const userAgent = req.headers['user-agent'] || '';
   // Only honoured from a trusted proxy: a client that can state its own TLS
   // fingerprint would just claim a stock Chrome one.
@@ -1279,8 +1281,9 @@ app.post('/api/verify', async (req, res) => {
 });
 
 app.post('/api/score', async (req, res) => {
-  const { siteKey, signals, action, powSolution, signalsJson, powTiming } = req.body;
+  const { siteKey: rawSiteKey, signals, action, powSolution, signalsJson, powTiming } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
+  const siteKey = SITE_KEYS.normalize(rawSiteKey, ip);
   const userAgent = req.headers['user-agent'] || '';
   const ja3Hash = PROXY_TRUST.trustedHeader(req, 'x-ja3-hash') || null;
 
@@ -1314,9 +1317,8 @@ app.post('/api/token/verify', (req, res) => {
 
 // PoW Challenge endpoint - client fetches this on page load
 app.get('/api/pow/challenge', (req, res) => {
-  const siteKey = req.query.siteKey || 'default';
-
   const ip = PROXY_TRUST.clientIP(req);
+  const siteKey = SITE_KEYS.normalize(req.query.siteKey, ip);
 
   // Difficulty scaling based on IP reputation
   let difficulty = 4; // Default: ~100-500ms on average hardware
@@ -1365,4 +1367,5 @@ app.get('/api/challenge', (req, res) => {
 app.listen(PORT, () => {
   console.log(`FCaptcha server running on port ${PORT}`);
   console.log(`Trusted proxies: ${PROXY_TRUST.describe()}`);
+  console.log(`Site keys: ${SITE_KEYS.describe()}`);
 });
