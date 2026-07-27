@@ -32,3 +32,13 @@ server-go/server-go
 coverage/
 .coverage
 htmlcov/
+
+# Internal planning docs. The AI-agent-detection PRD was published here once and
+# pulled again (1d31f97) because it enumerates unshipped weaknesses — an
+# adversary reading it gets a prioritized worklist against the current release.
+# Ignored wholesale so a `git add -A` cannot republish one by accident.
+#
+# Public documentation belongs in README.md / INSTALLATION.md, not here. If a
+# public docs/ site is ever wanted, narrow this to `docs/PRD-*.md` rather than
+# deleting the rule.
+docs/
