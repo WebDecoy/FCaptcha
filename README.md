@@ -27,7 +27,9 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 - **TLS fingerprinting** - JA3 (client-supplied) and JA4 (un-spoofable, from a trusted reverse proxy) matched against known automation tools
 - **Credential stuffing protection** - Form interaction analysis, timing, and programmatic submit/fill detection
 - **Self-hosted & privacy-first** - No external dependencies, no persistent fingerprinting, no cross-site tracking
-- **Open algorithm** - Transparent, confidence-weighted scoring across ~12 categories, fully auditable
+- **Input forensics** - Typing cadence and modality (keystrokes vs. paste vs. a value assigned into the DOM), scroll morphology, and platform contradictions like a Ctrl+V paste from a browser claiming macOS
+- **Open algorithm** - Transparent, evidence-accumulating scoring across ~12 categories, fully auditable
+- **Measured, not asserted** - A [benchmark harness](bench/) captures real browser traces for 14 human personas (keyboard-only, screen-reader, touch, tremor, elderly, DevTools-open, privacy-extension…) and reports a per-signal false-positive budget in CI. Every threshold in the behavioural layer was derived from it
 - **Multi-language servers** - Go, Python, or Node.js, kept in lockstep
 
 ## Quick Start
@@ -255,7 +257,7 @@ if (result.valid && result.score < 0.5) {
 
 ## How It Works
 
-FCaptcha collects signals across many categories and blends them into a single confidence-weighted score (weights sum to 1.0 and are tunable per deployment). The major surfaces:
+FCaptcha collects signals across many categories and blends them into a single score (category weights sum to 1.0 and are tunable per deployment). The major surfaces:
 
 ### Proof of Work (Invisible Layer)
 Before any verification, clients must solve a SHA-256 hashcash challenge:
@@ -275,6 +277,7 @@ This makes credential stuffing expensive: even if a bot passes all other checks,
 - **Input-event forensics** — coalesced pointer-event batches (real mice coalesce several hardware samples per frame; CDP-injected moves don't), `movementX/Y` vs. position-delta coherence, and teleport clicks (a click dispatched at coordinates with no approach trajectory)
 - **Think-time cadence** — the agent act → screenshot → inference → act loop leaves bursts of activity separated by multi-second perfect silence
 - **Mobile-native** — touch kinematics (multi-touch, force/radius variance) and passive device-sensor entropy, exempting genuine touch and keyboard-only users
+- **Scroll morphology** — a wheel or trackpad advances the page tens of pixels per event; `scrollIntoView()` covers the whole page in one. Measured separation: 109px vs. 704px per event. Stands down for keyboard users, since PageDown legitimately jumps a viewport
 
 ### Environmental & Automation
 - WebDriver / automation framework detection (Selenium, Puppeteer, Playwright, PhantomJS, Nightmare, Watir)
@@ -293,6 +296,8 @@ This makes credential stuffing expensive: even if a bot passes all other checks,
 - **Programmatic fill** — content that appears with zero keystrokes and zero pastes (Playwright `fill()` / `element.value=`)
 - Time from page load to submission; events-before-submit (no events = bot)
 - Textarea keystroke analysis — paste ratio, typing speed, rhythm/cadence, keydown/keyup ratio
+- **Typing cadence floors** — inter-key interval *and* key hold time both below the human range. Measured on real hardware: humans 226.9ms median with 4549 variance and 82ms holds; a scripted agent 7.9ms, variance 8, 7.8ms holds. Gated behind a ten-keystroke minimum and a no-paste requirement, because a paste is two keydowns a millisecond apart and people paste constantly
+- **Paste/platform contradiction** — Ctrl+V from a client claiming macOS, or Meta+V from one claiming Windows, *with the paste actually landing*. No threshold and no calibration: the client has disagreed with itself. Requiring a completed paste keeps it off the Windows switcher fat-fingering Ctrl+V on a new Mac, where that combination does nothing
 
 ### Declared Agents & Reputation
 - Self-identifying AI-agent user-agents (ClaudeBot, Claude-User, GPTBot, ChatGPT-User, OAI-SearchBot, PerplexityBot, Google-Extended, CCBot, Bytespider, meta-externalagent, Amazonbot, cohere-ai, …)
@@ -496,6 +501,34 @@ the socket address. Each server logs the resolved set on startup. Full details i
 | 0.3 - 0.6 | Challenge - uncertain |
 | > 0.6 | Block - likely bot |
 
+### How the score is composed
+
+Within a category, detections combine as **noisy-OR** — each is treated as
+independent evidence of strength `score x confidence`, and the category is the
+probability that at least one is right. Categories then contribute by weight.
+
+This replaced a confidence-weighted mean, which had a property nobody intended:
+corroborating evidence *lowered* the verdict. A browser reporting
+`navigator.webdriver = true` and nothing else scored 0.95 in the headless
+category; the same browser also caught with no plugins, a software renderer and
+five more automation tells scored **0.686**, because each additional signal was
+individually weaker than the first and pulled the average down. Evidence now
+accumulates, and an isolated low-confidence hit counts for *less* than it used
+to rather than setting a whole category.
+
+**Self-declared automation sets a floor.** A weighted sum across eleven
+categories means no single fact can consume much of the budget, so a blatant
+local agent used to land near 0.5 — "challenge", not "block". Detections marked
+`dispositive` now floor the score at 0.9. The bar for that mark is that a
+browser *cannot produce the signal without being automated*: `navigator.webdriver`
+(W3C-specified, its whole purpose is to announce automation) and
+ChromeDriver/Puppeteer injected globals. The DevTools console-attach probe is
+deliberately excluded — the benchmark's human panel proves it fires on a
+developer with DevTools open.
+
+This does not catch a stealth agent that patches the flag before the page sees
+it, and is not meant to. It closes the case where an agent is not trying to hide.
+
 ## Project Structure
 
 ```
@@ -507,6 +540,8 @@ fcaptcha/
 │   ├── scoring.go           # Scoring engine, PoW verification, behavioral/vision/CDP detectors
 │   ├── detection.go         # IP reputation, headers, declared-AI, JA3/JA4, form analysis
 │   ├── clientip.go          # Trusted-proxy client IP resolution (TRUSTED_PROXIES)
+│   ├── sitekeys.go          # Bounds on state a client-supplied siteKey can allocate
+│   ├── inputforensics.go    # Typing cadence/modality, scroll morphology, platform coherence
 │   ├── scoring_test.go      # Go unit tests
 │   ├── clientip_test.go     # Trusted-proxy unit tests
 │   └── go.mod
@@ -514,14 +549,24 @@ fcaptcha/
 │   ├── server.py            # Python/FastAPI server + PoW + detectors
 │   ├── detection.py         # IP reputation, headers, declared-AI, JA3/JA4, form analysis
 │   ├── clientip.py          # Trusted-proxy client IP resolution (TRUSTED_PROXIES)
+│   ├── sitekeys.py          # Bounds on state a client-supplied siteKey can allocate
+│   ├── inputforensics.py    # Typing cadence/modality, scroll morphology, platform coherence
 │   ├── test_clientip.py     # Trusted-proxy unit tests
 │   └── requirements.txt
 ├── server-node/
 │   ├── server.js            # Node.js/Express server + PoW + detectors
 │   ├── detection.js         # IP reputation, headers, declared-AI, JA3/JA4, form analysis
 │   ├── clientip.js          # Trusted-proxy client IP resolution (TRUSTED_PROXIES)
+│   ├── limits.js            # LRU-bounded stores + siteKey cardinality guard
+│   ├── inputforensics.js    # Typing cadence/modality, scroll morphology, platform coherence
 │   ├── clientip.test.js     # Trusted-proxy unit tests
 │   └── package.json
+├── bench/
+│   ├── capture/             # Drives real Chromium, intercepts the /api/verify body
+│   ├── corpus/captured/     # Committed real browser traces (14 human + 8 agent personas)
+│   ├── lib/                 # Corpus schema, browser-paced PoW client, metrics, reporting
+│   ├── run-bench.js         # Replay + per-signal FP budgets + CI gate
+│   └── README.md            # What the numbers do and do not establish — read first
 ├── test/
 │   └── test-detection.js    # End-to-end detection test suite (runs against a live server)
 ├── demo/
@@ -530,6 +575,7 @@ fcaptcha/
 │   ├── Dockerfile           # Multi-stage build (Go binary + client + demo)
 │   └── docker-compose.yml   # Docker compose with Redis
 ├── .github/workflows/
+│   ├── bench.yml            # Unit tests + E2E + gated detection benchmark
 │   ├── docker-publish.yml   # GHCR publish on release
 │   └── npm-publish.yml      # npm publish on release
 ├── .dockerignore
@@ -573,11 +619,49 @@ cd server-node && node server.js &
 node test/test-detection.js
 ```
 
-Coverage spans bot user-agents, headless/CDP detection, declared AI agents, datacenter/IP reputation, HTTP header and TLS (JA3/JA4) analysis, browser consistency, behavioral and input-event-forensics signals, vision/agent detection, form interaction (paste + programmatic fill), proof of work, token verification, and invisible-mode scoring.
+Coverage spans bot user-agents, headless/CDP detection, declared AI agents, datacenter/IP reputation, HTTP header and TLS (JA3/JA4) analysis, browser consistency, behavioral and input-event-forensics signals, vision/agent detection, form interaction (paste + programmatic fill), accessibility false positives, proof of work, token verification, and invisible-mode scoring.
+
+> The three servers do not all pass the full suite. It is written against the Node
+> implementation; Go and Python have documented divergences (Python maps
+> `datacenter` onto `BOT` and has no `datacenter` category; neither implements the
+> advanced headless fingerprint checks). Baseline before assuming a regression.
+
+### Detection benchmark
+
+`bench/` measures what the detection layer actually does to real users. It drives
+a real Chromium through real input events, intercepts the `/api/verify` body the
+widget produces, and replays that labeled corpus against a running server —
+reporting a false-positive rate per persona, a true-positive rate per agent
+class, and a per-signal FP budget that gates CI.
+
+```bash
+cd bench && npm install && npm run install-browsers
+node capture/record.js          # one-time; the corpus is committed
+node run-bench.js               # human FPR, agent TPR, per-signal budgets
+node run-bench.js --gate        # non-zero exit when a signal is over budget
+```
+
+**Read [bench/README.md](bench/README.md) before quoting any number from it.**
+A 0% false-positive rate there means "no sample in this corpus crossed the
+threshold" — not "0% of real users would". Fourteen scripted personas are a
+structural stand-in for fourteen kinds of user, not a population sample, and the
+panel's environment is partly reconstructed because an automated browser
+announces itself. The harness documents both limits rather than burying them.
+
+What it is good for is catching regressions and false positives that reasoning
+alone misses. Its first runs found seven, including mouse-trajectory checks
+firing on users who have no mouse, a touch exemption that a plain tap could not
+satisfy, and forwarding headers scored as suspicious on every visitor behind a
+reverse proxy.
 
 ## Contributing
 
-Contributions welcome! Please read [ARCHITECTURE.md](ARCHITECTURE.md) first. AI-agent detection is built out in phases — declared agents, input-event forensics, and Web Bot Auth signature verification have shipped; hosted-agent environment composites, accessibility-tree honeypots, and cross-session correlation are still open.
+Contributions welcome! Please read [ARCHITECTURE.md](ARCHITECTURE.md) first. AI-agent detection is built out in phases — declared agents, input-event forensics, Web Bot Auth signature verification, the measurement harness, and typing/scroll/platform-coherence forensics have shipped; hosted-agent environment composites, accessibility-tree honeypots, and cross-session correlation are still open.
+
+The most useful contribution right now is **captured traces from real browsers
+driven by real people**. The benchmark corpus is currently scripted personas from
+a single machine, which bounds what any false-positive number from it can mean.
+`bench/corpus/captured/` takes new samples directly — see [bench/README.md](bench/README.md).
 
 Areas that could use help:
 - Web Bot Auth verification for the Python server (Go and Node verify cryptographically against the agent's published key directory; Python still identifies by header presence — no maintained Python library yet)
