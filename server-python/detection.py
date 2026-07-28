@@ -404,13 +404,31 @@ def check_ja3_fingerprint(ja3_hash: Optional[str]) -> List[Dict]:
 # from the TLS ClientHello by the reverse proxy and passed via a trusted header
 # the server is configured to accept via TRUSTED_JA4_HEADERS env var.
 
-KNOWN_BOT_JA4_HASHES: Dict[str, str] = {
-    # Populate with observed automation fingerprints in production.
-    # JA4 format: t##d####_####..._####
-    # Placeholders — administrators should add real fingerprints as collected.
-    # Example once identified:
-    #   "t13d1516h2_8daaf6152771_02713d6af862": "Go default stdlib TLS",
-}
+# Observed automation fingerprints. Ships EMPTY, deliberately.
+#
+# JA4 format: t##d####_<cipher hash>_<extension+sigalg hash>
+#
+# The placeholder that used to live here was wrong. It read:
+#
+#     "t13d1516h2_8daaf6152771_02713d6af862": "Go default stdlib TLS"
+#
+# That is the canonical example from the JA4 specification, and it is *Chrome*,
+# not Go. Measured against a real TLS listener with server-go's ComputeJA4:
+#
+#     Chromium 141    t13i1515h2_8daaf6152771_806a8c22fdea
+#     Go stdlib       t13i131000_f57a46bbacb6_e5728521abd4
+#     curl            t13i4906h2_0d8feac7bc37_7395dae3b2f3
+#     node https      t13i521000_b262b3658495_8e6e362c5eac
+#     python urllib   t13i171000_ab0a1bf427ad_8e6e362c5eac
+#
+# The middle section hashes the cipher list, i.e. the TLS stack itself.
+# 8daaf6152771 is Chrome's; Go's is f57a46bbacb6. Had anyone uncommented that
+# line, every Chrome visitor would have been scored as automation at 0.8/0.9.
+#
+# A static hash list is defeated by rotating a fingerprint, and these values
+# drift with every browser release. Populate it only from abuse you actually saw
+# on your own deployment, and record where each fingerprint came from.
+KNOWN_BOT_JA4_HASHES: Dict[str, str] = {}
 
 
 def get_trusted_ja4_header_names() -> List[str]:

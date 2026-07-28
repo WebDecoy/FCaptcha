@@ -284,7 +284,7 @@ This makes credential stuffing expensive: even if a bot passes all other checks,
 - **CDP detection** — legacy ChromeDriver/Selenium globals plus a Runtime/DevTools console-attach probe that catches any attached protocol client, even when JS globals are scrubbed
 - Headless browser indicators, plugin/feature checks, UA ↔ platform consistency
 - Canvas / WebGL / Audio fingerprinting (session-scoped only)
-- **TLS fingerprinting** — JA3 (client-supplied) and JA4 (read from a trusted reverse-proxy header, un-spoofable by the client) matched against known automation tools
+- **TLS fingerprinting** — JA3 (client-supplied) and JA4. JA4 is computed **natively from the ClientHello** when the Go server terminates TLS itself (`FCAPTCHA_TLS_CERT`/`FCAPTCHA_TLS_KEY`), which no client can assert; behind a terminating proxy it falls back to a trusted header. Only JA4-TLS is implemented — the rest of the JA4 family is licensed non-commercially and cannot ship here
 
 ### Temporal Signals
 - Proof of Work timing (reveals API round-trip latency)
@@ -453,6 +453,7 @@ Verify a previously issued token (server-side).
 | `FCAPTCHA_SITE_KEYS` | Comma-separated allowlist of accepted site keys. Unset accepts any key (zero-config self-hosting); unlisted keys are folded into a shared overflow bucket rather than allocating their own rate-limit/fingerprint state | (any) |
 | `FCAPTCHA_MAX_SITE_KEYS_PER_IP` | Distinct site keys one IP may allocate state for before the excess is folded into the overflow bucket. The cap itself is unconditional | 8 |
 | `TRUSTED_JA4_HEADERS` | Comma-separated reverse-proxy header names carrying a JA4 TLS fingerprint (e.g. set by nginx/Cloudflare). Only these names are read, and only from a peer in `TRUSTED_PROXIES` | (none) |
+| `FCAPTCHA_TLS_CERT` / `FCAPTCHA_TLS_KEY` | Serve HTTPS directly (Go server). Terminating TLS here is what makes **native JA4** possible — the fingerprint is computed from the ClientHello rather than taken on trust from a proxy. Behind Railway/Cloudflare/nginx, leave unset and use `TRUSTED_JA4_HEADERS` | (none, plain HTTP) |
 | `FCAPTCHA_CLIENT_PATH` | Explicit path to `client/fcaptcha.js` for same-origin widget serving | (auto-probed) |
 | `FCAPTCHA_SERVE_CLIENT` | (Python) Serve the widget at `/fcaptcha.js`; set `false` to host the client on a separate CDN | `true` |
 | `FCAPTCHA_PPROF` | (Go) Enable the pprof debug server (`1`/`true`/`yes`/`on`) | off |
@@ -542,6 +543,7 @@ fcaptcha/
 │   ├── clientip.go          # Trusted-proxy client IP resolution (TRUSTED_PROXIES)
 │   ├── sitekeys.go          # Bounds on state a client-supplied siteKey can allocate
 │   ├── inputforensics.go    # Typing cadence/modality, scroll morphology, platform coherence
+│   ├── ja4.go               # Native JA4-TLS from the ClientHello (Go 1.24+, stdlib only)
 │   ├── scoring_test.go      # Go unit tests
 │   ├── clientip_test.go     # Trusted-proxy unit tests
 │   └── go.mod

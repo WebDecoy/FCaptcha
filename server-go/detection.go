@@ -569,13 +569,41 @@ func (e *ScoringEngine) CheckJA3Fingerprint(ja3Hash string) []DetectionResult {
 // computed from the TLS ClientHello by the reverse proxy and passed via a
 // trusted header the server is configured to accept via TRUSTED_JA4_HEADERS.
 
-// knownBotJA4Hashes holds observed automation fingerprints.
-// Populate in production; entries below are placeholders.
-// JA4 format: t##d####_####..._####
-var knownBotJA4Hashes = map[string]string{
-	// Example once identified:
-	//   "t13d1516h2_8daaf6152771_02713d6af862": "Go default stdlib TLS",
-}
+// knownBotJA4Hashes holds observed automation fingerprints. It ships EMPTY, and
+// that is deliberate — see below before adding anything.
+//
+// JA4 format: t##d####_<cipher hash>_<extension+sigalg hash>
+//
+// # The placeholder that used to live here was wrong
+//
+// It read:
+//
+//	"t13d1516h2_8daaf6152771_02713d6af862": "Go default stdlib TLS"
+//
+// That is the canonical example from the JA4 specification, and it is **Chrome**,
+// not Go. Measured on a real TLS listener with server-go's own ComputeJA4:
+//
+//	Chromium 141    t13i1515h2_8daaf6152771_806a8c22fdea
+//	Go stdlib       t13i131000_f57a46bbacb6_e5728521abd4
+//	curl            t13i4906h2_0d8feac7bc37_7395dae3b2f3
+//	node https      t13i521000_b262b3658495_8e6e362c5eac
+//	python urllib   t13i171000_ab0a1bf427ad_8e6e362c5eac
+//
+// The middle section is a hash of the cipher list, i.e. of the TLS stack itself.
+// 8daaf6152771 is Chrome's; Go's is f57a46bbacb6. Had anyone uncommented that
+// line, every Chrome visitor would have been scored as automation at 0.8/0.9.
+//
+// # Why it stays empty
+//
+// A static hash list is defeated by rotating a fingerprint, and these values
+// drift with every browser release — the two Chromium readings above differ from
+// the spec's example in both the counts and the extension hash, from version
+// drift alone. Populating this with fingerprints nobody here has observed trades
+// a real false-positive risk for no detection value.
+//
+// If you populate it, populate it from abuse you actually saw on your own
+// deployment, and record where each fingerprint came from.
+var knownBotJA4Hashes = map[string]string{}
 
 // GetTrustedJA4HeaderNames reads TRUSTED_JA4_HEADERS env var (comma-separated).
 func GetTrustedJA4HeaderNames() []string {

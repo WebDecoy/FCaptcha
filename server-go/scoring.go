@@ -322,7 +322,13 @@ func compileUAPatterns() []*regexp.Regexp {
 // request — currently Web Bot Auth signature verification, which needs the
 // accurately-reconstructed signed request. They are seeded into the detection
 // set so they participate in scoring like any engine-produced detection.
-func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash string, peerTrusted bool, preDetections []DetectionResult, powSolution ...*PoWSolution) *VerificationResult {
+// nativeJA4 is a fingerprint this process computed from the ClientHello (see
+// ja4.go), empty when something upstream terminated TLS.
+//
+// NOTE: this parameter list has now grown three times and is due a request-context
+// struct. Left positional for now so the vendored copy in fcaptcha-cloud stays a
+// straight file copy rather than a port.
+func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash, nativeJA4 string, peerTrusted bool, preDetections []DetectionResult, powSolution ...*PoWSolution) *VerificationResult {
 	detections := make([]DetectionResult, 0, len(preDetections)+8)
 	detections = append(detections, preDetections...)
 
@@ -407,14 +413,21 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 		detections = append(detections, e.CheckJA3Fingerprint(ja3Hash)...)
 	}
 
-	// TLS fingerprint (JA4) — trusted reverse-proxy header, un-spoofable by client
-	if headers != nil {
-		trustedJA4 := GetTrustedJA4HeaderNames()
-		if len(trustedJA4) > 0 {
-			if ja4 := ReadJA4FromHeaders(headers, trustedJA4); ja4 != "" {
-				detections = append(detections, e.CheckJA4Fingerprint(ja4)...)
-			}
+	// TLS fingerprint (JA4). Two sources, and the local one wins.
+	//
+	// A natively-computed fingerprint was derived from the ClientHello by this
+	// process, so it cannot be asserted by anyone — not the client, and not a
+	// misconfigured proxy either. The header path requires trusting whatever sits
+	// in front of us to have computed it honestly, which is weaker, so it is only
+	// consulted when there is no local fingerprint to use.
+	ja4 := nativeJA4
+	if ja4 == "" && headers != nil {
+		if trustedJA4 := GetTrustedJA4HeaderNames(); len(trustedJA4) > 0 {
+			ja4 = ReadJA4FromHeaders(headers, trustedJA4)
 		}
+	}
+	if ja4 != "" {
+		detections = append(detections, e.CheckJA4Fingerprint(ja4)...)
 	}
 
 	// Form interaction analysis (credential stuffing & spam detection)
@@ -459,7 +472,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 
 // Verify performs full verification (backward compatible)
 func (e *ScoringEngine) Verify(signals map[string]interface{}, ip, siteKey, userAgent string) *VerificationResult {
-	return e.VerifyWithHeaders(signals, ip, siteKey, userAgent, nil, "", false, nil, nil)
+	return e.VerifyWithHeaders(signals, ip, siteKey, userAgent, nil, "", "", false, nil, nil)
 }
 
 // GenerateChallenge creates a new PoW challenge (legacy)
