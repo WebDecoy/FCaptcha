@@ -26,7 +26,7 @@ from sitekeys import SiteKeyGuard
 from inputforensics import detect_input_forensics
 
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
-app = FastAPI(title="FCaptcha", version="1.18.0")
+app = FastAPI(title="FCaptcha", version="1.19.0")
 
 # Which peers may speak for another client via X-Forwarded-For / X-Real-IP and
 # the TLS-fingerprint headers. See clientip.py.
