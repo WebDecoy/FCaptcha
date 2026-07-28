@@ -354,7 +354,10 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 
 		userAgent := r.Header.Get("User-Agent")
 
-		// Collect headers for analysis
+		// Collect headers for analysis. peerTrusted decides whether forwarding
+		// headers (X-Forwarded-For and friends) count as anomalous: behind a
+		// proxy we trust they are how the request is meant to arrive.
+		peerTrusted := trust.PeerTrusted(r)
 		headers := make(map[string]string)
 		for key, values := range r.Header {
 			if len(values) > 0 {
@@ -411,7 +414,7 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 		// passed as preDetections so the verified/forged verdict is scored.
 		webBotAuth := webBotAuthDetections(engine, r)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, webBotAuth, req.PowSolution)
+		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, peerTrusted, webBotAuth, req.PowSolution)
 
 		// Add signal commitment detections to results
 		if len(extraDetections) > 0 {
@@ -470,7 +473,8 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 
 		userAgent := r.Header.Get("User-Agent")
 
-		// Collect headers for analysis
+		// Collect headers for analysis (see verifyHandler on peerTrusted).
+		peerTrusted := trust.PeerTrusted(r)
 		scoreHeaders := make(map[string]string)
 		for key, values := range r.Header {
 			if len(values) > 0 {
@@ -520,7 +524,7 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 		// Web Bot Auth: verify signed-agent requests (see verifyHandler).
 		webBotAuth := webBotAuthDetections(engine, r)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, webBotAuth, req.PowSolution)
+		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, peerTrusted, webBotAuth, req.PowSolution)
 		if len(scoreExtraDetections) > 0 {
 			result.Detections = append(scoreExtraDetections, result.Detections...)
 		}

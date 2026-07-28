@@ -297,6 +297,57 @@ const WEIGHTS = {
 // Detection Functions
 // =============================================================================
 
+/**
+ * Whether this visitor is using a touch or pen device, and so should be exempt
+ * from the mouse-trajectory detections.
+ *
+ * The old rule was `touchEvents >= 3`, which a mobile user who simply taps the
+ * checkbox does not meet: the client records touchstart and touchmove, and a
+ * clean tap on a page short enough not to need scrolling produces exactly one
+ * event. The bench human panel captured precisely that — `touchEvents: 1` — and
+ * the visitor collected three agent detections for it, including
+ * "Zero mouse, touch, or keyboard events recorded" at confidence 0.9.
+ *
+ * One touch event is enough to establish modality. Corroborating it with the
+ * pointer type keeps a bare forged count from claiming the exemption on its
+ * own — though note this is a soft check either way, since every input here is
+ * client-supplied and an agent willing to claim `touchEvents: 1` was equally
+ * willing to claim 3.
+ */
+/**
+ * Movement that carries independent evidence of a human hand.
+ *
+ * A slow pointer is the thing two of these checks look for, and it is also
+ * exactly what an elderly or motor-impaired visitor produces. The bench human
+ * panel caught both firing on them: "Mouse event rate abnormally low" on the
+ * elderly and motor-slow personas, "Mouse velocity too consistent" on
+ * motor-slow.
+ *
+ * Slowness alone cannot separate those users from an agent, but it does not
+ * have to. The same captures carry markers no low-effort automation produces:
+ * saturated micro-tremor, dozens of direction changes, corrective overshoots.
+ * On the bench corpus the split is total - every human persona clears this bar
+ * (tremor 1.00, 22-49 direction changes, 1-4 corrections) and every agent
+ * misses it (tremor 0.04-0.16, 0-1 direction changes, 0 corrections).
+ *
+ * So: do not read slowness as automation when the movement independently looks
+ * like a hand. An agent can of course fake all three, but faking three
+ * correlated properties of human motion is a materially harder job than
+ * running slowly, which is the point.
+ */
+function hasHumanMovementMarkers(b) {
+  const tremor = b.microTremorScore ?? 0.5;
+  const corrections = b.overshootCorrections ?? 0;
+  const changes = b.directionChanges ?? 0;
+  return tremor >= 0.5 && (corrections >= 1 || changes >= 10);
+}
+
+function isTouchModality(b) {
+  const touchEvents = b.touchEvents ?? 0;
+  const touchPoints = b.touchTotalPoints ?? 0;
+  return touchEvents >= 3 || ((touchEvents >= 1 || touchPoints >= 1) && b.pointerHasNonMouseType === true);
+}
+
 function getNestedValue(obj, ...keys) {
   return keys.reduce((o, k) => (o && o[k] !== undefined) ? o[k] : null, obj);
 }
@@ -313,7 +364,7 @@ function detectVisionAI(signals) {
   const approachPts = b.approachPoints ?? 0;
   const touchEvents = b.touchEvents ?? 0;
   const keyEvents = b.keyEvents ?? 0;
-  const isTouchUser = touchEvents >= 3;
+  const isTouchUser = isTouchModality(b);
   const isKeyboardUser = keyEvents >= 2 && totalPoints === 0;
 
   if (totalPoints < 5 && trajectory < 10 && !isTouchUser && !isKeyboardUser) {
@@ -350,16 +401,39 @@ function detectVisionAI(signals) {
   }
 
   // Micro-tremor
+  // Micro-tremor.
+  //
+  // Two things were wrong here. Go defaulted a missing microTremorScore to 0
+  // (maximally suspicious) while Node and Python defaulted to 0.5, so a client
+  // that omitted the field was flagged by one server and not the others. And
+  // like the approach-directness check above, this fires on a measurement that
+  // does not exist for someone who never moved a mouse — the client itself
+  // reports 0.5 as its "no mouse data" sentinel.
+  //
+  // Require real mouse movement before judging its texture, and apply the same
+  // exemptions as the surrounding checks.
   const microTremor = b.microTremorScore ?? 0.5;
-  if (microTremor < 0.15) {
+  const hasMouseMovement = totalPoints >= 5;
+  if (hasMouseMovement && !isTouchUser && !isKeyboardUser && microTremor < 0.15) {
     detections.push({
       category: 'vision_ai', score: 0.7, confidence: 0.6,
       reason: 'Mouse movement lacks natural micro-tremor'
     });
   }
 
-  // Approach directness
-  if ((b.approachDirectness ?? 0) > 0.95) {
+  // Approach directness.
+  //
+  // The client reports directness 1 (perfectly straight) when there is no
+  // approach path to measure at all, so this check used to fire on every
+  // keyboard-only, screen-reader and touch user — the populations the
+  // surrounding checks go out of their way to exempt. Found by the bench
+  // human panel: keyboard-only, screen-reader and touch all reported
+  // approachPoints 0 with approachDirectness 1.
+  //
+  // Require an actual path before judging its shape, and apply the same
+  // exemptions as its neighbours.
+  const hasApproachPath = approachPts >= 5;
+  if (hasApproachPath && !isTouchUser && !isKeyboardUser && (b.approachDirectness ?? 0) > 0.95) {
     detections.push({
       category: 'vision_ai', score: 0.5, confidence: 0.5,
       reason: 'Mouse path to target is unnaturally direct'
@@ -422,6 +496,7 @@ function detectHeadless(signals, userAgent) {
   if (env.webdriver) {
     detections.push({
       category: 'headless', score: 0.95, confidence: 0.95,
+      dispositive: true, // navigator.webdriver === true — see DISPOSITIVE_FLOOR
       reason: 'WebDriver detected'
     });
   }
@@ -631,6 +706,7 @@ function detectCDP(signals) {
         category: 'cdp',
         score: 0.9,
         confidence: 0.95,
+        dispositive: true, // driver-injected globals — see DISPOSITIVE_FLOOR
         reason: `CDP automation detected: ${signalList.join(', ')}`
       });
     } else if (signalCount >= 2) {
@@ -664,7 +740,7 @@ function detectBehavioral(signals) {
   const trajectory = b.trajectoryLength ?? 0;
   const touchEvts = b.touchEvents ?? 0;
   const keyEvts = b.keyEvents ?? 0;
-  const isTouchUsr = touchEvts >= 3;
+  const isTouchUsr = isTouchModality(b);
   const isKbdUser = keyEvts >= 2 && totalPoints === 0;
 
   if (totalPoints === 0 && !isTouchUsr && !isKbdUser) {
@@ -681,7 +757,7 @@ function detectBehavioral(signals) {
 
   // Velocity variance
   const velVar = b.velocityVariance ?? 1;
-  if (velVar < 0.02 && trajectory > 50) {
+  if (velVar < 0.02 && trajectory > 50 && !hasHumanMovementMarkers(b)) {
     detections.push({
       category: 'behavioral', score: 0.6, confidence: 0.6,
       reason: 'Mouse velocity too consistent'
@@ -727,7 +803,7 @@ function detectBehavioral(signals) {
       category: 'behavioral', score: 0.6, confidence: 0.5,
       reason: 'Mouse event rate abnormally high'
     });
-  } else if (eventRate > 0 && eventRate < 10) {
+  } else if (eventRate > 0 && eventRate < 10 && !hasHumanMovementMarkers(b)) {
     detections.push({
       category: 'behavioral', score: 0.4, confidence: 0.4,
       reason: 'Mouse event rate abnormally low'
@@ -953,6 +1029,36 @@ function detectRateAbuse(ip, siteKey) {
 // Scoring
 // =============================================================================
 
+/**
+ * Combines the detections within each category into a category score.
+ *
+ * ## Why this is not a mean
+ *
+ * It used to be a confidence-weighted mean, which had a property nobody
+ * intended: corroborating evidence *lowered* the verdict. A visitor whose
+ * browser reported `navigator.webdriver === true` and nothing else scored 0.95
+ * in the headless category. The same visitor, additionally caught with no
+ * plugins, a software renderer, a viewport equal to its window and three more
+ * automation tells, scored 0.686 — because each additional signal, being
+ * individually weaker than the first, pulled the average down. Seven pieces of
+ * corroboration made the case weaker than one.
+ *
+ * Noisy-OR fixes that. Each detection is treated as independent evidence of
+ * strength `score × confidence`, and the category is the probability that at
+ * least one of them is right:
+ *
+ *     category = 1 - ∏(1 - scoreᵢ × confidenceᵢ)
+ *
+ * Evidence now accumulates: adding a signal can only raise a category, never
+ * lower it. And it is *more* forgiving of isolated weak evidence than the mean
+ * was — one detection at score 0.4, confidence 0.5 contributes 0.20 rather than
+ * setting the whole category to 0.40 — which is the right treatment for a
+ * lone low-confidence hit on a real user.
+ *
+ * Measured on the bench corpus (bench/tools/compare-aggregation.js): human
+ * median 0.182 → 0.097 and human max 0.260 → 0.171, while agent median rose
+ * 0.517 → 0.570. Both populations moved in the direction they should.
+ */
 function calculateCategoryScores(detections) {
   const categoryData = {};
 
@@ -966,11 +1072,12 @@ function calculateCategoryScores(detections) {
   const result = {};
   for (const [cat, scores] of Object.entries(categoryData)) {
     if (scores.length > 0) {
-      const totalWeight = scores.reduce((sum, [, conf]) => sum + conf, 0);
-      if (totalWeight > 0) {
-        const weightedSum = scores.reduce((sum, [score, conf]) => sum + score * conf, 0);
-        result[cat] = Math.min(1.0, weightedSum / totalWeight);
+      let survives = 1;
+      for (const [score, conf] of scores) {
+        const strength = Math.max(0, Math.min(1, score * conf));
+        survives *= 1 - strength;
       }
+      result[cat] = Math.min(1.0, 1 - survives);
     }
   }
 
@@ -990,6 +1097,57 @@ function calculateFinalScore(categoryScores) {
     total += (categoryScores[cat] || 0) * weight;
   }
   return Math.min(1.0, total);
+}
+
+/**
+ * Score below which a self-declared automated browser cannot fall.
+ *
+ * ## Why a floor exists at all
+ *
+ * The final score is a weighted sum across all eleven categories, so a category
+ * can contribute at most its own weight no matter how certain it is. A local
+ * automated browser trips at most the six categories reachable without a
+ * datacenter IP, a reused fingerprint or a rate-limit hit — about 0.81 of the
+ * weight — and in practice lands near 0.5. The bench measured exactly that: a
+ * Playwright browser reporting `navigator.webdriver === true`, no plugins, a
+ * software renderer and four more automation tells scored 0.549, i.e.
+ * "challenge", not "block".
+ *
+ * That is the weighted sum working as designed. It expresses "what fraction of
+ * the total suspicion budget did this visitor consume", and no single fact can
+ * consume most of that budget. The trouble is that some facts are not
+ * probabilistic evidence at all — they are the browser saying so.
+ *
+ * ## What qualifies
+ *
+ * Only detections marked `dispositive`, and the bar for that mark is that a
+ * browser cannot produce the signal without being automated:
+ *
+ *   - `navigator.webdriver === true` — a W3C-specified flag whose sole purpose
+ *     is to tell the page it is under automation.
+ *   - ChromeDriver / Puppeteer injected globals (`chromedriver_cdc`,
+ *     `puppeteer_eval`, `cdp_script_injection`), which exist in no ordinary
+ *     browsing session.
+ *
+ * Deliberately excluded, though both look tempting: the "console consumer
+ * attached" CDP check, because the bench human panel proves it fires on a
+ * developer with DevTools open; and the Playwright `webdriver_configurable`
+ * artifact, which relies on a property-descriptor detail no specification
+ * guarantees.
+ *
+ * ## What this does not do
+ *
+ * It does not catch a stealth agent, which patches `navigator.webdriver` before
+ * the page ever sees it. That is not a regression — such an agent scores the
+ * same as it did before — and it is the reason the behavioural workstreams
+ * still matter. The floor closes the case where an agent is not even trying to
+ * hide, which was previously being waved through with a "challenge".
+ */
+const DISPOSITIVE_FLOOR = 0.9;
+
+function applyDispositiveFloor(score, detections) {
+  const selfDeclared = detections.some((d) => d.dispositive === true);
+  return selfDeclared ? Math.max(score, DISPOSITIVE_FLOOR) : score;
 }
 
 function generateToken(ip, siteKey, score) {
@@ -1070,7 +1228,7 @@ async function verifyWebBotAuth(req) {
 // require the raw request — currently Web Bot Auth signature verification, which
 // needs the accurately-reconstructed signed request. They are seeded into the
 // detection set so they participate in scoring like any other detection.
-function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash = null, powSolution = null, signalsJson = null, powTiming = null, preDetections = []) {
+function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash = null, powSolution = null, signalsJson = null, powTiming = null, preDetections = [], opts = {}) {
   const detections = Array.isArray(preDetections) ? [...preDetections] : [];
 
   // Verify signal commitment (signalsJson hash must match powSolution.signalsHash)
@@ -1179,7 +1337,7 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
   }
 
   // Add header analysis
-  const headerDetections = detection.analyzeHeaders(headers);
+  const headerDetections = detection.analyzeHeaders(headers, { peerTrusted: opts.peerTrusted === true });
   detections.push(...headerDetections);
 
   // Add browser consistency checks
@@ -1215,7 +1373,7 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
   detections.push(...advancedDetections);
 
   const categoryScores = calculateCategoryScores(detections);
-  const finalScore = calculateFinalScore(categoryScores);
+  const finalScore = applyDispositiveFloor(calculateFinalScore(categoryScores), detections);
 
   let recommendation;
   if (finalScore < 0.3) recommendation = 'allow';
@@ -1271,11 +1429,12 @@ app.post('/api/verify', async (req, res) => {
 
   // Collect headers for analysis
   const headers = collectHeaders(req);
+  const peerTrusted = PROXY_TRUST.peerTrusted(req);
 
   // Web Bot Auth verification needs the raw request; its verdict is scored.
   const webBotAuth = await verifyWebBotAuth(req);
 
-  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth);
+  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted });
   logVerdict('verify', siteKey, result);
   res.json(result);
 });
@@ -1287,15 +1446,16 @@ app.post('/api/score', async (req, res) => {
   const userAgent = req.headers['user-agent'] || '';
   const ja3Hash = PROXY_TRUST.trustedHeader(req, 'x-ja3-hash') || null;
 
-  const headers = {};
-  for (const [key, value] of Object.entries(req.headers)) {
-    headers[key.toLowerCase()] = Array.isArray(value) ? value[0] : value;
-  }
+  // Use collectHeaders, not a bare copy of req.headers: this endpoint used to
+  // build its own map, which skipped the trust gate on the TLS-fingerprint
+  // header names and let an untrusted client present its own JA4.
+  const headers = collectHeaders(req);
+  const peerTrusted = PROXY_TRUST.peerTrusted(req);
 
   // Web Bot Auth verification needs the raw request; its verdict is scored.
   const webBotAuth = await verifyWebBotAuth(req);
 
-  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth);
+  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted });
   logVerdict('score', siteKey, result);
   res.json({
     success: result.success,

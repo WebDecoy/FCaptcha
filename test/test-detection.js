@@ -1531,6 +1531,153 @@ async function testTightenedExemptions() {
   assertDetection(legitimateKbdResult, 'vision_ai', false, 'keyEvents=2 with no mouse still exempts');
 }
 
+async function testAccessibilityFalsePositives() {
+  log('\n[Accessibility False Positives]', colors.cyan);
+
+  // These cases came out of the bench human panel (bench/), which captures real
+  // browser traces for keyboard-only, screen-reader and touch users. Every
+  // assertion below failed before the fixes it guards.
+
+  // A mobile user who taps the checkbox without scrolling first produces
+  // exactly one touch event. Requiring three meant they were scored as an AI
+  // agent — "Zero mouse, touch, or keyboard events recorded" at confidence 0.9.
+  const tapOnlyResult = await makeRequest('/api/verify', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    body: {
+      siteKey: 'test',
+      signals: {
+        behavioral: {
+          totalPoints: 0, trajectoryLength: 0, approachPoints: 0,
+          touchEvents: 1, touchTotalPoints: 1, pointerHasNonMouseType: true,
+          pointerTypes: ['touch'], keyEvents: 0, interactionDuration: 1500,
+        }
+      }
+    }
+  });
+  assertDetection(tapOnlyResult, 'vision_ai', false, 'A single corroborated tap exempts (mobile user who does not scroll)');
+  assertDetection(tapOnlyResult, 'behavioral', false, 'A single corroborated tap exempts behavioral checks');
+
+  // The corroboration matters: a bare touchEvents count with no matching
+  // pointer data must not buy the exemption, or the previous hardening is undone.
+  const bareCountResult = await makeRequest('/api/verify', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    body: {
+      siteKey: 'test',
+      signals: {
+        behavioral: {
+          totalPoints: 0, trajectoryLength: 0, approachPoints: 0,
+          touchEvents: 1, keyEvents: 0,
+        }
+      }
+    }
+  });
+  assertDetection(bareCountResult, 'vision_ai', true, 'An uncorroborated touchEvents=1 still does not exempt');
+
+  // The client reports approachDirectness 1 (perfectly straight) when there is
+  // no approach path at all, so "unnaturally direct mouse path" used to fire on
+  // every keyboard, screen-reader and touch user — the exact populations the
+  // neighbouring checks exempt.
+  const keyboardResult = await makeRequest('/api/verify', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    body: {
+      siteKey: 'test',
+      signals: {
+        behavioral: {
+          totalPoints: 0, trajectoryLength: 0, approachPoints: 0,
+          approachDirectness: 1, microTremorScore: 0.5,
+          touchEvents: 0, keyEvents: 8, interactionDuration: 4000,
+        }
+      }
+    }
+  });
+  assertDetection(keyboardResult, 'vision_ai', false, 'Keyboard-only user is not flagged for a mouse path they never made');
+
+  // Same shape, screen-reader pacing: many tabs, long dwells, no pointer.
+  const screenReaderResult = await makeRequest('/api/verify', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    body: {
+      siteKey: 'test',
+      signals: {
+        behavioral: {
+          totalPoints: 0, trajectoryLength: 0, approachPoints: 0,
+          approachDirectness: 1, microTremorScore: 0.5,
+          touchEvents: 0, keyEvents: 12, interactionDuration: 12000,
+        }
+      }
+    }
+  });
+  assertDetection(screenReaderResult, 'vision_ai', false, 'Screen-reader traversal is not flagged for a mouse path');
+
+  // A real mouse user travelling in a dead-straight line still gets caught:
+  // the fix gates on a path existing, it does not disable the check.
+  const straightLineResult = await makeRequest('/api/verify', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    body: {
+      siteKey: 'test',
+      signals: {
+        behavioral: {
+          totalPoints: 40, trajectoryLength: 300, approachPoints: 20,
+          approachDirectness: 0.99, microTremorScore: 0.5,
+          touchEvents: 0, keyEvents: 0,
+        }
+      }
+    }
+  });
+  assertDetection(straightLineResult, 'vision_ai', true, 'A real straight-line mouse path is still flagged');
+}
+
+async function testForwardingHeaderTrust() {
+  log('\n[Forwarding Header Trust]', colors.cyan);
+
+  // Behind a reverse proxy, CDN or load balancer every visitor carries these
+  // headers. Scoring them unconditionally gave every visitor to every proxied
+  // deployment a permanent bot detection — measured by the bench at 100% of the
+  // human panel AND 100% of the agent corpus, so it separated nothing.
+  //
+  // These requests reach the server from loopback, which is in the default
+  // trusted-proxy set, so the headers count as infrastructure rather than as an
+  // anomaly.
+  const behindProxy = await makeRequest('/api/verify', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'X-Forwarded-For': '203.0.113.45',
+      'CF-Connecting-IP': '203.0.113.45',
+      'True-Client-IP': '203.0.113.45',
+    },
+    body: { siteKey: 'test', signals: { behavioral: { totalPoints: 40, trajectoryLength: 300 } } }
+  });
+
+  const headerHits = (behindProxy.detections || [])
+    .filter(d => /Suspicious header present/.test(d.reason || ''));
+  if (headerHits.length === 0) {
+    passed++;
+    results.push({ name: 'Forwarding headers from a trusted proxy are not suspicious', status: 'PASS' });
+    log('  ✓ Forwarding headers from a trusted proxy are not suspicious', colors.green);
+  } else {
+    failed++;
+    results.push({ name: 'Forwarding headers from a trusted proxy are not suspicious', status: 'FAIL' });
+    log('  ✗ Forwarding headers from a trusted proxy are not suspicious', colors.red);
+    log(`    Fired: ${headerHits.map(d => d.reason).join(', ')}`, colors.dim);
+  }
+}
+
 async function testMobileSensorDetection() {
   log('\n[Mobile Sensor & Touch Authenticity]', colors.cyan);
 
@@ -2121,6 +2268,8 @@ async function runTests() {
   await testStealthArtifactDetection();
   await testMissingPoWHardFail();
   await testTightenedExemptions();
+  await testAccessibilityFalsePositives();
+  await testForwardingHeaderTrust();
   await testMobileSensorDetection();
   await testProofOfWork();
   await testSignalCommitment();

@@ -1,0 +1,60 @@
+name: Detection benchmark
+
+# Guards the per-signal false-positive budget against the committed corpus.
+#
+# The gate deliberately fails on only two things: a signal firing on the human
+# panel more often than its budget allows, and a replay error (an incomplete run
+# must not read as a pass). Aggregate FPR and per-class TPR are reported as
+# warnings — those are population claims and this corpus is not a population
+# sample, so gating on them would dress a regression check up as evidence about
+# real users. See bench/README.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install server dependencies
+        working-directory: server-node
+        run: npm install --no-audit --no-fund
+
+      - name: Unit tests
+        working-directory: server-node
+        run: npm test
+
+      - name: Start server
+        working-directory: server-node
+        run: |
+          node server.js &
+          for _ in $(seq 1 40); do
+            curl -sf http://localhost:3000/health >/dev/null && exit 0
+            sleep 0.5
+          done
+          echo "server did not come up"; exit 1
+
+      - name: End-to-end detection suite
+        run: node test/test-detection.js
+
+      # Replays the committed corpus. No browser needed: capture is a separate,
+      # manual step whose output lives in bench/corpus/.
+      - name: Benchmark gate
+        working-directory: bench
+        run: node run-bench.js --gate --json bench-results.json
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench/bench-results.json
+          if-no-files-found: ignore

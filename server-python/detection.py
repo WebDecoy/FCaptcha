@@ -99,10 +99,25 @@ def check_ip_reputation(ip: str) -> List[Dict]:
 # HTTP Header Analysis
 # =============================================================================
 
-SUSPICIOUS_HEADERS = {
-    "x-requested-with", "x-forwarded-for", "x-real-ip", "via",
-    "forwarded", "x-originating-ip", "cf-connecting-ip",
-    "true-client-ip", "x-cluster-client-ip"
+# Suspicious regardless of who the peer is. x-requested-with is set by XHR
+# libraries, not by proxies, so trusting the peer says nothing about it.
+SUSPICIOUS_HEADERS = {"x-requested-with"}
+
+# Headers a reverse proxy, CDN or load balancer adds on the way in.
+#
+# These are only anomalous when they arrive from a peer that is NOT a proxy we
+# trust: an ordinary client has no business claiming to forward for someone
+# else. Behind a proxy they are the opposite of suspicious - they are how the
+# request is supposed to arrive, and Cloudflare alone contributes three of them.
+#
+# Scoring them unconditionally meant every visitor to every proxied deployment
+# picked up a bot detection, permanently, including the project's own demo
+# behind Railway. The bench measured it firing on 100% of the human panel *and*
+# 100% of the agent corpus - a signal that fires on everyone distinguishes
+# nobody, it just adds noise to both sides of the comparison.
+FORWARDING_HEADERS = {
+    "x-forwarded-for", "x-real-ip", "via", "forwarded", "x-originating-ip",
+    "cf-connecting-ip", "true-client-ip", "x-cluster-client-ip"
 }
 
 EXPECTED_BROWSER_HEADERS = {"accept", "accept-language", "accept-encoding", "user-agent"}
@@ -169,7 +184,14 @@ def check_declared_ai_agent(user_agent: str, headers: Optional[Dict[str, str]] =
     return detections
 
 
-def analyze_headers(headers: Dict[str, str]) -> List[Dict]:
+def analyze_headers(headers: Dict[str, str], peer_trusted: bool = False) -> List[Dict]:
+    """Score HTTP-level anomalies.
+
+    peer_trusted says whether the immediate peer is a proxy we trust; when it is,
+    forwarding headers are expected infrastructure rather than an anomaly. It
+    defaults to False so a caller that does not know keeps the stricter
+    behaviour.
+    """
     """Analyze HTTP headers for bot indicators."""
     detections = []
     headers_lower = {k.lower(): v for k, v in headers.items()}
@@ -184,9 +206,10 @@ def analyze_headers(headers: Dict[str, str]) -> List[Dict]:
             "reason": f"Missing {missing_count} expected browser headers"
         })
 
-    # Check for suspicious headers
+    # Check for suspicious headers. Forwarding headers only count when the peer
+    # is not a proxy we trust - see FORWARDING_HEADERS.
     for header in headers_lower:
-        if header in SUSPICIOUS_HEADERS:
+        if header in SUSPICIOUS_HEADERS or (not peer_trusted and header in FORWARDING_HEADERS):
             detections.append({
                 "category": "bot",
                 "score": 0.3,

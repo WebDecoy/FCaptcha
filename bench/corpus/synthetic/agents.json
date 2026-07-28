@@ -1,0 +1,128 @@
+[
+  {
+    "id": "agent/declared-crawler/0000",
+    "label": "agent",
+    "group": "declared-crawler",
+    "provenance": "synthetic",
+    "clientIp": "34.64.12.9",
+    "notes": "Self-identifying crawler (ClaudeBot). HTTP only — no browser, so no behavioural or environmental signals exist to collect. Hand-authored because there is no browser to capture from, not because the shape is uncertain: this one is simply what a bare HTTP request looks like. EXPECTED TO SCORE ~0.4-0.5 AND SO TO 'MISS' AT THE 0.8 BAR: declared agents are deliberately low-severity (score 0.5, confidence 0.99) because they are honest about who they are and the operator decides by policy whether to serve them. A 0% true-positive rate for this class is the designed outcome, not a gap.",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ClaudeBot/1.0; +claudebot@anthropic.com",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Encoding": "gzip, deflate"
+    },
+    "signals": {
+      "meta": { "userAgent": "ClaudeBot/1.0" }
+    }
+  },
+  {
+    "id": "agent/hosted-computer-use/0000",
+    "label": "agent",
+    "group": "hosted-computer-use",
+    "provenance": "synthetic",
+    "clientIp": "3.91.44.18",
+    "notes": "Hosted computer-use agent (ChatGPT Agent / Manus / Skyvern shape): cloud VM driving Playwright. Datacenter egress, software GPU, no plugins, teleport click. Values are hand-authored from the class description in the extensions PRD §3 — no hosted agent was captured, so this stands in for one rather than measuring one.",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br"
+    },
+    "signals": {
+      "behavioral": {
+        "totalPoints": 0,
+        "trajectoryLength": 0,
+        "approachPoints": 0,
+        "microTremorScore": 0.5,
+        "touchEvents": 0,
+        "keyEvents": 0,
+        "interactionDuration": 380,
+        "mouseEventRate": 0,
+        "clickPrecision": 0.4
+      },
+      "environmental": {
+        "webdriver": true,
+        "automationFlags": {
+          "webdriver": true,
+          "plugins": 0,
+          "chrome": false,
+          "chromeRuntime": false,
+          "platform": "Linux x86_64",
+          "languages": true
+        },
+        "headlessIndicators": {
+          "hasOuterDimensions": true,
+          "innerEqualsOuter": true,
+          "screenColorDepth": 24,
+          "connectionRtt": 0,
+          "notificationPermission": "denied"
+        },
+        "webglInfo": { "vendor": "Google Inc.", "renderer": "SwiftShader" },
+        "canvasHash": { "hash": "b17c9f2e4a6d8103f5e2c4b7a9d0e6f3" }
+      }
+    }
+  },
+  {
+    "id": "agent/source-patched/0000",
+    "label": "agent",
+    "group": "source-patched",
+    "provenance": "synthetic",
+    "clientIp": "198.51.100.201",
+    "notes": "Source-patched Chromium (CloakBrowser shape): every JS-observable automation flag is scrubbed at the binary level, so the environment reads as an ordinary desktop Chrome on a residential IP. Only the movement is wrong — dead-straight approach, no tremor, no corrections, machine-fast interaction. This sample exists to check that the behavioural layer carries the case ALONE: it deliberately trips no dispositive signal, so the 0.9 floor cannot rescue it. Expect it to score lower than the other agent classes; that gap is the open problem, not a bug in the harness.",
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    },
+    "signals": {
+      "behavioral": {
+        "totalPoints": 32,
+        "trajectoryLength": 412,
+        "approachPoints": 18,
+        "approachDirectness": 0.985,
+        "microTremorScore": 0.04,
+        "straightLineRatio": 0.97,
+        "directionChanges": 1,
+        "overshootCorrections": 0,
+        "velocityVariance": 0.004,
+        "eventDeltaVariance": 0.8,
+        "mouseEventRate": 62,
+        "clickPrecision": 0.6,
+        "touchEvents": 0,
+        "keyEvents": 0,
+        "interactionDuration": 240
+      },
+      "environmental": {
+        "webdriver": false,
+        "automationFlags": {
+          "webdriver": false,
+          "plugins": 5,
+          "chrome": true,
+          "chromeRuntime": true,
+          "platform": "Win32",
+          "languages": true,
+          "mimeTypes": 2
+        },
+        "headlessIndicators": {
+          "hasOuterDimensions": true,
+          "innerEqualsOuter": false,
+          "screenColorDepth": 24,
+          "connectionRtt": 50,
+          "notificationPermission": "default",
+          "hasBattery": true,
+          "hasMediaDevices": true
+        },
+        "webglInfo": { "vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA GeForce RTX 3060)" },
+        "canvasHash": { "hash": "7d3f1a9c5e2b8046f1a3c9e7d5b2a408" }
+      }
+    }
+  },
+  {
+    "id": "gap/browser-internal/0000",
+    "label": "agent",
+    "group": "browser-internal",
+    "provenance": "synthetic",
+    "unmeasured": true,
+    "notes": "Chrome auto browse (Gemini in Chrome) and the browser-internal agent class generally. NO DATA — no vendor or researcher has published what isTrusted, event coalescing or input cadence look like under Chrome's internal injection, and this project has not captured it either. Deliberately left as a declared gap rather than a fabricated sample: inventing a trace for a class nobody has measured would put invented numbers into a benchmark, which is the exact failure this harness exists to prevent. It is excluded from every rate. Closing it means capturing the real thing — see the extensions PRD §6.2, which names it the priority capture target."
+  }
+]

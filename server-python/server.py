@@ -176,6 +176,11 @@ class Detection:
     reason: str
     details: Dict[str, Any] = field(default_factory=dict)
 
+    # Marks a signal a browser cannot produce without being automated, as
+    # opposed to one that merely correlates with automation. Triggers
+    # DISPOSITIVE_FLOOR - see apply_dispositive_floor.
+    dispositive: bool = False
+
 
 # =============================================================================
 # Rate Limiter (In-Memory - Use Redis in production)
@@ -404,6 +409,57 @@ def get_nested(d: dict, *keys, default=None):
     return d
 
 
+def _has_human_movement_markers(b: Dict[str, Any]) -> bool:
+    """Movement that carries independent evidence of a human hand.
+
+
+    A slow pointer is the thing two of these checks look for, and it is also
+    exactly what an elderly or motor-impaired visitor produces. The bench human
+    panel caught both firing on them: "Mouse event rate abnormally low" on the
+    elderly and motor-slow personas, "Mouse velocity too consistent" on motor-slow.
+
+    Slowness alone cannot separate those users from an agent, but it does not have
+    to. The same captures carry markers no low-effort automation produces:
+    saturated micro-tremor, dozens of direction changes, corrective overshoots. On
+    the bench corpus the split is total - every human persona clears this bar
+    (tremor 1.00, 22-49 direction changes, 1-4 corrections) and every agent misses
+    it (tremor 0.04-0.16, 0-1 direction changes, 0 corrections).
+
+    So: do not read slowness as automation when the movement independently looks
+    like a hand. An agent can of course fake all three, but faking three correlated
+    properties of human motion is a materially harder job than running slowly,
+    which is the point.
+    """
+    tremor = b.get("microTremorScore", 0.5)
+    corrections = b.get("overshootCorrections", 0)
+    changes = b.get("directionChanges", 0)
+    return tremor >= 0.5 and (corrections >= 1 or changes >= 10)
+
+
+def _is_touch_modality(b: Dict[str, Any]) -> bool:
+    """Whether this visitor is using a touch or pen device, and so should be
+    exempt from the mouse-trajectory detections.
+
+    The old rule was `touch_events >= 3`, which a mobile user who simply taps the
+    checkbox does not meet: the client records touchstart and touchmove, and a
+    clean tap on a page short enough not to need scrolling produces exactly one
+    event. The bench human panel captured precisely that - `touchEvents: 1` - and
+    the visitor collected three agent detections for it, including
+    "Zero mouse, touch, or keyboard events recorded" at confidence 0.9.
+
+    One touch event is enough to establish modality. Corroborating it with the
+    pointer type keeps a bare forged count from claiming the exemption on its
+    own - though note this is a soft check either way, since every input here is
+    client-supplied and an agent willing to claim `touchEvents: 1` was equally
+    willing to claim 3.
+    """
+    touch_events = b.get("touchEvents", 0)
+    touch_points = b.get("touchTotalPoints", 0)
+    if touch_events >= 3:
+        return True
+    return (touch_events >= 1 or touch_points >= 1) and b.get("pointerHasNonMouseType") is True
+
+
 def detect_vision_ai(signals: Dict) -> List[Detection]:
     detections = []
     b = signals.get("behavioral", {})
@@ -416,7 +472,7 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
     approach_pts = b.get("approachPoints", 0)
     touch_events = b.get("touchEvents", 0)
     key_events = b.get("keyEvents", 0)
-    is_touch_user = touch_events >= 3
+    is_touch_user = _is_touch_modality(b)
     is_keyboard_user = key_events >= 2 and total_points == 0
 
     if total_points < 5 and trajectory < 10 and not is_touch_user and not is_keyboard_user:
@@ -455,17 +511,34 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
                 ))
 
     # Micro-tremor
+    # Micro-tremor. Like the approach-directness check below, this fires on a
+    # measurement that does not exist for someone who never moved a mouse - the
+    # client itself reports 0.5 as its "no mouse data" sentinel. Require real
+    # mouse movement before judging its texture, and apply the same exemptions
+    # as the surrounding checks.
     micro_tremor = b.get("microTremorScore", 0.5)
-    if micro_tremor < 0.15:
+    has_mouse_movement = total_points >= 5
+    if has_mouse_movement and not is_touch_user and not is_keyboard_user and micro_tremor < 0.15:
         detections.append(Detection(
             ThreatCategory.VISION_AI, 0.7, 0.6,
             "Mouse movement lacks natural micro-tremor",
             {"microTremorScore": micro_tremor}
         ))
 
-    # Approach directness
+    # Approach directness.
+    #
+    # The client reports directness 1 (perfectly straight) when there is no
+    # approach path to measure at all, so this check used to fire on every
+    # keyboard-only, screen-reader and touch user - the populations the
+    # surrounding checks go out of their way to exempt. Found by the bench
+    # human panel: keyboard-only, screen-reader and touch all reported
+    # approachPoints 0 with approachDirectness 1.
+    #
+    # Require an actual path before judging its shape, and apply the same
+    # exemptions as its neighbours.
     approach = b.get("approachDirectness", 0.5)
-    if approach > 0.95:
+    has_approach_path = approach_pts >= 5
+    if has_approach_path and not is_touch_user and not is_keyboard_user and approach > 0.95:
         detections.append(Detection(
             ThreatCategory.VISION_AI, 0.5, 0.5,
             "Mouse path to target is unnaturally direct"
@@ -523,7 +596,8 @@ def detect_headless(signals: Dict, user_agent: str) -> List[Detection]:
     if env.get("webdriver"):
         detections.append(Detection(
             ThreatCategory.HEADLESS, 0.95, 0.95,
-            "WebDriver detected (navigator.webdriver = true)"
+            "WebDriver detected (navigator.webdriver = true)",
+            dispositive=True,  # navigator.webdriver === true - see apply_dispositive_floor
         ))
 
     # Automation flags
@@ -719,7 +793,8 @@ def detect_cdp(signals: Dict) -> List[Detection]:
     if has_high_conf:
         detections.append(Detection(
             ThreatCategory.CDP, 0.9, 0.95,
-            f"CDP automation detected: {signals_joined}"
+            f"CDP automation detected: {signals_joined}",
+            dispositive=True,  # driver-injected globals - see apply_dispositive_floor
         ))
     elif signal_count >= 2:
         detections.append(Detection(
@@ -746,7 +821,7 @@ def detect_behavioral(signals: Dict) -> List[Detection]:
     trajectory = b.get("trajectoryLength", 0)
     touch_events = b.get("touchEvents", 0)
     key_events = b.get("keyEvents", 0)
-    is_touch_user = touch_events >= 3
+    is_touch_user = _is_touch_modality(b)
     is_keyboard_user = key_events >= 2 and total_points == 0
 
     if total_points == 0 and not is_touch_user and not is_keyboard_user:
@@ -763,7 +838,7 @@ def detect_behavioral(signals: Dict) -> List[Detection]:
 
     # Velocity variance
     vel_var = b.get("velocityVariance", 1)
-    if vel_var < 0.02 and trajectory > 50:
+    if vel_var < 0.02 and trajectory > 50 and not _has_human_movement_markers(b):
         detections.append(Detection(
             ThreatCategory.BEHAVIORAL, 0.6, 0.6,
             "Mouse velocity too consistent"
@@ -805,7 +880,7 @@ def detect_behavioral(signals: Dict) -> List[Detection]:
             ThreatCategory.BEHAVIORAL, 0.6, 0.5,
             "Mouse event rate abnormally high"
         ))
-    elif 0 < event_rate < 10:
+    elif 0 < event_rate < 10 and not _has_human_movement_markers(b):
         detections.append(Detection(
             ThreatCategory.BEHAVIORAL, 0.4, 0.4,
             "Mouse event rate abnormally low"
@@ -1022,18 +1097,46 @@ def detect_rate_abuse(ip: str, site_key: str) -> List[Detection]:
 # =============================================================================
 
 def calculate_category_scores(detections: List[Detection]) -> Dict[str, float]:
-    category_data: Dict[ThreatCategory, List[tuple]] = defaultdict(list)
+    """Combine the detections within each category into a category score.
+
+    Why this is not a mean
+    ----------------------
+    It used to be a confidence-weighted mean, which had a property nobody
+    intended: corroborating evidence *lowered* the verdict. A visitor whose
+    browser reported navigator.webdriver = true and nothing else scored 0.95 in
+    the headless category. The same visitor, additionally caught with no
+    plugins, a software renderer, a viewport equal to its window and three more
+    automation tells, scored 0.686 - because each additional signal, being
+    individually weaker than the first, pulled the average down. Seven pieces of
+    corroboration made the case weaker than one.
+
+    Noisy-OR fixes that. Each detection is independent evidence of strength
+    score x confidence, and the category is the probability at least one is
+    right::
+
+        category = 1 - PRODUCT(1 - score_i * confidence_i)
+
+    Evidence now accumulates: adding a signal can only raise a category, never
+    lower it. And it is *more* forgiving of isolated weak evidence than the mean
+    was - one detection at score 0.4, confidence 0.5 contributes 0.20 rather
+    than setting the whole category to 0.40 - which is the right treatment for a
+    lone low-confidence hit on a real user.
+
+    Measured on the bench corpus (bench/tools/compare-aggregation.js): human
+    median 0.182 -> 0.097 and human max 0.260 -> 0.171, while agent median rose
+    0.517 -> 0.570. Both populations moved in the direction they should.
+    """
+    # Probability that every detection in a category is wrong; the category
+    # score is one minus that.
+    survives: Dict[ThreatCategory, float] = {}
 
     for d in detections:
-        category_data[d.category].append((d.score, d.confidence))
+        strength = max(0.0, min(1.0, d.score * d.confidence))
+        survives[d.category] = survives.get(d.category, 1.0) * (1 - strength)
 
     result = {}
-    for cat, scores in category_data.items():
-        if scores:
-            total_weight = sum(conf for _, conf in scores)
-            if total_weight > 0:
-                weighted_sum = sum(score * conf for score, conf in scores)
-                result[cat.value] = min(1.0, weighted_sum / total_weight)
+    for cat, s_val in survives.items():
+        result[cat.value] = min(1.0, 1 - s_val)
 
     # Fill missing
     for cat in ThreatCategory:
@@ -1041,6 +1144,57 @@ def calculate_category_scores(detections: List[Detection]) -> Dict[str, float]:
             result[cat.value] = 0.0
 
     return result
+
+
+# Score below which a self-declared automated browser cannot fall.
+#
+# Why a floor exists at all
+# -------------------------
+# The final score is a weighted sum across all eleven categories, so a category
+# can contribute at most its own weight no matter how certain it is. A local
+# automated browser trips at most the six categories reachable without a
+# datacenter IP, a reused fingerprint or a rate-limit hit - about 0.81 of the
+# weight - and in practice lands near 0.5. The bench measured exactly that: a
+# Playwright browser reporting navigator.webdriver = true, no plugins, a
+# software renderer and four more automation tells scored 0.549, i.e.
+# "challenge", not "block".
+#
+# That is the weighted sum working as designed. It expresses "what fraction of
+# the total suspicion budget did this visitor consume", and no single fact can
+# consume most of that budget. The trouble is that some facts are not
+# probabilistic evidence at all - they are the browser saying so.
+#
+# What qualifies
+# --------------
+# Only detections marked dispositive, and the bar for that mark is that a
+# browser cannot produce the signal without being automated:
+#
+#   - navigator.webdriver = true - a W3C-specified flag whose sole purpose is to
+#     tell the page it is under automation.
+#   - ChromeDriver / Puppeteer injected globals (chromedriver_cdc,
+#     puppeteer_eval, cdp_script_injection), which exist in no ordinary browsing
+#     session.
+#
+# Deliberately excluded, though both look tempting: the "console consumer
+# attached" CDP check, because the bench human panel proves it fires on a
+# developer with DevTools open; and the Playwright webdriver_configurable
+# artifact, which relies on a property-descriptor detail no specification
+# guarantees.
+#
+# What this does not do
+# ---------------------
+# It does not catch a stealth agent, which patches navigator.webdriver before
+# the page ever sees it. That is not a regression - such an agent scores the
+# same as it did before - and it is the reason the behavioural workstreams still
+# matter. The floor closes the case where an agent is not even trying to hide,
+# which was previously being waved through with a "challenge".
+DISPOSITIVE_FLOOR = 0.9
+
+
+def apply_dispositive_floor(score: float, detections: List[Detection]) -> float:
+    if any(d.dispositive for d in detections):
+        return max(score, DISPOSITIVE_FLOOR)
+    return score
 
 
 def calculate_final_score(category_scores: Dict[str, float]) -> float:
@@ -1113,7 +1267,8 @@ def run_verification(
     ja3_hash: str = None,
     pow_solution: PoWSolution = None,
     signals_json: str = None,
-    pow_timing: PowTiming = None
+    pow_timing: PowTiming = None,
+    peer_trusted: bool = False
 ) -> Dict:
     from detection import (
         check_ip_reputation, analyze_headers,
@@ -1213,7 +1368,7 @@ def run_verification(
 
     # HTTP-level detectors
     if headers:
-        for d in analyze_headers(headers):
+        for d in analyze_headers(headers, peer_trusted):
             detections.append(Detection(
                 ThreatCategory.BOT, d["score"], d["confidence"], d["reason"]
             ))
@@ -1249,7 +1404,7 @@ def run_verification(
             ))
 
     category_scores = calculate_category_scores(detections)
-    final_score = calculate_final_score(category_scores)
+    final_score = apply_dispositive_floor(calculate_final_score(category_scores), detections)
 
     if final_score < 0.3:
         recommendation = "allow"
@@ -1319,7 +1474,7 @@ async def verify(req: VerifyRequest, request: Request):
     # Collect headers for analysis
     headers = collect_headers(request)
 
-    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming)
+    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request))
     log_verdict("verify", req.siteKey, result)
     return result
 
@@ -1333,7 +1488,7 @@ async def score(req: ScoreRequest, request: Request):
     ja3_hash = PROXY_TRUST.trusted_header(request, "X-JA3-Hash")
     headers = collect_headers(request)
 
-    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming)
+    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request))
     log_verdict("score", req.siteKey, result)
     return {
         "success": result["success"],
@@ -1377,4 +1532,26 @@ async def challenge():
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 3000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+
+    # proxy_headers=False is required, not a preference.
+    #
+    # uvicorn enables its own X-Forwarded-For handling by default: when the real
+    # peer is in forwarded_allow_ips (default 127.0.0.1), it rewrites
+    # request.client from the header. FCaptcha then sees the *claimed* address
+    # where it expects the socket peer, so ProxyTrust ends up evaluating the
+    # visitor's IP against the trusted-proxy list instead of the proxy's - which
+    # is the resolution ProxyTrust exists to do, done again, on different rules,
+    # underneath it.
+    #
+    # Concretely, with a reverse proxy on the same host (the normal shape), every
+    # request logged "ignoring forwarding headers from untrusted peer <visitor
+    # IP>" and scored a spurious suspicious-header detection, because the peer
+    # FCaptcha inspected was never the proxy.
+    #
+    # This mirrors the same decision in the other two servers: server-go removed
+    # chi's middleware.RealIP and server-node sets `trust proxy` to false, both
+    # so that clientip.* is the only thing resolving a client address.
+    #
+    # Running uvicorn directly? Pass --no-proxy-headers. Under gunicorn, set
+    # forwarded_allow_ips to nothing. See INSTALLATION.md.
+    uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=False)

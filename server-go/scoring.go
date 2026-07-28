@@ -45,6 +45,11 @@ type DetectionResult struct {
 	Confidence float64
 	Reason     string
 	Details    map[string]interface{}
+
+	// Dispositive marks a signal a browser cannot produce without being
+	// automated, as opposed to one that merely correlates with automation.
+	// It triggers dispositiveFloor. See applyDispositiveFloor.
+	Dispositive bool
 }
 
 // VerificationResult is the final result
@@ -317,7 +322,7 @@ func compileUAPatterns() []*regexp.Regexp {
 // request — currently Web Bot Auth signature verification, which needs the
 // accurately-reconstructed signed request. They are seeded into the detection
 // set so they participate in scoring like any engine-produced detection.
-func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash string, preDetections []DetectionResult, powSolution ...*PoWSolution) *VerificationResult {
+func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash string, peerTrusted bool, preDetections []DetectionResult, powSolution ...*PoWSolution) *VerificationResult {
 	detections := make([]DetectionResult, 0, len(preDetections)+8)
 	detections = append(detections, preDetections...)
 
@@ -391,7 +396,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 
 	// HTTP-level detectors
 	if headers != nil {
-		detections = append(detections, e.AnalyzeHeaders(headers)...)
+		detections = append(detections, e.AnalyzeHeaders(headers, peerTrusted)...)
 	}
 
 	// TLS fingerprint (JA3) — client-supplied, spoofable
@@ -416,7 +421,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 
 	// Calculate scores
 	categoryScores := e.calculateCategoryScores(detections)
-	finalScore := e.calculateFinalScore(categoryScores)
+	finalScore := applyDispositiveFloor(e.calculateFinalScore(categoryScores), detections)
 
 	// Determine recommendation
 	var recommendation string
@@ -449,7 +454,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 
 // Verify performs full verification (backward compatible)
 func (e *ScoringEngine) Verify(signals map[string]interface{}, ip, siteKey, userAgent string) *VerificationResult {
-	return e.VerifyWithHeaders(signals, ip, siteKey, userAgent, nil, "", nil, nil)
+	return e.VerifyWithHeaders(signals, ip, siteKey, userAgent, nil, "", false, nil, nil)
 }
 
 // GenerateChallenge creates a new PoW challenge (legacy)
@@ -690,6 +695,56 @@ func (e *ScoringEngine) VerifyTokenWithIP(token, ip string) map[string]interface
 // Detection Methods
 // ============================================================
 
+// hasHumanMovementMarkers reports whether the movement carries independent
+// evidence of a human hand.
+//
+// A slow pointer is the thing two of these checks look for, and it is also
+// exactly what an elderly or motor-impaired visitor produces. The bench human
+// panel caught both firing on them: "Mouse event rate abnormally low" on the
+// elderly and motor-slow personas, "Mouse velocity too consistent" on motor-slow.
+//
+// Slowness alone cannot separate those users from an agent, but it does not have
+// to. The same captures carry markers no low-effort automation produces:
+// saturated micro-tremor, dozens of direction changes, corrective overshoots. On
+// the bench corpus the split is total - every human persona clears this bar
+// (tremor 1.00, 22-49 direction changes, 1-4 corrections) and every agent misses
+// it (tremor 0.04-0.16, 0-1 direction changes, 0 corrections).
+//
+// So: do not read slowness as automation when the movement independently looks
+// like a hand. An agent can of course fake all three, but faking three correlated
+// properties of human motion is a materially harder job than running slowly,
+// which is the point.
+func hasHumanMovementMarkers(behavioral map[string]interface{}) bool {
+	tremor := getFloatDefault(behavioral, "microTremorScore", 0.5)
+	corrections := getFloat(behavioral, "overshootCorrections")
+	changes := getFloat(behavioral, "directionChanges")
+	return tremor >= 0.5 && (corrections >= 1 || changes >= 10)
+}
+
+// isTouchModality reports whether this visitor is using a touch or pen device,
+// and so should be exempt from the mouse-trajectory detections.
+//
+// The old rule was touchEvents >= 3, which a mobile user who simply taps the
+// checkbox does not meet: the client records touchstart and touchmove, and a
+// clean tap on a page short enough not to need scrolling produces exactly one
+// event. The bench human panel captured precisely that — touchEvents: 1 — and
+// the visitor collected three agent detections for it, including
+// "Zero mouse, touch, or keyboard events recorded" at confidence 0.9.
+//
+// One touch event is enough to establish modality. Corroborating it with the
+// pointer type keeps a bare forged count from claiming the exemption on its
+// own — though note this is a soft check either way, since every input here is
+// client-supplied and an agent willing to claim touchEvents: 1 was equally
+// willing to claim 3.
+func isTouchModality(behavioral map[string]interface{}) bool {
+	touchEvents := getFloat(behavioral, "touchEvents")
+	if touchEvents >= 3 {
+		return true
+	}
+	nonMouse, _ := behavioral["pointerHasNonMouseType"].(bool)
+	return (touchEvents >= 1 || getFloat(behavioral, "touchTotalPoints") >= 1) && nonMouse
+}
+
 func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []DetectionResult {
 	results := make([]DetectionResult, 0)
 
@@ -701,9 +756,8 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 	totalPoints := getFloat(behavioral, "totalPoints")
 	trajectoryLen := getFloat(behavioral, "trajectoryLength")
 	approachPts := getFloat(behavioral, "approachPoints")
-	touchEventsAI := getFloat(behavioral, "touchEvents")
 	keyEventsAI := getFloat(behavioral, "keyEvents")
-	isTouchUser := touchEventsAI >= 3
+	isTouchUser := isTouchModality(behavioral)
 	isKeyboardUser := keyEventsAI >= 2 && totalPoints == 0
 
 	if totalPoints < 5 && trajectoryLen < 10 && !isTouchUser && !isKeyboardUser {
@@ -754,9 +808,21 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 		}
 	}
 
-	// Check micro-tremor (humans have natural hand shake)
-	microTremor := getFloat(behavioral, "microTremorScore")
-	if microTremor < 0.15 {
+	// Check micro-tremor (humans have natural hand shake).
+	//
+	// Two things were wrong here. Go defaulted a missing microTremorScore to 0
+	// (maximally suspicious) while Node and Python defaulted to 0.5, so a client
+	// that omitted the field was flagged by this server and not the others — the
+	// E2E suite's touch and keyboard exemption cases failed on Go for exactly
+	// this reason. And like the approach-directness check below, it fires on a
+	// measurement that does not exist for someone who never moved a mouse; the
+	// client itself reports 0.5 as its "no mouse data" sentinel.
+	//
+	// Default to that sentinel, require real mouse movement before judging its
+	// texture, and apply the same exemptions as the surrounding checks.
+	microTremor := getFloatDefault(behavioral, "microTremorScore", 0.5)
+	hasMouseMovement := totalPoints >= 5
+	if hasMouseMovement && !isTouchUser && !isKeyboardUser && microTremor < 0.15 {
 		results = append(results, DetectionResult{
 			Category:   CategoryVisionAI,
 			Score:      0.7,
@@ -766,9 +832,20 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 		})
 	}
 
-	// Check approach directness
+	// Check approach directness.
+	//
+	// The client reports directness 1 (perfectly straight) when there is no
+	// approach path to measure at all, so this check used to fire on every
+	// keyboard-only, screen-reader and touch user — the populations the
+	// surrounding checks go out of their way to exempt. Found by the bench
+	// human panel: keyboard-only, screen-reader and touch all reported
+	// approachPoints 0 with approachDirectness 1.
+	//
+	// Require an actual path before judging its shape, and apply the same
+	// exemptions as its neighbours.
 	approachDirectness := getFloat(behavioral, "approachDirectness")
-	if approachDirectness > 0.95 {
+	hasApproachPath := approachPts >= 5
+	if hasApproachPath && !isTouchUser && !isKeyboardUser && approachDirectness > 0.95 {
 		results = append(results, DetectionResult{
 			Category:   CategoryVisionAI,
 			Score:      0.5,
@@ -851,10 +928,11 @@ func (e *ScoringEngine) detectHeadless(signals map[string]interface{}, userAgent
 	// WebDriver detection
 	if getBool(env, "webdriver") {
 		results = append(results, DetectionResult{
-			Category:   CategoryHeadless,
-			Score:      0.95,
-			Confidence: 0.95,
-			Reason:     "WebDriver detected (navigator.webdriver = true)",
+			Category:    CategoryHeadless,
+			Score:       0.95,
+			Confidence:  0.95,
+			Dispositive: true, // navigator.webdriver === true — see applyDispositiveFloor
+			Reason:      "WebDriver detected (navigator.webdriver = true)",
 		})
 	}
 
@@ -941,10 +1019,10 @@ func (e *ScoringEngine) detectHeadless(signals map[string]interface{}, userAgent
 	playwright := getMap(env, "playwright")
 	if getBool(playwright, "detected") {
 		scoreMap := map[string]float64{
-			"playwright_globals":      0.95,
-			"webdriver_deleted":       0.8,
-			"webdriver_configurable":  0.7,
-			"chrome_runtime_missing":  0.6,
+			"playwright_globals":     0.95,
+			"webdriver_deleted":      0.8,
+			"webdriver_configurable": 0.7,
+			"chrome_runtime_missing": 0.6,
 		}
 		if sigs, ok := playwright["signals"].([]interface{}); ok {
 			for _, s := range sigs {
@@ -1082,7 +1160,7 @@ func (e *ScoringEngine) detectCDP(signals map[string]interface{}) []DetectionRes
 	// and so evades the global-based checks below. Touch users are exempt — they
 	// don't generate the mouse-pointer batches these signals rely on.
 	behavioral := getMap(signals, "behavioral")
-	isTouchUser := getFloat(behavioral, "touchEvents") >= 3
+	isTouchUser := isTouchModality(behavioral)
 	if fcs := getMap(behavioral, "inputForensics"); fcs != nil && !isTouchUser {
 		// Real mice coalesce several hardware samples per animation frame; a
 		// stream of pointermoves that NEVER coalesced is synthetic injection.
@@ -1146,8 +1224,8 @@ func (e *ScoringEngine) detectCDP(signals map[string]interface{}) []DetectionRes
 
 	// High-confidence signals
 	highConfSignals := map[string]bool{
-		"chromedriver_cdc":   true,
-		"puppeteer_eval":     true,
+		"chromedriver_cdc":     true,
+		"puppeteer_eval":       true,
 		"cdp_script_injection": true,
 	}
 
@@ -1163,11 +1241,12 @@ func (e *ScoringEngine) detectCDP(signals map[string]interface{}) []DetectionRes
 
 	if hasHighConf {
 		results = append(results, DetectionResult{
-			Category:   CategoryCDP,
-			Score:      0.9,
-			Confidence: 0.95,
-			Reason:     "CDP automation detected: " + signalsJoined,
-			Details:    map[string]interface{}{"signals": signals_strs},
+			Category:    CategoryCDP,
+			Score:       0.9,
+			Confidence:  0.95,
+			Dispositive: true, // driver-injected globals — see applyDispositiveFloor
+			Reason:      "CDP automation detected: " + signalsJoined,
+			Details:     map[string]interface{}{"signals": signals_strs},
 		})
 	} else if signalCount >= 2 {
 		results = append(results, DetectionResult{
@@ -1200,9 +1279,8 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 	// Exempt: touch users (mobile) and keyboard-only users (accessibility)
 	totalPoints := getFloat(behavioral, "totalPoints")
 	trajectoryLength := getFloat(behavioral, "trajectoryLength")
-	touchEvents := getFloat(behavioral, "touchEvents")
 	keyEvents := getFloat(behavioral, "keyEvents")
-	isTouchUsr := touchEvents >= 3
+	isTouchUsr := isTouchModality(behavioral)
 	isKbdUsr := keyEvents >= 2 && totalPoints == 0
 
 	if totalPoints == 0 && !isTouchUsr && !isKbdUsr {
@@ -1224,7 +1302,7 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 
 	// Velocity variance
 	velocityVariance := getFloat(behavioral, "velocityVariance")
-	if velocityVariance < 0.02 && trajectoryLength > 50 {
+	if velocityVariance < 0.02 && trajectoryLength > 50 && !hasHumanMovementMarkers(behavioral) {
 		results = append(results, DetectionResult{
 			Category:   CategoryBehavioral,
 			Score:      0.6,
@@ -1286,7 +1364,7 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 			Reason:     "Mouse event rate abnormally high",
 			Details:    map[string]interface{}{"mouseEventRate": eventRate},
 		})
-	} else if eventRate > 0 && eventRate < 10 {
+	} else if eventRate > 0 && eventRate < 10 && !hasHumanMovementMarkers(behavioral) {
 		results = append(results, DetectionResult{
 			Category:   CategoryBehavioral,
 			Score:      0.4,
@@ -1735,24 +1813,103 @@ func errStrings(errs []error) []string {
 	return out
 }
 
+// calculateCategoryScores combines the detections within each category.
+//
+// # Why this is not a mean
+//
+// It used to be a confidence-weighted mean, which had a property nobody
+// intended: corroborating evidence *lowered* the verdict. A visitor whose
+// browser reported navigator.webdriver = true and nothing else scored 0.95 in
+// the headless category. The same visitor, additionally caught with no plugins,
+// a software renderer, a viewport equal to its window and three more automation
+// tells, scored 0.686 — because each additional signal, being individually
+// weaker than the first, pulled the average down. Seven pieces of corroboration
+// made the case weaker than one.
+//
+// Noisy-OR fixes that. Each detection is independent evidence of strength
+// Score×Confidence, and the category is the probability at least one is right:
+//
+//	category = 1 - ∏(1 - Scoreᵢ × Confidenceᵢ)
+//
+// Evidence now accumulates: adding a signal can only raise a category, never
+// lower it. And it is *more* forgiving of isolated weak evidence than the mean
+// was — one detection at score 0.4, confidence 0.5 contributes 0.20 rather than
+// setting the whole category to 0.40 — which is the right treatment for a lone
+// low-confidence hit on a real user.
+//
+// Measured on the bench corpus (bench/tools/compare-aggregation.js): human
+// median 0.182 → 0.097 and human max 0.260 → 0.171, while agent median rose
+// 0.517 → 0.570. Both populations moved in the direction they should.
+// dispositiveFloor is the score below which a self-declared automated browser
+// cannot fall.
+//
+// # Why a floor exists at all
+//
+// The final score is a weighted sum across all eleven categories, so a category
+// can contribute at most its own weight no matter how certain it is. A local
+// automated browser trips at most the six categories reachable without a
+// datacenter IP, a reused fingerprint or a rate-limit hit — about 0.81 of the
+// weight — and in practice lands near 0.5. The bench measured exactly that: a
+// Playwright browser reporting navigator.webdriver = true, no plugins, a
+// software renderer and four more automation tells scored 0.549, i.e.
+// "challenge", not "block".
+//
+// That is the weighted sum working as designed. It expresses "what fraction of
+// the total suspicion budget did this visitor consume", and no single fact can
+// consume most of that budget. The trouble is that some facts are not
+// probabilistic evidence at all — they are the browser saying so.
+//
+// # What qualifies
+//
+// Only detections marked Dispositive, and the bar for that mark is that a
+// browser cannot produce the signal without being automated:
+//
+//   - navigator.webdriver = true — a W3C-specified flag whose sole purpose is
+//     to tell the page it is under automation.
+//   - ChromeDriver / Puppeteer injected globals (chromedriver_cdc,
+//     puppeteer_eval, cdp_script_injection), which exist in no ordinary
+//     browsing session.
+//
+// Deliberately excluded, though both look tempting: the "console consumer
+// attached" CDP check, because the bench human panel proves it fires on a
+// developer with DevTools open; and the Playwright webdriver_configurable
+// artifact, which relies on a property-descriptor detail no specification
+// guarantees.
+//
+// # What this does not do
+//
+// It does not catch a stealth agent, which patches navigator.webdriver before
+// the page ever sees it. That is not a regression — such an agent scores the
+// same as it did before — and it is the reason the behavioural workstreams
+// still matter. The floor closes the case where an agent is not even trying to
+// hide, which was previously being waved through with a "challenge".
+const dispositiveFloor = 0.9
+
+func applyDispositiveFloor(score float64, detections []DetectionResult) float64 {
+	for _, d := range detections {
+		if d.Dispositive {
+			return math.Max(score, dispositiveFloor)
+		}
+	}
+	return score
+}
+
 func (e *ScoringEngine) calculateCategoryScores(detections []DetectionResult) map[string]float64 {
-	categoryTotals := make(map[ThreatCategory]struct {
-		weightedSum float64
-		totalWeight float64
-	})
+	// Probability that every detection in a category is wrong; the category
+	// score is one minus that.
+	survives := make(map[ThreatCategory]float64)
 
 	for _, d := range detections {
-		totals := categoryTotals[d.Category]
-		totals.weightedSum += d.Score * d.Confidence
-		totals.totalWeight += d.Confidence
-		categoryTotals[d.Category] = totals
+		if _, ok := survives[d.Category]; !ok {
+			survives[d.Category] = 1.0
+		}
+		strength := math.Max(0, math.Min(1, d.Score*d.Confidence))
+		survives[d.Category] *= 1 - strength
 	}
 
 	result := make(map[string]float64)
-	for cat, totals := range categoryTotals {
-		if totals.totalWeight > 0 {
-			result[string(cat)] = math.Min(1.0, totals.weightedSum/totals.totalWeight)
-		}
+	for cat, s := range survives {
+		result[string(cat)] = math.Min(1.0, 1-s)
 	}
 
 	// Fill missing categories
@@ -1899,8 +2056,19 @@ func getMap(m map[string]interface{}, key string) map[string]interface{} {
 }
 
 func getFloat(m map[string]interface{}, key string) float64 {
+	return getFloatDefault(m, key, 0)
+}
+
+// getFloatDefault reads a numeric signal, falling back to def when the client
+// did not send it.
+//
+// getFloat's zero default silently conflates "the client reported 0" with "the
+// client reported nothing", which for a signal where low means suspicious turns
+// an absent field into an accusation. Callers scoring that kind of signal should
+// pass the client's own neutral sentinel instead.
+func getFloatDefault(m map[string]interface{}, key string, def float64) float64 {
 	if m == nil {
-		return 0
+		return def
 	}
 	if v, ok := m[key].(float64); ok {
 		return v
@@ -1908,7 +2076,7 @@ func getFloat(m map[string]interface{}, key string) float64 {
 	if v, ok := m[key].(int); ok {
 		return float64(v)
 	}
-	return 0
+	return def
 }
 
 func getString(m map[string]interface{}, key string) string {

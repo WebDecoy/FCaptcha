@@ -220,15 +220,32 @@ var firefoxHeaderOrder = []string{
 	"sec-fetch-site", "sec-fetch-user",
 }
 
-// Suspicious headers that indicate automation
+// Suspicious regardless of who the peer is. x-requested-with is set by XHR
+// libraries, not by proxies, so trusting the peer says nothing about it.
 var suspiciousHeaders = map[string]bool{
-	"x-requested-with":    true, // Often set by automation
-	"x-forwarded-for":     true, // Proxy indicator
-	"x-real-ip":           true, // Proxy indicator
-	"via":                 true, // Proxy indicator
-	"forwarded":           true, // Proxy indicator
-	"x-originating-ip":    true, // Proxy indicator
-	"cf-connecting-ip":    true, // Cloudflare (usually stripped)
+	"x-requested-with": true, // Often set by automation
+}
+
+// forwardingHeaders are added by a reverse proxy, CDN or load balancer on the
+// way in.
+//
+// These are only anomalous when they arrive from a peer that is NOT a proxy we
+// trust: an ordinary client has no business claiming to forward for someone
+// else. Behind a proxy they are the opposite of suspicious — they are how the
+// request is supposed to arrive, and Cloudflare alone contributes three of them.
+//
+// Scoring them unconditionally meant every visitor to every proxied deployment
+// picked up a bot detection, permanently, including the project's own demo
+// behind Railway. The bench measured it firing on 100% of the human panel *and*
+// 100% of the agent corpus — a signal that fires on everyone distinguishes
+// nobody, it just adds noise to both sides of the comparison.
+var forwardingHeaders = map[string]bool{
+	"x-forwarded-for":     true,
+	"x-real-ip":           true,
+	"via":                 true,
+	"forwarded":           true,
+	"x-originating-ip":    true,
+	"cf-connecting-ip":    true, // Cloudflare
 	"true-client-ip":      true, // CDN header
 	"x-cluster-client-ip": true, // Load balancer header
 }
@@ -242,7 +259,10 @@ var expectedBrowserHeaders = map[string]bool{
 }
 
 // AnalyzeHeaders checks HTTP headers for bot indicators
-func (e *ScoringEngine) AnalyzeHeaders(headers map[string]string) []DetectionResult {
+// AnalyzeHeaders scores HTTP-level anomalies. peerTrusted says whether the
+// immediate peer is a proxy we trust; when it is, forwarding headers are
+// expected infrastructure rather than an anomaly.
+func (e *ScoringEngine) AnalyzeHeaders(headers map[string]string, peerTrusted bool) []DetectionResult {
 	var detections []DetectionResult
 
 	// Check for missing expected headers
@@ -262,9 +282,11 @@ func (e *ScoringEngine) AnalyzeHeaders(headers map[string]string) []DetectionRes
 		})
 	}
 
-	// Check for suspicious headers
+	// Check for suspicious headers. Forwarding headers only count when the peer
+	// is not a proxy we trust — see forwardingHeaders.
 	for header := range headers {
-		if suspiciousHeaders[strings.ToLower(header)] {
+		lower := strings.ToLower(header)
+		if suspiciousHeaders[lower] || (!peerTrusted && forwardingHeaders[lower]) {
 			detections = append(detections, DetectionResult{
 				Category:   CategoryBot,
 				Score:      0.3,
@@ -308,12 +330,12 @@ func (e *ScoringEngine) AnalyzeHeaders(headers map[string]string) []DetectionRes
 
 // UABrowserInfo extracted from User-Agent
 type UABrowserInfo struct {
-	Browser   string
-	Version   string
-	OS        string
-	IsMobile  bool
-	IsBot     bool
-	BotName   string
+	Browser  string
+	Version  string
+	OS       string
+	IsMobile bool
+	IsBot    bool
+	BotName  string
 }
 
 var botUAPatterns = []*regexp.Regexp{
