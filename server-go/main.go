@@ -620,6 +620,11 @@ type PoWChallengeResponse struct {
 	ExpiresAt   int64  `json:"expiresAt"`
 	Nonce       string `json:"nonce"`
 	Sig         string `json:"sig"`
+	// MinAgeMs tells the client how long to hold a solved challenge before
+	// submitting it. Honouring it is how an ordinary visitor pays an elevated
+	// cost as a short wait instead of as a worse score — which matters most for
+	// people sharing an egress address with whatever earned the elevation.
+	MinAgeMs int64 `json:"minAgeMs"`
 }
 
 func powChallengeHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGuard) http.HandlerFunc {
@@ -637,6 +642,7 @@ func powChallengeHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *Sit
 			ExpiresAt:   challenge.ExpiresAt,
 			Nonce:       challenge.Nonce,
 			Sig:         challenge.Sig,
+			MinAgeMs:    challenge.MinAgeMs,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

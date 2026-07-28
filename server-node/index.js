@@ -12,6 +12,7 @@
 const crypto = require('crypto');
 const detection = require('./detection');
 const { ProxyTrust } = require('./clientip');
+const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 
 // =============================================================================
 // PoW Challenge Store (can be extended with Redis)
@@ -25,7 +26,7 @@ class PoWChallengeStore {
     this.expirationMs = options.expirationMs || 5 * 60 * 1000; // 5 minutes
   }
 
-  generate(siteKey, ip, difficulty = 4) {
+  generate(siteKey, ip, difficulty = 4, minAgeMs = BASE_MIN_AGE_MS) {
     const challengeId = crypto.randomBytes(16).toString('hex');
     const timestamp = Date.now();
     const expiresAt = timestamp + this.expirationMs;
@@ -36,14 +37,16 @@ class PoWChallengeStore {
       timestamp,
       expiresAt,
       difficulty,
+      // How long the client must hold this challenge before submitting a
+      // solution. Inside the signed payload so it cannot be talked down.
+      minAgeMs,
       prefix: `${challengeId}:${timestamp}:${difficulty}`
     };
 
     // Sign the challenge
     const sig = crypto.createHmac('sha256', this.secret)
       .update(JSON.stringify(challengeData))
-      .digest('hex')
-      .slice(0, 16);
+      .digest('hex');
 
     challengeData.sig = sig;
 
@@ -100,7 +103,13 @@ class PoWChallengeStore {
     this.usedSolutions.add(solutionKey);
     this.challenges.delete(challengeId);
 
-    return { valid: true, difficulty: challenge.difficulty };
+    return {
+      valid: true,
+      difficulty: challenge.difficulty,
+      serverElapsed: Date.now() - challenge.timestamp,
+      // Fall back for challenges issued before adaptive cost existed.
+      minAgeMs: challenge.minAgeMs || BASE_MIN_AGE_MS
+    };
   }
 
   _cleanup() {
@@ -207,29 +216,31 @@ class ScoringEngine {
     this.powStore = options.powStore || new PoWChallengeStore({ secret: this.secret });
     this.rateLimiter = options.rateLimiter || new RateLimiter();
     this.fingerprintStore = options.fingerprintStore || new FingerprintStore();
+    this.suspicion = options.suspicion || new SuspicionLedger();
     this.weights = options.weights || WEIGHTS;
   }
 
   // Generate a PoW challenge
   generateChallenge(siteKey, ip, options = {}) {
+    // See suspicion.js for why the escalation lands almost entirely on
+    // minAgeMs rather than on difficulty.
     let difficulty = options.difficulty || 4;
+    let minAgeMs = BASE_MIN_AGE_MS;
 
     if (options.scaleByReputation !== false) {
-      if (detection.isDatacenterIP(ip)) {
-        difficulty = Math.max(difficulty, 5);
-      }
-
       const rateKey = `pow:${siteKey}:${ip}`;
       const [exceeded, count] = this.rateLimiter.check(rateKey, 60, 20);
-      if (count > 10) {
-        difficulty = Math.min(6, difficulty + 1);
-      }
-      if (exceeded) {
-        difficulty = 6;
-      }
+      const cost = computeChallengeCost(
+        this.suspicion.count(siteKey, ip),
+        detection.isDatacenterIP(ip),
+        count,
+        exceeded
+      );
+      difficulty = Math.max(difficulty, cost.difficulty);
+      minAgeMs = cost.minAgeMs;
     }
 
-    return this.powStore.generate(siteKey, ip, difficulty);
+    return this.powStore.generate(siteKey, ip, difficulty, minAgeMs);
   }
 
   // Verify signals and return score
@@ -259,6 +270,26 @@ class ScoringEngine {
           score: 0.7,
           confidence: 0.8,
           reason: `PoW verification failed: ${powResult.reason}`
+        });
+      } else if (powResult.serverElapsed < BASE_MIN_AGE_MS) {
+        // Under the universal baseline nothing legitimate can have happened —
+        // no human completes an interaction that fast.
+        detections.push({
+          category: 'bot',
+          score: 0.8,
+          confidence: 0.85,
+          reason: `Challenge solved too fast (${powResult.serverElapsed}ms server-side)`
+        });
+      } else if (powResult.serverElapsed < powResult.minAgeMs) {
+        // Between the baseline and this source's own elevated floor is weaker
+        // evidence: a client predating adaptive cost, or one served from a
+        // stale cache, does not know to wait. It contributes rather than
+        // deciding.
+        detections.push({
+          category: 'bot',
+          score: 0.5,
+          confidence: 0.5,
+          reason: `Challenge submitted before the required delay for this source (${powResult.serverElapsed}ms of ${powResult.minAgeMs}ms)`
         });
       }
     } else {
@@ -308,6 +339,10 @@ class ScoringEngine {
     const success = finalScore < 0.5;
     const token = success ? this._generateToken(ip, siteKey, finalScore) : null;
 
+    // Feed the ledger so the next challenge this source asks for is priced on
+    // what it just did.
+    this.suspicion.record(siteKey, ip, finalScore);
+
     return {
       success,
       score: finalScore,
@@ -332,7 +367,7 @@ class ScoringEngine {
       delete decoded.sig;
 
       const payload = JSON.stringify(decoded, Object.keys(decoded).sort());
-      const expectedSig = crypto.createHmac('sha256', this.secret).update(payload).digest('hex').slice(0, 16);
+      const expectedSig = crypto.createHmac('sha256', this.secret).update(payload).digest('hex');
 
       if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
         return { valid: false, reason: 'invalid_signature' };
@@ -707,7 +742,7 @@ class ScoringEngine {
     };
 
     const payload = JSON.stringify(data, Object.keys(data).sort());
-    const sig = crypto.createHmac('sha256', this.secret).update(payload).digest('hex').slice(0, 16);
+    const sig = crypto.createHmac('sha256', this.secret).update(payload).digest('hex');
     data.sig = sig;
 
     return Buffer.from(JSON.stringify(data)).toString('base64url');

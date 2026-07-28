@@ -22,6 +22,22 @@
  * connection really does not. Samples may set `clientIp` to say so; anything
  * that does not gets a documentation-range address (RFC 5737), which no
  * detection treats as anything in particular.
+ *
+ * Those addresses are assigned by position and must stay unique — see
+ * neutralIpAt for what happened when they were hashed instead.
+ *
+ * ## Why the pacer does not honour the server's minAgeMs
+ *
+ * The server tells a client how long to hold a solved challenge, and the
+ * shipped client waits that long. This harness deliberately does not: it always
+ * waits a fixed interval just past the universal baseline.
+ *
+ * That is the conservative choice for measuring false positives. A replayer
+ * that honoured the delay would satisfy the timing gate by construction and the
+ * panel could never observe it firing on a human — the same trap as pinning a
+ * property during normalization and then reporting that nothing disagrees with
+ * it. Leaving the pacer fixed means any escalation applied to a human persona
+ * shows up as a signal over budget, which is exactly what it should do.
  */
 
 const crypto = require('crypto');
@@ -63,13 +79,46 @@ function distinguishDevice(signals, id) {
   };
 }
 
-/** RFC 5737 TEST-NET-2 and TEST-NET-3: reserved, routable nowhere, in no CIDR list. */
-const NEUTRAL_PREFIXES = ['198.51.100', '203.0.113'];
+/** RFC 5737 TEST-NET-1, -2 and -3: reserved, routable nowhere, in no CIDR list. */
+const NEUTRAL_PREFIXES = ['192.0.2', '198.51.100', '203.0.113'];
 
+/** .0 and .255 are the network and broadcast addresses; keep to 1-254. */
+const NEUTRAL_POOL_SIZE = NEUTRAL_PREFIXES.length * 254;
+
+/**
+ * The address for the Nth sample in a corpus.
+ *
+ * Assigned by position rather than by hashing the sample id, and that is the
+ * whole point. Hashing put 180 samples into a 508-address space, which by the
+ * birthday bound collided constantly: 25 shared addresses, 24 of them putting
+ * an agent and a human on the same IP. The corpus was manufacturing shared
+ * egress that its labels never claimed, so any per-source signal — rate limits,
+ * reputation, accumulated suspicion — was being measured against a fiction.
+ *
+ * Nothing caught it until a per-source signal existed to notice, which is the
+ * same shape of mistake as normalization pinning a property the panel then
+ * could not disagree about. Assign by index and the collisions cannot come back.
+ */
+function neutralIpAt(index) {
+  if (index >= NEUTRAL_POOL_SIZE) {
+    throw new Error(
+      `corpus has outgrown the neutral address pool (${NEUTRAL_POOL_SIZE} addresses). ` +
+        'Add another RFC 5737 prefix rather than letting samples share an address — ' +
+        'shared addresses silently break every per-source measurement.'
+    );
+  }
+  return `${NEUTRAL_PREFIXES[Math.floor(index / 254)]}.${(index % 254) + 1}`;
+}
+
+/**
+ * Address for a single sample replayed outside a corpus run.
+ *
+ * Collision-prone by construction — see neutralIpAt. Fine for a one-off, wrong
+ * for a panel.
+ */
 function neutralIpFor(id) {
   const digest = crypto.createHash('sha256').update(id).digest();
   const prefix = NEUTRAL_PREFIXES[digest[0] % NEUTRAL_PREFIXES.length];
-  // .0 and .255 are the network and broadcast addresses; keep to 1-254.
   return `${prefix}.${(digest[1] % 254) + 1}`;
 }
 
@@ -134,6 +183,13 @@ async function replaySample(serverUrl, sample, opts = {}) {
  */
 async function replayCorpus(serverUrl, samples, opts = {}) {
   const concurrency = opts.concurrency || 4;
+
+  // Give every sample its own address before anything is replayed, so no two
+  // samples share server-side per-source state.
+  samples.forEach((sample, i) => {
+    if (!sample.clientIp) sample.clientIp = neutralIpAt(i);
+  });
+
   const results = new Array(samples.length);
   let next = 0;
   let done = 0;
@@ -152,4 +208,12 @@ async function replayCorpus(serverUrl, samples, opts = {}) {
   return results;
 }
 
-module.exports = { DEFAULT_UA, distinguishDevice, neutralIpFor, replayCorpus, replaySample };
+module.exports = {
+  DEFAULT_UA,
+  distinguishDevice,
+  neutralIpAt,
+  neutralIpFor,
+  NEUTRAL_POOL_SIZE,
+  replayCorpus,
+  replaySample,
+};

@@ -116,14 +116,37 @@ sample and measures nothing but itself. `lib/pow.js` paces the solve and waits
 out the challenge age, so `duration` stays true wall-clock — a fabricated
 duration would be measuring the fabrication.
 
-**Every sample gets its own client IP.** The server escalates PoW difficulty per
-`pow:{siteKey}:{ip}`, so a few hundred samples from one address would spend the
-run solving 16.7M-hash challenges *and* pick up rate-limit detections that the
-earlier samples never saw — the measurement would drift with position in the
-corpus. Samples present a distinct RFC 5737 documentation address via
-`X-Forwarded-For`, which works because loopback is in the default trusted-proxy
-set. Agent classes that really do arrive from datacenter ranges can say so with
-`clientIp`.
+**Every sample gets its own client IP.** The server keys rate limits and
+accumulated suspicion per `pow:{siteKey}:{ip}`, so a few hundred samples from one
+address would pick up escalations the earlier samples never saw — the measurement
+would drift with position in the corpus. Samples present a distinct RFC 5737
+documentation address via `X-Forwarded-For`, which works because loopback is in
+the default trusted-proxy set. Agent classes that really do arrive from
+datacenter ranges can say so with `clientIp`.
+
+Those addresses are assigned **by position**, not by hashing the sample id, and
+that distinction was learned the hard way. Hashing put 180 samples into a
+508-address space; by the birthday bound they collided constantly — 25 shared
+addresses, 24 of them putting an agent and a human on the same IP. The corpus was
+manufacturing shared egress its labels never claimed, and nothing noticed for as
+long as no signal was keyed by source. The first one that was, read 12.7% FPR on
+a panel whose real answer was zero. `lib/replay.test.js` now holds the pool
+collision-free and throws rather than wrapping if the corpus outgrows it.
+
+**Each run namespaces its own server-side state.** The same per-source keying
+means a second run against a long-lived server measures the residue of the first.
+Measured: one signal fired on 2/75 agents against a fresh server and 74/75
+against one already benchmarked. Each run generates a unique site key, so runs
+are independent without the harness having to own the server's lifecycle.
+
+**The pacer does not honour the server's `minAgeMs`.** The server tells clients
+how long to hold a solved challenge and the shipped client obeys; the harness
+deliberately waits a fixed interval just past the universal baseline instead. A
+replayer that honoured the delay would satisfy the timing gate by construction,
+and the panel could never observe it firing on a human — the same trap as pinning
+a property during normalization and then reporting that nothing disagrees with
+it. Leaving the pacer fixed means any escalation applied to a human persona shows
+up as a signal over budget, which is what it should do.
 
 ---
 

@@ -1,0 +1,15 @@
+{
+  "name": "@webdecoy/fcaptcha-bench",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Measurement harness: labeled corpus, replay, and per-signal false-positive reporting for FCaptcha",
+  "scripts": {
+    "bench": "node run-bench.js",
+    "capture": "node capture/record.js",
+    "install-browsers": "playwright install chromium",
+    "test": "node --test lib/*.test.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

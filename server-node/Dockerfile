@@ -16,16 +16,12 @@ WORKDIR /app/server-node
 COPY server-node/package.json server-node/package-lock.json* ./
 RUN npm install --omit=dev
 
-# Every module server.js requires. Copying the entrypoint alone leaves the image
-# unable to start, and nothing in a Dockerfile review makes that visible — keep
-# this list in step with server.js's requires.
-COPY server-node/server.js \
-     server-node/detection.js \
-     server-node/clientip.js \
-     server-node/limits.js \
-     server-node/webbotauth.js \
-     server-node/inputforensics.js \
-     ./
+# All of it, rather than a list of modules to keep in step with server.js's
+# requires. That list was the defect: a module added to the server and not to the
+# Dockerfile produces an image that crashes on startup, which no Dockerfile
+# review makes visible and which the previous instruction here did not prevent.
+COPY server-node/*.js ./
+RUN rm -f *.test.js
 
 # Sibling of server-node/, so ../client/fcaptcha.js resolves.
 COPY client/fcaptcha.js /app/client/fcaptcha.js

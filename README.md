@@ -293,8 +293,34 @@ to honest mobile users for no gain in the constraint that actually binds. Number
 in [bench/POW-PRIMITIVE.md](bench/POW-PRIMITIVE.md).
 
 If you want proof of work to genuinely raise an attacker's cost, the lever is the
-server-measured elapsed time, not the hash. That is what adaptive difficulty
-should key on.
+server-measured elapsed time, not the hash. That is what the adaptive cost keys
+on.
+
+Each challenge carries a `minAgeMs`: how long it must be held before a solution
+is accepted without penalty. A visitor who has done nothing wrong gets the same
+1500ms floor the server has always applied. A source that has recently produced
+strong bot verdicts gets more, up to 15 seconds — which takes it from roughly 40
+tokens a minute to four, on hardware no amount of money can speed up.
+
+Difficulty barely moves, and now caps at 5 rather than 6. Difficulty 6 costs a
+native solver about a millisecond and a budget Android phone about sixteen
+seconds; escalating there taxes the slowest legitimate devices and constrains
+nobody. Being on a datacenter address no longer raises difficulty at all — a
+real person on a corporate VPN or iCloud Private Relay was paying several seconds
+of blocked hashing for a shared IP — and raises the time floor instead, which a
+hosted scraper feels as reduced throughput and a person filling in a form does
+not feel at all.
+
+The client is told `minAgeMs` and waits it out, so for an ordinary visitor the
+cost is a short delay rather than a worse score. That distinction matters most
+for anyone sharing an egress address with whatever earned the delay. A client
+that submits early anyway is scored, but only as contributory evidence — an
+older cached client does not know to wait, and should not be treated as
+automation for it.
+
+Suspicion is held per (site key, address) for 15 minutes, records only verdicts
+at or above 0.8, and stores nothing but timestamps. It is not cross-session
+correlation and should not grow into it.
 
 ### Behavioral Biometrics
 - Mouse trajectory, velocity, and acceleration curves
@@ -381,6 +407,7 @@ Get a Proof of Work challenge. Called automatically by the client on page load.
   "challengeId": "abc123...",
   "prefix": "abc123:1703356800000:4",
   "difficulty": 4,
+  "minAgeMs": 1500,
   "expiresAt": 1703357100000,
   "nonce": "f1e2d3...",
   "sig": "def456..."
@@ -389,9 +416,22 @@ Get a Proof of Work challenge. Called automatically by the client on page load.
 
 The `nonce` is generated per-challenge by the server; the client echoes it back in `signals.meta.challengeNonce` and the server verifies it, preventing challenge replay.
 
-Difficulty scales based on:
-- Datacenter IPs: +1 difficulty
-- High request rate: +1 difficulty (max 6)
+`minAgeMs` is how long the client should hold the solved challenge before
+submitting. The bundled client does this for you. Both fields are covered by
+`sig`, so neither can be talked down on the way back.
+
+Cost scales with what the requesting source has recently been caught doing:
+
+| source | difficulty | minAgeMs |
+|---|---|---|
+| clean, or unknown | 4 | 1500 |
+| 1–2 recent strong bot verdicts | 4 | 4000 |
+| 3–5 | 5 | 8000 |
+| 6+ | 5 | 15000 |
+
+Datacenter addresses, high request rates and exceeded rate limits raise the time
+floor only — never the difficulty. See [what proof of work does and does not buy
+you](#what-the-proof-of-work-does-and-does-not-buy-you) for why.
 
 ### POST /api/verify
 Verify a checkbox CAPTCHA submission.
@@ -611,7 +651,7 @@ fcaptcha/
 └── README.md
 ```
 
-> All three servers implement the same detection engine and must stay in sync. The Go scoring is unit-tested (`go test ./server-go/...`); `test/test-detection.js` exercises the full pipeline against a running server.
+> All three servers implement the same detection engine and must stay in sync. Each has unit tests that run in CI, and `test/test-detection.js` exercises the full pipeline against a running server.
 
 ## Development
 
@@ -631,10 +671,24 @@ open demo/index.html
 
 ### Running Tests
 
-Go unit tests (no server required):
+Unit tests, no server required. All three run in CI on every pull request.
 
 ```bash
-cd server-go && go test ./...
+cd server-go     && go test -race ./...              # Go
+cd server-node   && npm test                         # Node
+cd server-python && python -m unittest discover -p "test_*.py"   # Python
+```
+
+The Python tests are plain functions collected by a decorator rather than
+`TestCase` methods, so `testkit.py` bridges them into `unittest` — run a single
+file directly (`python test_sitekeys.py`) for readable per-test output. Discovery
+and direct execution both report the same set; if the discovered count drops, a
+file has stopped being discoverable.
+
+The measurement harness has its own tests:
+
+```bash
+cd bench && npm test
 ```
 
 End-to-end detection suite (runs against a live server):

@@ -24,6 +24,7 @@ const path = require('path');
 const { deriveVariant, loadCorpus } = require('./lib/corpus');
 const { computeMetrics, evaluateGate } = require('./lib/metrics');
 const { renderReport } = require('./lib/report');
+const crypto = require('crypto');
 const { replayCorpus } = require('./lib/replay');
 const { makeRng } = require('./lib/rng');
 
@@ -109,8 +110,21 @@ async function main() {
     );
   }
 
+  // Namespace this run's server-side per-source state.
+  //
+  // The server keys rate limits and accumulated suspicion by (siteKey, address).
+  // Sample addresses are assigned by position, so two runs against the same
+  // long-lived server reuse the same addresses and the second run measures the
+  // residue of the first. Measured: one signal fired on 2/75 agents against a
+  // fresh server and 74/75 against one that had already been benchmarked.
+  //
+  // A per-run site key makes runs independent without the harness having to own
+  // the server's lifecycle.
+  const siteKey = `bench-${crypto.randomBytes(6).toString('hex')}`;
+
   const started = Date.now();
   const results = await replayCorpus(args.server, corpus, {
+    siteKey,
     concurrency: args.concurrency,
     onProgress: args.quiet
       ? null

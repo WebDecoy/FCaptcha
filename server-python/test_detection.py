@@ -8,7 +8,7 @@ evidence weakening a verdict rather than strengthening it.
 Run: python test_detection.py
 """
 
-import sys
+from testkit import TestRegistry
 
 from detection import analyze_headers
 from server import (
@@ -19,12 +19,7 @@ from server import (
     DISPOSITIVE_FLOOR,
 )
 
-tests = []
-
-
-def test(fn):
-    tests.append(fn)
-    return fn
+test = TestRegistry()
 
 
 def browser_headers():
@@ -115,14 +110,8 @@ def dispositive_floor():
     assert apply_dispositive_floor(0.97, declared) == 0.97
 
 
-failed = 0
-for fn in tests:
-    try:
-        fn()
-        print(f"  ok  {fn.__name__}")
-    except AssertionError as e:
-        failed += 1
-        print(f"  FAIL {fn.__name__}\n       {e}")
+DetectionTests = test.testcase("DetectionTests")
 
-print(f"\n{len(tests) - failed}/{len(tests)} passed")
-sys.exit(0 if failed == 0 else 1)
+
+if __name__ == "__main__":
+    test.main()
