@@ -651,7 +651,7 @@ fcaptcha/
 └── README.md
 ```
 
-> All three servers implement the same detection engine and must stay in sync. The Go scoring is unit-tested (`go test ./server-go/...`); `test/test-detection.js` exercises the full pipeline against a running server.
+> All three servers implement the same detection engine and must stay in sync. Each has unit tests that run in CI, and `test/test-detection.js` exercises the full pipeline against a running server.
 
 ## Development
 
@@ -671,10 +671,24 @@ open demo/index.html
 
 ### Running Tests
 
-Go unit tests (no server required):
+Unit tests, no server required. All three run in CI on every pull request.
 
 ```bash
-cd server-go && go test ./...
+cd server-go     && go test -race ./...              # Go
+cd server-node   && npm test                         # Node
+cd server-python && python -m unittest discover -p "test_*.py"   # Python
+```
+
+The Python tests are plain functions collected by a decorator rather than
+`TestCase` methods, so `testkit.py` bridges them into `unittest` — run a single
+file directly (`python test_sitekeys.py`) for readable per-test output. Discovery
+and direct execution both report the same set; if the discovered count drops, a
+file has stopped being discoverable.
+
+The measurement harness has its own tests:
+
+```bash
+cd bench && npm test
 ```
 
 End-to-end detection suite (runs against a live server):

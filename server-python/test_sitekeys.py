@@ -2,7 +2,7 @@
 Tests for site_key state bounds. Run: python3 test_sitekeys.py
 """
 
-import sys
+from testkit import TestRegistry
 
 from sitekeys import (
     MAX_TRACKED_IPS,
@@ -11,12 +11,7 @@ from sitekeys import (
     SiteKeyGuard,
 )
 
-_tests = []
-
-
-def test(fn):
-    _tests.append(fn)
-    return fn
+test = TestRegistry()
 
 
 @test
@@ -106,14 +101,8 @@ def edge_cases_do_not_raise():
     assert g.normalize("k", None) == "k"
 
 
+SiteKeyTests = test.testcase("SiteKeyTests")
+
+
 if __name__ == "__main__":
-    failures = 0
-    for fn in _tests:
-        try:
-            fn()
-            print(f"  ok  {fn.__name__}")
-        except AssertionError as exc:
-            failures += 1
-            print(f"  FAIL {fn.__name__}\n       {exc}")
-    print(f"\n{len(_tests) - failures}/{len(_tests)} passed")
-    sys.exit(1 if failures else 0)
+    test.main()

@@ -4,7 +4,7 @@ Tests for trusted-proxy client IP resolution.
 Run: python3 test_clientip.py
 """
 
-import sys
+from testkit import TestRegistry
 
 from clientip import MAX_PROXY_MISCONFIG_WARNINGS, ProxyTrust
 
@@ -31,12 +31,7 @@ class FakeRequest:
         self.headers = _Headers({k.lower(): v for k, v in (headers or {}).items()})
 
 
-_tests = []
-
-
-def test(fn):
-    _tests.append(fn)
-    return fn
+test = TestRegistry()
 
 
 @test
@@ -171,14 +166,8 @@ def untrusted_forwarding_is_warned_about_boundedly():
     assert "further warnings suppressed" in buf.getvalue()
 
 
+ClientIpTests = test.testcase("ClientIpTests")
+
+
 if __name__ == "__main__":
-    failures = 0
-    for fn in _tests:
-        try:
-            fn()
-            print(f"  ok  {fn.__name__}")
-        except AssertionError as exc:
-            failures += 1
-            print(f"  FAIL {fn.__name__}\n       {exc}")
-    print(f"\n{len(_tests) - failures}/{len(_tests)} passed")
-    sys.exit(1 if failures else 0)
+    test.main()

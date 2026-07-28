@@ -6,7 +6,7 @@ numbers: human typing at 226.9ms/4549 variance/82ms hold, a scripted agent at
 that passes on invented inputs proves nothing about real ones.
 """
 
-import sys
+from testkit import TestRegistry
 
 from inputforensics import (
     check_font_platform_coherence,
@@ -16,12 +16,7 @@ from inputforensics import (
     check_typing_cadence,
 )
 
-tests = []
-
-
-def test(fn):
-    tests.append(fn)
-    return fn
+test = TestRegistry()
 
 
 def field(interval, variance, dwell, key_count=43, paste_count=0):
@@ -133,14 +128,8 @@ def blocked_font_list_never_flagged():
         assert check_font_platform_coherence(fonts, "MacIntel") == [], fonts
 
 
-failed = 0
-for fn in tests:
-    try:
-        fn()
-        print(f"  ok  {fn.__name__}")
-    except AssertionError as e:
-        failed += 1
-        print(f"  FAIL {fn.__name__}\n       {e}")
+InputForensicsTests = test.testcase("InputForensicsTests")
 
-print(f"\n{len(tests) - failed}/{len(tests)} passed")
-sys.exit(0 if failed == 0 else 1)
+
+if __name__ == "__main__":
+    test.main()
