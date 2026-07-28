@@ -24,6 +24,11 @@ from pydantic import BaseModel
 from clientip import ProxyTrust
 from sitekeys import SiteKeyGuard
 from inputforensics import detect_input_forensics
+from suspicion import (
+    SuspicionLedger,
+    compute_challenge_cost,
+    BASE_MIN_AGE_MS,
+)
 
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
 app = FastAPI(title="FCaptcha", version="1.20.0")
@@ -239,16 +244,13 @@ class PoWChallengeStore:
         now = int(time.time() * 1000)
         expires_at = now + (5 * 60 * 1000)  # 5 minutes
 
-        # Difficulty scaling
-        difficulty = 4  # Default: ~100-500ms on average hardware
-        if is_datacenter:
-            difficulty = 5  # Harder for datacenter IPs
-
-        # Check rate for this IP
+        # Cost scaling. See suspicion.py for why the escalation lands almost
+        # entirely on min_age_ms rather than on difficulty.
         rate_key = f"pow:{site_key}:{ip}"
-        _, count = rate_limiter.check(rate_key, 60, 20)
-        if count > 10:
-            difficulty = min(6, difficulty + 1)
+        exceeded, count = rate_limiter.check(rate_key, 60, 20)
+        difficulty, min_age_ms = compute_challenge_cost(
+            suspicion_ledger.count(site_key, ip), is_datacenter, count, exceeded
+        )
 
         prefix = f"{challenge_id}:{now}:{difficulty}"
 
@@ -260,6 +262,9 @@ class PoWChallengeStore:
             "timestamp": now,
             "expiresAt": expires_at,
             "nonce": nonce,
+            # How long the client must hold this challenge before submitting a
+            # solution. Inside the signed payload so it cannot be talked down.
+            "minAgeMs": min_age_ms,
             "ip": ip
         }
 
@@ -270,7 +275,8 @@ class PoWChallengeStore:
             "timestamp": now,
             "expiresAt": expires_at,
             "difficulty": difficulty,
-            "prefix": prefix
+            "prefix": prefix,
+            "minAgeMs": min_age_ms
         }, sort_keys=True)
         sig = hmac.new(SECRET_KEY.encode(), sig_data.encode(), hashlib.sha256).hexdigest()
         challenge["sig"] = sig
@@ -288,7 +294,11 @@ class PoWChallengeStore:
             "difficulty": difficulty,
             "expiresAt": expires_at,
             "nonce": nonce,
-            "sig": sig
+            "sig": sig,
+            # Tells the client how long to hold a solved challenge before
+            # submitting. Honouring it is how an ordinary visitor pays an
+            # elevated cost as a short wait instead of as a worse score.
+            "minAgeMs": min_age_ms
         }
 
     def verify(self, solution: PoWSolution, site_key: str, signals_hash: str = None) -> Dict:
@@ -336,7 +346,14 @@ class PoWChallengeStore:
         # Delete challenge (one-time use)
         del self.challenges[solution.challengeId]
 
-        return {"valid": True, "difficulty": challenge["difficulty"], "serverElapsed": server_elapsed, "nonce": challenge.get("nonce")}
+        return {
+            "valid": True,
+            "difficulty": challenge["difficulty"],
+            "serverElapsed": server_elapsed,
+            "nonce": challenge.get("nonce"),
+            # Fall back for challenges issued before adaptive cost existed.
+            "minAgeMs": challenge.get("minAgeMs") or BASE_MIN_AGE_MS,
+        }
 
     def _cleanup(self):
         now = int(time.time() * 1000)
@@ -371,6 +388,10 @@ class TokenStore:
 
 
 rate_limiter = RateLimiter()
+
+# Recent strong verdicts per source, used to price the next challenge that
+# source asks for. Bounded and short-lived; see suspicion.py.
+suspicion_ledger = SuspicionLedger()
 fingerprint_store = FingerprintStore()
 pow_store = PoWChallengeStore()
 token_store = TokenStore()
@@ -1357,12 +1378,28 @@ def run_verification(
                     "Challenge nonce mismatch (signals not bound to challenge)"
                 ))
 
-        if pow_result["valid"] and pow_result.get("serverElapsed", 99999) < 1500:
-            # Server-side timing: challenge was solved too fast (un-spoofable)
-            detections.append(Detection(
-                ThreatCategory.BOT, 0.8, 0.85,
-                f"Challenge solved too fast ({pow_result['serverElapsed']}ms server-side)"
-            ))
+        # Server-side timing, the one cost an attacker cannot buy their way out
+        # of. Two thresholds, because they mean different things.
+        if pow_result["valid"]:
+            elapsed = pow_result.get("serverElapsed", 99999)
+            min_age = pow_result.get("minAgeMs") or BASE_MIN_AGE_MS
+            if elapsed < BASE_MIN_AGE_MS:
+                # Under the universal baseline nothing legitimate can have
+                # happened - no human completes an interaction that fast.
+                detections.append(Detection(
+                    ThreatCategory.BOT, 0.8, 0.85,
+                    f"Challenge solved too fast ({elapsed}ms server-side)"
+                ))
+            elif elapsed < min_age:
+                # Between the baseline and this source's own elevated floor is
+                # weaker evidence: a client predating adaptive cost, or one
+                # served from a stale cache, does not know to wait. It
+                # contributes rather than deciding.
+                detections.append(Detection(
+                    ThreatCategory.BOT, 0.5, 0.5,
+                    f"Challenge submitted before the required delay for this "
+                    f"source ({elapsed}ms of {min_age}ms)"
+                ))
     else:
         # No PoW solution provided - hard fail
         detections.append(Detection(
@@ -1457,6 +1494,10 @@ def run_verification(
 
     success = final_score < 0.5
     token = generate_token(ip, site_key, final_score) if success else None
+
+    # Feed the ledger so the next challenge this source asks for is priced on
+    # what it just did.
+    suspicion_ledger.record(site_key, ip, final_score)
 
     return {
         "success": success,

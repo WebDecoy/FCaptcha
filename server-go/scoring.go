@@ -73,7 +73,11 @@ type PoWChallenge struct {
 	ExpiresAt  int64  `json:"expiresAt"`
 	Nonce      string `json:"nonce"`
 	Sig        string `json:"sig"`
-	IP         string `json:"-"` // Not sent to client
+	// MinAgeMs is how old this challenge must be before its solution is
+	// accepted without penalty. Sent to the client, which waits it out, and
+	// covered by Sig so it cannot be lowered on the way back.
+	MinAgeMs int64  `json:"minAgeMs"`
+	IP       string `json:"-"` // Not sent to client
 }
 
 // PoWSolution from client
@@ -91,6 +95,9 @@ type PoWVerifyResult struct {
 	Difficulty    int
 	ServerElapsed int64
 	Nonce         string
+	// MinAgeMs is the floor this particular challenge was issued with, which
+	// varies with how suspicious the source was at the time.
+	MinAgeMs int64
 }
 
 // PoWChallengeStore manages challenges and replay-protects spent solutions.
@@ -178,6 +185,7 @@ type ScoringEngine struct {
 	fingerprintStore *FingerprintStore
 	powStore         *PoWChallengeStore
 	tokenStore       *TokenStore
+	suspicion        *SuspicionLedger
 	weights          map[ThreatCategory]float64
 	uaPatterns       []*regexp.Regexp
 	webBotAuth       *webbotauth.Verifier
@@ -250,6 +258,7 @@ func NewScoringEngine(secretKey string) *ScoringEngine {
 		fingerprintStore: newFingerprintStore(),
 		powStore:         newPoWChallengeStore(),
 		tokenStore:       newTokenStore(),
+		suspicion:        NewSuspicionLedger(),
 		weights: map[ThreatCategory]float64{
 			CategoryVisionAI:    0.15,
 			CategoryHeadless:    0.15,
@@ -364,13 +373,31 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 			}
 		}
 
-		if powResult.Valid && powResult.ServerElapsed < 1500 {
-			detections = append(detections, DetectionResult{
-				Category:   CategoryBot,
-				Score:      0.8,
-				Confidence: 0.85,
-				Reason:     fmt.Sprintf("Challenge solved too fast (%dms server-side)", powResult.ServerElapsed),
-			})
+		// Two thresholds, because they mean different things. Under the
+		// universal baseline nothing legitimate can have happened: no human
+		// completes an interaction that fast, so it scores as it always has.
+		//
+		// Between the baseline and this source's own elevated floor is weaker
+		// evidence. A client that predates adaptive cost does not know to wait,
+		// and neither does one served from a stale cache, so a full-strength
+		// penalty there would punish the wrong people. It contributes instead.
+		if powResult.Valid {
+			switch {
+			case powResult.ServerElapsed < baseMinAgeMs:
+				detections = append(detections, DetectionResult{
+					Category:   CategoryBot,
+					Score:      0.8,
+					Confidence: 0.85,
+					Reason:     fmt.Sprintf("Challenge solved too fast (%dms server-side)", powResult.ServerElapsed),
+				})
+			case powResult.ServerElapsed < powResult.MinAgeMs:
+				detections = append(detections, DetectionResult{
+					Category:   CategoryBot,
+					Score:      0.5,
+					Confidence: 0.5,
+					Reason:     fmt.Sprintf("Challenge submitted before the required delay for this source (%dms of %dms)", powResult.ServerElapsed, powResult.MinAgeMs),
+				})
+			}
 		}
 	} else {
 		// No PoW solution provided - hard fail
@@ -459,6 +486,12 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 		token = e.generateToken(ip, siteKey, finalScore)
 	}
 
+	// Feed the ledger so the next challenge this source asks for is priced on
+	// what it just did. Recorded here rather than in the handlers so every
+	// caller — both endpoints and the library API — contributes without having
+	// to remember to.
+	e.suspicion.Record(siteKey, ip, finalScore)
+
 	return &VerificationResult{
 		Success:        success,
 		Score:          finalScore,
@@ -500,29 +533,23 @@ func (e *ScoringEngine) GeneratePoWChallenge(siteKey, ip string, isDatacenter bo
 	now := time.Now().UnixMilli()
 	expiresAt := now + (5 * 60 * 1000) // 5 minutes
 
-	// Difficulty scaling
-	difficulty := 4 // Default: ~100-500ms on average hardware
-	if isDatacenter {
-		difficulty = 5 // Harder for datacenter IPs
-	}
-
-	// Check rate for this IP
+	// Cost scaling. See suspicion.go for why the escalation lands almost
+	// entirely on MinAgeMs rather than on Difficulty.
 	rateKey := "pow:" + siteKey + ":" + ip
-	_, count := e.rateLimiter.Check(rateKey, 60, 20)
-	if count > 10 {
-		difficulty = min(6, difficulty+1)
-	}
+	exceeded, count := e.rateLimiter.Check(rateKey, 60, 20)
+	cost := ComputeChallengeCost(e.suspicion.Count(siteKey, ip), isDatacenter, count, exceeded)
 
-	prefix := challengeID + ":" + formatInt64(now) + ":" + formatInt(difficulty)
+	prefix := challengeID + ":" + formatInt64(now) + ":" + formatInt(cost.Difficulty)
 
 	challenge := &PoWChallenge{
 		ID:         challengeID,
 		SiteKey:    siteKey,
 		Prefix:     prefix,
-		Difficulty: difficulty,
+		Difficulty: cost.Difficulty,
 		Timestamp:  now,
 		ExpiresAt:  expiresAt,
 		Nonce:      nonce,
+		MinAgeMs:   cost.MinAgeMs,
 		IP:         ip,
 	}
 
@@ -534,6 +561,7 @@ func (e *ScoringEngine) GeneratePoWChallenge(siteKey, ip string, isDatacenter bo
 		"expiresAt":  challenge.ExpiresAt,
 		"difficulty": challenge.Difficulty,
 		"prefix":     challenge.Prefix,
+		"minAgeMs":   challenge.MinAgeMs,
 	})
 	h := hmac.New(sha256.New, []byte(e.secretKey))
 	h.Write(sigData)
@@ -611,7 +639,12 @@ func (e *ScoringEngine) VerifyPoWSolution(solution *PoWSolution, siteKey string,
 	// Delete challenge (one-time use) — inline, lock already held
 	delete(e.powStore.challenges, solution.ChallengeID)
 
-	return PoWVerifyResult{Valid: true, Difficulty: challenge.Difficulty, ServerElapsed: serverElapsed, Nonce: challenge.Nonce}
+	minAge := challenge.MinAgeMs
+	if minAge <= 0 {
+		minAge = baseMinAgeMs // challenge predates adaptive cost
+	}
+
+	return PoWVerifyResult{Valid: true, Difficulty: challenge.Difficulty, ServerElapsed: serverElapsed, Nonce: challenge.Nonce, MinAgeMs: minAge}
 }
 
 func formatInt64(n int64) string {

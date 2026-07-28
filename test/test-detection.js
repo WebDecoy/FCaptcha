@@ -1991,6 +1991,131 @@ async function testMobileSensorDetection() {
   }
 }
 
+// Adaptive challenge cost. The escalation lives on the wall-clock floor rather
+// than on difficulty, because a native solver clears difficulty 6 in about a
+// millisecond while a budget phone spends about sixteen seconds on it — so
+// raising difficulty taxes slow devices and constrains nobody.
+async function testAdaptiveChallengeCost() {
+  log('\n[Adaptive Challenge Cost]', colors.cyan);
+
+  const { createHash } = await import('crypto');
+  const solve = (prefix, difficulty, signalsHash) => {
+    const target = '0'.repeat(difficulty);
+    for (let nonce = 0; nonce < 10000000; nonce++) {
+      const hash = createHash('sha256').update(`${prefix}:${signalsHash}:${nonce}`).digest('hex');
+      if (hash.startsWith(target)) return { nonce, hash };
+    }
+    return null;
+  };
+
+  const challengeFor = async (ip) => {
+    const res = await fetch(`${SERVER_URL}/api/pow/challenge?siteKey=adaptive`, {
+      headers: { 'X-Forwarded-For': ip },
+    });
+    return res.json();
+  };
+
+  // A visitor who has done nothing wrong pays exactly what everyone paid before
+  // adaptive cost existed.
+  const clean = await challengeFor('192.0.2.150');
+  if (clean.difficulty === 4 && clean.minAgeMs === 1500) {
+    passed++;
+    log('  ✓ A clean source pays the baseline (difficulty 4, 1500ms)', colors.green);
+  } else {
+    failed++;
+    log(`  ✗ A clean source should pay the baseline, got difficulty ${clean.difficulty} / ${clean.minAgeMs}ms`, colors.red);
+  }
+
+  // Drive one address to a strong verdict repeatedly, then confirm its next
+  // challenge costs more time — and no more hashing than the cap allows.
+  const abuser = '192.0.2.151';
+  // navigator.webdriver === true is dispositive, so this lands at or above the
+  // 0.8 the ledger requires. Anything weaker is deliberately not recorded.
+  const botSignals = {
+    behavioral: { totalPoints: 0, trajectoryLength: 0, keyEvents: 0, touchEvents: 0 },
+    environmental: { webdriver: true, automationFlags: { plugins: 0 } },
+  };
+  for (let i = 0; i < 6; i++) {
+    await fetch(`${SERVER_URL}/api/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': abuser },
+      body: JSON.stringify({ siteKey: 'adaptive', signals: botSignals }),
+    });
+  }
+
+  const escalated = await challengeFor(abuser);
+  if (escalated.minAgeMs > clean.minAgeMs) {
+    passed++;
+    log(`  ✓ A source with strong verdicts is charged more time (${escalated.minAgeMs}ms vs ${clean.minAgeMs}ms)`, colors.green);
+  } else {
+    failed++;
+    log(`  ✗ A source with strong verdicts should be charged more time, got ${escalated.minAgeMs}ms`, colors.red);
+  }
+
+  if (escalated.difficulty <= 5) {
+    passed++;
+    log(`  ✓ Difficulty stays at or below 5 under escalation (got ${escalated.difficulty})`, colors.green);
+  } else {
+    failed++;
+    log(`  ✗ Difficulty reached ${escalated.difficulty}; the escalation belongs on the time floor`, colors.red);
+  }
+
+  // Submitting before that source's floor is scored — but as contributory
+  // evidence, not as a verdict, because an older cached client does not know to
+  // wait and would otherwise be punished for the delay it was never told about.
+  const signals = {
+    behavioral: {
+      totalPoints: 80, trajectoryLength: 350, interactionDuration: 1500,
+      velocityVariance: 0.8, microTremorScore: 0.6, directionChanges: 15,
+      mouseEventRate: 60, approachPoints: 12,
+    },
+    environmental: { automationFlags: { chrome: true, platform: 'MacIntel', plugins: 5 } },
+    meta: { challengeNonce: escalated.nonce },
+  };
+  const signalsJson = JSON.stringify(signals);
+  const signalsHash = createHash('sha256').update(signalsJson).digest('hex');
+  const solution = solve(escalated.prefix, escalated.difficulty, signalsHash);
+
+  // Past the universal baseline, short of this source's own floor.
+  await new Promise((r) => setTimeout(r, 1700));
+
+  const res = await fetch(`${SERVER_URL}/api/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': abuser },
+    body: JSON.stringify({
+      siteKey: 'adaptive',
+      signals,
+      signalsJson,
+      powSolution: {
+        challengeId: escalated.challengeId,
+        nonce: solution.nonce,
+        hash: solution.hash,
+        signalsHash,
+      },
+    }),
+  });
+  const verdict = await res.json();
+  const reasons = (verdict.detections || []).map((d) => d.reason || '');
+  const early = reasons.find((r) => r.includes('before the required delay'));
+  const tooFast = reasons.find((r) => r.includes('solved too fast'));
+
+  if (early) {
+    passed++;
+    log('  ✓ Submitting before the source-specific floor is detected', colors.green);
+  } else {
+    failed++;
+    log(`  ✗ Submitting before the source-specific floor was not detected. Reasons: ${reasons.join(' | ')}`, colors.red);
+  }
+
+  if (!tooFast) {
+    passed++;
+    log('  ✓ Past the universal baseline, the strong "too fast" detection stays quiet', colors.green);
+  } else {
+    failed++;
+    log('  ✗ The strong "too fast" detection fired past the universal baseline', colors.red);
+  }
+}
+
 async function testProofOfWork() {
   log('\n[Proof of Work]', colors.cyan);
 
@@ -2379,6 +2504,7 @@ async function runTests() {
   await testTouchSubmitIsNotProgrammatic();
   await testMobileSensorDetection();
   await testProofOfWork();
+  await testAdaptiveChallengeCost();
   await testSignalCommitment();
   await testChallengeNonce();
   await testKeystrokeCadence();

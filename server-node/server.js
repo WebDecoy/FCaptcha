@@ -12,6 +12,7 @@ const detection = require('./detection');
 const webbotauth = require('./webbotauth');
 const { ProxyTrust } = require('./clientip');
 const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
+const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 const { detectInputForensics } = require('./inputforensics');
 
 const app = express();
@@ -31,6 +32,10 @@ const PROXY_TRUST = ProxyTrust.fromEnv();
 // SITE_KEYS bounds how many distinct values one IP may allocate state for. See
 // limits.js — the cap is unconditional; FCAPTCHA_SITE_KEYS adds an allowlist.
 const SITE_KEYS = SiteKeyGuard.fromEnv();
+
+// Recent strong verdicts per source, used to price the next challenge that
+// source asks for. Bounded and short-lived; see suspicion.js.
+const suspicionLedger = new SuspicionLedger();
 
 // Express's own `trust proxy` would re-derive req.ip from the same headers on
 // its own terms; IP resolution goes through PROXY_TRUST.clientIP exclusively.
@@ -97,7 +102,7 @@ const powChallengeStore = {
   usedSolutions: new BoundedSet(),
 
   // Generate a new challenge
-  generate(siteKey, ip, difficulty = 4) {
+  generate(siteKey, ip, difficulty = 4, minAgeMs = BASE_MIN_AGE_MS) {
     const challengeId = crypto.randomBytes(16).toString('hex');
     const nonce = crypto.randomBytes(16).toString('hex');
     const timestamp = Date.now();
@@ -110,6 +115,9 @@ const powChallengeStore = {
       timestamp,
       expiresAt,
       difficulty,
+      // How long the client must hold this challenge before submitting a
+      // solution. Inside the signed payload so it cannot be talked down.
+      minAgeMs,
       nonce,
       prefix: `${challengeId}:${timestamp}:${difficulty}`
     };
@@ -180,7 +188,14 @@ const powChallengeStore = {
     // Calculate server-side elapsed time (un-spoofable)
     const serverElapsed = Date.now() - challenge.createdAt;
 
-    return { valid: true, difficulty: challenge.difficulty, serverElapsed, nonce: challenge.nonce };
+    return {
+      valid: true,
+      difficulty: challenge.difficulty,
+      serverElapsed,
+      nonce: challenge.nonce,
+      // Fall back for challenges issued before adaptive cost existed.
+      minAgeMs: challenge.minAgeMs || BASE_MIN_AGE_MS
+    };
   },
 
   _cleanup() {
@@ -1311,13 +1326,25 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
       }
     }
 
-    if (powValid && powVerification.serverElapsed < 1500) {
-      // Server-side timing: challenge was solved too fast (un-spoofable)
+    // Server-side timing, the one cost an attacker cannot buy their way out
+    // of. Two thresholds, because they mean different things.
+    if (powValid && powVerification.serverElapsed < BASE_MIN_AGE_MS) {
+      // Under the universal baseline nothing legitimate can have happened.
       detections.push({
         category: 'bot',
         score: 0.8,
         confidence: 0.85,
         reason: `Challenge solved too fast (${powVerification.serverElapsed}ms server-side)`
+      });
+    } else if (powValid && powVerification.serverElapsed < (powVerification.minAgeMs || BASE_MIN_AGE_MS)) {
+      // Between the baseline and this source's own elevated floor is weaker
+      // evidence: a client predating adaptive cost, or one served from a stale
+      // cache, does not know to wait. It contributes rather than deciding.
+      detections.push({
+        category: 'bot',
+        score: 0.5,
+        confidence: 0.5,
+        reason: `Challenge submitted before the required delay for this source (${powVerification.serverElapsed}ms of ${powVerification.minAgeMs}ms)`
       });
     }
   } else {
@@ -1408,6 +1435,10 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
 
   const success = finalScore < 0.5;
   const token = success ? generateToken(ip, siteKey, finalScore) : null;
+
+  // Feed the ledger so the next challenge this source asks for is priced on
+  // what it just did.
+  suspicionLedger.record(siteKey, ip, finalScore);
 
   return {
     success,
@@ -1506,25 +1537,18 @@ app.get('/api/pow/challenge', (req, res) => {
   const ip = PROXY_TRUST.clientIP(req);
   const siteKey = SITE_KEYS.normalize(req.query.siteKey, ip);
 
-  // Difficulty scaling based on IP reputation
-  let difficulty = 4; // Default: ~100-500ms on average hardware
-
-  // Increase difficulty for suspicious IPs
-  if (detection.isDatacenterIP(ip)) {
-    difficulty = 5; // ~1-3 seconds
-  }
-
-  // Check rate - high request rate gets harder challenges
+  // Cost scaling. See suspicion.js for why the escalation lands almost
+  // entirely on minAgeMs rather than on difficulty.
   const rateKey = `pow:${siteKey}:${ip}`;
   const [exceeded, count] = rateLimiter.check(rateKey, 60, 20);
-  if (count > 10) {
-    difficulty = Math.min(6, difficulty + 1); // Up to difficulty 6
-  }
-  if (exceeded) {
-    difficulty = 6; // Maximum difficulty for rate-limited IPs
-  }
+  const cost = computeChallengeCost(
+    suspicionLedger.count(siteKey, ip),
+    detection.isDatacenterIP(ip),
+    count,
+    exceeded
+  );
 
-  const challenge = powChallengeStore.generate(siteKey, ip, difficulty);
+  const challenge = powChallengeStore.generate(siteKey, ip, cost.difficulty, cost.minAgeMs);
 
   res.json({
     challengeId: challenge.id,
@@ -1532,7 +1556,11 @@ app.get('/api/pow/challenge', (req, res) => {
     difficulty: challenge.difficulty,
     expiresAt: challenge.expiresAt,
     nonce: challenge.nonce,
-    sig: challenge.sig
+    sig: challenge.sig,
+    // Tells the client how long to hold a solved challenge before submitting.
+    // Honouring it is how an ordinary visitor pays an elevated cost as a short
+    // wait instead of as a worse score.
+    minAgeMs: challenge.minAgeMs
   });
 });
 

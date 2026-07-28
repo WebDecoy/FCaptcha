@@ -2229,6 +2229,7 @@
     constructor() {
       this.workers = [];
       this.challenge = null;
+      this.challengeReceivedAt = null;
       this.solution = null;
       this.solving = false;
       this.solvePromise = null;
@@ -2319,6 +2320,11 @@
           return this._generateLocalChallenge();
         }
         this.challenge = await response.json();
+        // Time the wait from when the challenge arrived, not from the
+        // timestamp inside it. Receipt is necessarily later than issue, so a
+        // wait measured from here always clears the server's floor — and it
+        // costs nothing to a client whose clock disagrees with the server's.
+        this.challengeReceivedAt = Date.now();
         return this.challenge;
       } catch (e) {
         console.warn('PoW challenge fetch failed, using local challenge:', e);
@@ -2335,7 +2341,32 @@
         expiresAt: Date.now() + 300000,
         local: true // Flag that this is a local challenge
       };
+      this.challengeReceivedAt = Date.now();
       return this.challenge;
+    }
+
+    // Hold a solved challenge until it is old enough for the server to accept
+    // without penalty.
+    //
+    // The server prices a challenge by how suspicious the requesting source
+    // has recently been, and the part of that price it can actually enforce is
+    // wall-clock: an attacker can buy faster hardware but cannot make less time
+    // pass. Waiting here is what turns that price into a short delay for an
+    // ordinary visitor instead of a worse score — which matters most for
+    // someone who shares an address with whatever earned the delay.
+    //
+    // Usually free: by the time a person has finished with the form, the wait
+    // has already elapsed.
+    async _awaitMinAge() {
+      const minAge = Number(this.challenge && this.challenge.minAgeMs) || 0;
+      if (!minAge || !this.challengeReceivedAt) return;
+
+      // Clamp. A server that asks for an implausible delay gets a bounded one
+      // rather than a page that never finishes.
+      const remaining = Math.min(minAge, 30000) - (Date.now() - this.challengeReceivedAt);
+      if (remaining > 0) {
+        await new Promise((r) => setTimeout(r, remaining));
+      }
     }
 
     // Start solving in background (legacy - solve without signals binding)
@@ -2366,8 +2397,17 @@
         const finish = (fn, value) => {
           if (settled) return;
           settled = true;
-          this.solving = false;
           this._terminateWorkers();
+          // Resolvers wait out the server's floor first; rejections do not,
+          // since there is no solution to hold back.
+          if (fn === resolve) {
+            this._awaitMinAge().then(() => {
+              this.solving = false;
+              fn(value);
+            });
+            return;
+          }
+          this.solving = false;
           fn(value);
         };
 
@@ -2427,6 +2467,7 @@
     reset() {
       this._terminateWorkers();
       this.challenge = null;
+      this.challengeReceivedAt = null;
       this.solution = null;
       this.solving = false;
       this.solvePromise = null;

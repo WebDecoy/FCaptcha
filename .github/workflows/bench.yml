@@ -45,6 +45,13 @@ jobs:
       - name: End-to-end detection suite
         run: node test/test-detection.js
 
+      # The harness itself, before it is trusted to measure anything. Sample
+      # addresses have to stay unique or every per-source measurement is taken
+      # against manufactured IP sharing.
+      - name: Harness unit tests
+        working-directory: bench
+        run: npm test
+
       # Replays the committed corpus. No browser needed: capture is a separate,
       # manual step whose output lives in bench/corpus/.
       - name: Benchmark gate
