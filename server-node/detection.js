@@ -97,11 +97,27 @@ async function checkIPReputation(ip) {
 // HTTP Header Analysis
 // =============================================================================
 
-const SUSPICIOUS_HEADERS = new Set([
-  'x-requested-with', 'x-forwarded-for', 'x-real-ip', 'via',
-  'forwarded', 'x-originating-ip', 'cf-connecting-ip',
-  'true-client-ip', 'x-cluster-client-ip'
+// Headers a reverse proxy, CDN or load balancer adds on the way in.
+//
+// These are only anomalous when they arrive from a peer that is NOT a proxy we
+// trust: an ordinary client has no business claiming to forward for someone
+// else. Behind a proxy they are the opposite of suspicious — they are how the
+// request is supposed to arrive, and Cloudflare alone contributes three of
+// them.
+//
+// Scoring them unconditionally meant every visitor to every proxied deployment
+// picked up a bot detection, permanently, including the project's own demo
+// behind Railway. The bench measured it firing on 100% of the human panel *and*
+// 100% of the agent corpus — a signal that fires on everyone distinguishes
+// nobody, it just adds noise to both sides of the comparison.
+const FORWARDING_HEADERS = new Set([
+  'x-forwarded-for', 'x-real-ip', 'via', 'forwarded', 'x-originating-ip',
+  'cf-connecting-ip', 'true-client-ip', 'x-cluster-client-ip'
 ]);
+
+// Suspicious regardless of who the peer is. x-requested-with is set by XHR
+// libraries, not by proxies, so trusting the peer says nothing about it.
+const SUSPICIOUS_HEADERS = new Set(['x-requested-with']);
 
 const EXPECTED_BROWSER_HEADERS = new Set([
   'accept', 'accept-language', 'accept-encoding', 'user-agent'
@@ -162,7 +178,16 @@ function checkDeclaredAIAgent(userAgent, headers = {}) {
   return detections;
 }
 
-function analyzeHeaders(headers) {
+/**
+ * @param {object} headers
+ * @param {object} [opts]
+ * @param {boolean} [opts.peerTrusted] whether the immediate peer is a proxy we
+ *   trust. When it is, forwarding headers are expected infrastructure rather
+ *   than an anomaly. Defaults to false, so a caller that does not know keeps
+ *   the stricter behaviour.
+ */
+function analyzeHeaders(headers, opts = {}) {
+  const peerTrusted = opts.peerTrusted === true;
   const detections = [];
   const headersLower = {};
   for (const [key, value] of Object.entries(headers)) {
@@ -185,9 +210,12 @@ function analyzeHeaders(headers) {
     });
   }
 
-  // Check for suspicious headers
+  // Check for suspicious headers. Forwarding headers only count when the peer
+  // is not a proxy we trust — see FORWARDING_HEADERS.
   for (const header of Object.keys(headersLower)) {
-    if (SUSPICIOUS_HEADERS.has(header)) {
+    const isSuspicious =
+      SUSPICIOUS_HEADERS.has(header) || (!peerTrusted && FORWARDING_HEADERS.has(header));
+    if (isSuspicious) {
       detections.push({
         category: 'bot',
         score: 0.3,

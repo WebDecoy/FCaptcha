@@ -148,13 +148,23 @@ export PORT=3000
 # Development
 python server.py
 
-# Or with uvicorn directly
-uvicorn server:app --host 0.0.0.0 --port 3000
+# Or with uvicorn directly — note --no-proxy-headers
+uvicorn server:app --host 0.0.0.0 --port 3000 --no-proxy-headers
 
 # Production (with gunicorn)
 pip install gunicorn
-gunicorn server:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:3000
+gunicorn server:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:3000 \
+  --forwarded-allow-ips=""
 ```
+
+> **Why `--no-proxy-headers`.** uvicorn does its own `X-Forwarded-For`
+> resolution by default, rewriting `request.client` from the header whenever the
+> real peer is loopback. FCaptcha then sees the *claimed* address where it
+> expects the socket peer, and its own trusted-proxy logic ends up checking the
+> visitor's IP against the proxy allowlist. Behind a same-host reverse proxy
+> that means every request is logged as coming from an untrusted peer and picks
+> up a spurious detection. Let `TRUSTED_PROXIES` be the only thing that decides
+> which peers may speak for a client. `python server.py` sets this for you.
 
 **Step 5: Verify**
 

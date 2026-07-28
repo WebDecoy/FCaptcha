@@ -1,0 +1,42 @@
+{
+  "_comment": [
+    "Signals the gate does not fail on, because the recorder causes them rather",
+    "than FCaptcha misfiring.",
+    "",
+    "Every entry needs a reason that says why the harness — not the product —",
+    "produces the signal, and what would have to change to remove the exemption.",
+    "The report prints these separately from real results so an exemption cannot",
+    "quietly become a way to hide a regression. Nothing here is exempt from being",
+    "measured; they are exempt from failing the build.",
+    "",
+    "If you can eliminate one by improving capture/normalize.js, do that instead",
+    "of adding it here."
+  ],
+  "artifacts": [
+    {
+      "signal": "Pointer moves never coalesced across many samples (synthetic/CDP input)",
+      "reason": "Real pointer streams coalesce; CDP-injected ones do not. Every input event the recorder produces arrives through CDP's Input domain, so this fires on anything Playwright drives. Removing the exemption requires input that does not come from an automation protocol — i.e. a capture from a real person.",
+      "removable_by": "real-human capture"
+    },
+    {
+      "signal": "No local IP addresses detected via WebRTC",
+      "reason": "Headless Chromium on a loopback-only CI network surfaces no ICE host candidates. normalize.js appends a synthetic candidate to the SDP, which does not reach every code path the client uses to enumerate them. A real browser on a real LAN reports one.",
+      "removable_by": "capture on a host with a real network interface, or a more complete RTCPeerConnection shim"
+    },
+    {
+      "signal": "JS execution unusually fast",
+      "reason": "Measures how quickly a timing loop completes. An M-series laptop and a CI runner are both genuinely fast, so this fires on the panel. Notably this is NOT purely an artifact — it is a real false-positive risk for anyone on quick hardware, and is tracked as such rather than treated as solved.",
+      "removable_by": "nothing in the harness — this one is a real finding awaiting a decision"
+    },
+    {
+      "signal": "RequestAnimationFrame timing too consistent",
+      "reason": "Headless Chromium drives rAF from a metronomic timer rather than a display vsync, so frame deltas are more regular than on a real compositor.",
+      "removable_by": "headed capture with GPU compositing"
+    },
+    {
+      "signal": "CDP/DevTools console consumer attached (automation protocol or open DevTools)",
+      "reason": "Fires only on the devtools-open persona, for which it is the condition under test rather than a false positive — a developer with DevTools open genuinely trips it, which is why the signal is low-confidence and contributory server-side. The other personas have it cleared post-capture (console-attached-cleared).",
+      "removable_by": "nothing — this is correct behaviour being measured"
+    }
+  ]
+}

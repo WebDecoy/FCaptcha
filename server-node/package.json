@@ -13,7 +13,9 @@
     "dev": "node --watch server.js",
     "test:webbotauth": "node webbotauth.test.js",
     "test:clientip": "node clientip.test.js",
-    "test:limits": "node limits.test.js"
+    "test:limits": "node limits.test.js",
+    "test:detection": "node detection.test.js",
+    "test": "node clientip.test.js && node limits.test.js && node detection.test.js && node webbotauth.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

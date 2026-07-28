@@ -42,3 +42,9 @@ htmlcov/
 # public docs/ site is ever wanted, narrow this to `docs/PRD-*.md` rather than
 # deleting the rule.
 docs/
+
+# Bench harness: replay output and captured-corpus scratch. The corpus itself
+# (bench/corpus/) IS committed — it is the measurement baseline, and a benchmark
+# whose inputs are not in the repo cannot be reproduced or argued with.
+bench/*.json
+bench/test-results/
