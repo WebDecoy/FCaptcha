@@ -21,11 +21,19 @@
         "eventDeltaVariance": 0,
         "mouseEventRate": 0,
         "scrollEvents": 0,
+        "scrollMorphology": {
+          "gestures": 0,
+          "instantGestures": 0,
+          "instantRatio": 0,
+          "maxStep": 0,
+          "distancePerEvent": 0,
+          "samples": 0
+        },
         "keyEvents": 8,
         "touchEvents": 0,
-        "focusEvents": 7,
+        "focusEvents": 9,
         "clickData": null,
-        "interactionDuration": 4439,
+        "interactionDuration": 4428,
         "inputForensics": {
           "coalescedSamples": 0,
           "coalescedEmptyRatio": 0,
@@ -35,7 +43,7 @@
           "pointerMoveZeroRatio": 0,
           "cadenceEvents": 7,
           "cadenceSilentGaps": 0,
-          "cadenceGapCV": 1.2356854373477975,
+          "cadenceGapCV": 1.2433601574604936,
           "cadenceSilentRatio": 0,
           "teleportClicks": 0
         },
@@ -171,8 +179,8 @@
           "timezoneOffset": 300
         },
         "jsExecutionTime": {
-          "mathOps": 0.09999999403953552,
-          "arrayOps": 0.10000002384185791,
+          "mathOps": 0,
+          "arrayOps": 0,
           "arrayLen": 1000,
           "stringOps": 0
         },
@@ -188,7 +196,7 @@
           "supported": true
         },
         "domRectFingerprint": {
-          "hash": "-354d91f8",
+          "hash": "7a5d03d2",
           "rectAWidth": 180.25,
           "rectBWidth": 111.453125,
           "rangeWidth": 180.25,
@@ -232,11 +240,13 @@
           "hasSegoeUI": false,
           "hasSFPro": false,
           "hasDejaVuSans": false,
+          "hasCalibri": false,
+          "hasMenlo": true,
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 8.32755555555549,
-          "frameTimeVariance": 0.5028744691357461,
+          "avgFrameTime": 7.40600000000005,
+          "frameTimeVariance": 6.858776888888994,
           "frames": 10
         },
         "speechInfo": {
@@ -284,9 +294,9 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 1621.699999988079,
-        "firstInteractionToClick": 2816.5,
-        "totalSessionTime": 4983,
+        "pageLoadToFirstInteraction": 1623.4000000059605,
+        "firstInteractionToClick": 2804.0999999940395,
+        "totalSessionTime": 4969,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
@@ -297,20 +307,42 @@
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 1621.0999999940395,
-        "pageLoadToNow": 4982.5,
+        "pageLoadToFirstInteraction": 1622.800000011921,
+        "pageLoadToNow": 4968.5999999940395,
         "totalInteractionEvents": 5,
         "submit": {
           "method": "none",
           "eventsBeforeSubmit": 5,
           "hadTriggerEvent": false
         },
-        "textareaKeyboard": null
+        "textareaKeyboard": {
+          "message": {
+            "keyCount": 0,
+            "avgKeyInterval": 0,
+            "keyIntervalVariance": 0,
+            "keydownUpRatio": 0,
+            "pasteCount": 0,
+            "intervals": [],
+            "dwellTimes": [],
+            "rollovers": 0
+          }
+        },
+        "typing": {
+          "pasteShortcutMeta": 0,
+          "pasteShortcutControl": 0,
+          "selectAllShortcuts": 0,
+          "pasteEvents": 0,
+          "pasteInputs": 0,
+          "inputEvents": 0,
+          "inputsWithoutKeys": 0,
+          "inputsWithoutInputType": 0,
+          "keydownsBeforeInput": 1
+        }
       },
       "meta": {
-        "widgetId": "fcaptcha_kzhuczzl5",
+        "widgetId": "fcaptcha_fo3smko3n",
         "siteKey": "bench-capture",
-        "timestamp": 1785180233366,
+        "timestamp": 1785251131678,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

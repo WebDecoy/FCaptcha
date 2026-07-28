@@ -36,11 +36,11 @@
           "x": 71,
           "y": 350,
           "button": 0,
-          "downTime": 178.5,
-          "upTime": 178.59999999403954,
+          "downTime": 176.09999999403954,
+          "upTime": 176.19999998807907,
           "holdDuration": 0.09999999403953552
         },
-        "interactionDuration": 171,
+        "interactionDuration": 169,
         "inputForensics": {
           "coalescedSamples": 1,
           "coalescedEmptyRatio": 1,
@@ -50,7 +50,7 @@
           "pointerMoveZeroRatio": 0,
           "cadenceEvents": 4,
           "cadenceSilentGaps": 0,
-          "cadenceGapCV": 0.3333333664470326,
+          "cadenceGapCV": 0.34641024410439397,
           "cadenceSilentRatio": 0,
           "teleportClicks": 0
         },
@@ -127,10 +127,8 @@
           "consoleAttached": true
         },
         "playwright": {
-          "detected": true,
-          "signals": [
-            "webdriver_configurable"
-          ]
+          "detected": false,
+          "signals": []
         },
         "stealthArtifacts": {
           "signals": []
@@ -254,8 +252,8 @@
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 7.411333333333333,
-          "frameTimeVariance": 6.866583111111092,
+          "avgFrameTime": 8.329777777777776,
+          "frameTimeVariance": 0.08407150617283862,
           "frames": 10
         },
         "speechInfo": {
@@ -303,21 +301,21 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 170.10000002384186,
-        "firstInteractionToClick": 0.5,
-        "totalSessionTime": 724.9000000059605,
+        "pageLoadToFirstInteraction": 168,
+        "firstInteractionToClick": 0.3999999761581421,
+        "totalSessionTime": 720.1999999880791,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
           "serverResponse": 0,
-          "domLoad": 9,
-          "fullLoad": 9
+          "domLoad": 8,
+          "fullLoad": 8
         },
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 169.69999998807907,
-        "pageLoadToNow": 724.2999999821186,
+        "pageLoadToFirstInteraction": 167.59999999403954,
+        "pageLoadToNow": 719.6999999880791,
         "totalInteractionEvents": 1,
         "submit": {
           "method": "none",
@@ -338,9 +336,9 @@
         }
       },
       "meta": {
-        "widgetId": "fcaptcha_8gtxsu2xw",
+        "widgetId": "fcaptcha_f23a3qrsx",
         "siteKey": "bench-capture",
-        "timestamp": 1785201417444,
+        "timestamp": 1785251221324,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

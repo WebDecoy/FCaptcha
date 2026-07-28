@@ -8,58 +8,66 @@
     "signals": {
       "behavioral": {
         "totalPoints": 27,
-        "trajectoryLength": 232.71288909531987,
-        "avgVelocity": 1.130737095814351,
-        "velocityVariance": 0.12005216919504683,
-        "avgAcceleration": -0.0054872846670529106,
-        "accelerationChanges": 18,
-        "microTremorScore": 0.15801876875292387,
-        "straightLineRatio": 0.92,
+        "trajectoryLength": 333.9583245041334,
+        "avgVelocity": 1.6055700218088518,
+        "velocityVariance": 0.20105706850321695,
+        "avgAcceleration": -0.00921548148572711,
+        "accelerationChanges": 23,
+        "microTremorScore": 0.1374711592576816,
+        "straightLineRatio": 0.96,
         "microMovements": 0,
         "directionChanges": 1,
         "eventDeltas": [
-          3.800000011920929,
-          9.799999982118607,
-          6.5999999940395355,
+          4.0999999940395355,
           8.300000011920929,
+          8.199999988079071,
           8.5,
-          9,
-          7.5999999940395355,
+          8.300000011920929,
+          8.300000011920929,
+          8.199999988079071,
+          8.5,
+          8.300000011920929,
+          8.299999982118607,
+          8.400000005960464,
+          8.400000005960464,
+          7.799999982118607,
+          8.900000005960464,
           8.099999994039536,
+          8.600000023841858,
+          8.099999994039536,
+          8.400000005960464,
+          8.299999982118607,
+          8.400000005960464,
+          8.199999988079071,
           8.5,
-          8.300000011920929,
-          8.300000011920929,
-          8.399999976158142,
-          8.300000011920929,
-          8.400000005960464,
-          8.299999982118607,
-          8.300000011920929,
-          8.300000011920929,
-          8.399999976158142,
-          8.400000005960464,
-          8.300000011920929,
-          8.299999982118607,
-          8.300000011920929,
-          8.300000011920929,
-          8.699999988079071,
-          8,
-          35.900000005960464
+          8.200000017881393,
+          8.599999994039536,
+          8.099999994039536,
+          34.80000001192093
         ],
-        "eventDeltaVariance": 29.504556219616592,
-        "mouseEventRate": 112.78195488441006,
+        "eventDeltaVariance": 26.948224879457396,
+        "mouseEventRate": 113.0653266275216,
         "scrollEvents": 0,
+        "scrollMorphology": {
+          "gestures": 0,
+          "instantGestures": 0,
+          "instantRatio": 0,
+          "maxStep": 0,
+          "distancePerEvent": 0,
+          "samples": 0
+        },
         "keyEvents": 0,
         "touchEvents": 0,
         "focusEvents": 1,
         "clickData": {
           "x": 71,
-          "y": 247,
+          "y": 350,
           "button": 0,
-          "downTime": 264.89999997615814,
-          "upTime": 265.2999999821186,
-          "holdDuration": 0.4000000059604645
+          "downTime": 266.89999997615814,
+          "upTime": 267.09999999403954,
+          "holdDuration": 0.20000001788139343
         },
-        "interactionDuration": 259,
+        "interactionDuration": 258,
         "inputForensics": {
           "coalescedSamples": 27,
           "coalescedEmptyRatio": 1,
@@ -69,7 +77,7 @@
           "pointerMoveZeroRatio": 0.038461538461538464,
           "cadenceEvents": 56,
           "cadenceSilentGaps": 0,
-          "cadenceGapCV": 1.3683798247898868,
+          "cadenceGapCV": 1.3498533229781624,
           "cadenceSilentRatio": 0,
           "teleportClicks": 0
         },
@@ -99,10 +107,10 @@
           "mouse"
         ],
         "clickPrecision": 0.4375,
-        "explorationRatio": 0.9196160663445855,
+        "explorationRatio": 0.9206649196679499,
         "overshootCorrections": 0,
-        "hoverTime": 43.900000005960464,
-        "approachDirectness": 0.9996783230517922,
+        "hoverTime": 42.900000005960464,
+        "approachDirectness": 0.9998354891943668,
         "approachPoints": 20
       },
       "environmental": {
@@ -146,10 +154,8 @@
           "consoleAttached": true
         },
         "playwright": {
-          "detected": true,
-          "signals": [
-            "webdriver_configurable"
-          ]
+          "detected": false,
+          "signals": []
         },
         "stealthArtifacts": {
           "signals": []
@@ -207,8 +213,8 @@
           "timezoneOffset": 300
         },
         "jsExecutionTime": {
-          "mathOps": 0,
-          "arrayOps": 0.09999999403953552,
+          "mathOps": 0.09999999403953552,
+          "arrayOps": 0,
           "arrayLen": 1000,
           "stringOps": 0
         },
@@ -224,7 +230,7 @@
           "supported": true
         },
         "domRectFingerprint": {
-          "hash": "-354d91f8",
+          "hash": "7a5d03d2",
           "rectAWidth": 180.25,
           "rectBWidth": 111.453125,
           "rangeWidth": 180.25,
@@ -268,11 +274,13 @@
           "hasSegoeUI": false,
           "hasSFPro": false,
           "hasDejaVuSans": false,
+          "hasCalibri": false,
+          "hasMenlo": true,
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 8.33355555555555,
-          "frameTimeVariance": 0.773318913580244,
+          "avgFrameTime": 7.411333333333333,
+          "frameTimeVariance": 6.9888053333333255,
           "frames": 10
         },
         "speechInfo": {
@@ -320,33 +328,44 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 17.599999994039536,
-        "firstInteractionToClick": 240.19999998807907,
-        "totalSessionTime": 821.5999999940395,
+        "pageLoadToFirstInteraction": 18,
+        "firstInteractionToClick": 239.5,
+        "totalSessionTime": 813.9000000059605,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
           "serverResponse": 1,
-          "domLoad": 8,
-          "fullLoad": 8
+          "domLoad": 10,
+          "fullLoad": 11
         },
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 256.59999999403954,
-        "pageLoadToNow": 821,
+        "pageLoadToFirstInteraction": 256.39999997615814,
+        "pageLoadToNow": 813.1999999880791,
         "totalInteractionEvents": 1,
         "submit": {
           "method": "none",
           "eventsBeforeSubmit": 1,
           "hadTriggerEvent": false
         },
-        "textareaKeyboard": null
+        "textareaKeyboard": null,
+        "typing": {
+          "pasteShortcutMeta": 0,
+          "pasteShortcutControl": 0,
+          "selectAllShortcuts": 0,
+          "pasteEvents": 0,
+          "pasteInputs": 0,
+          "inputEvents": 0,
+          "inputsWithoutKeys": 0,
+          "inputsWithoutInputType": 0,
+          "keydownsBeforeInput": 0
+        }
       },
       "meta": {
-        "widgetId": "fcaptcha_sd84sy2tz",
+        "widgetId": "fcaptcha_4gonv0ex4",
         "siteKey": "bench-capture",
-        "timestamp": 1785180288368,
+        "timestamp": 1785251222795,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

@@ -1050,9 +1050,31 @@ func (e *ScoringEngine) detectHeadless(signals map[string]interface{}, userAgent
 			"webdriver_configurable": 0.7,
 			"chrome_runtime_missing": 0.6,
 		}
+		// Signals a genuine browser also produces, and therefore not evidence of
+		// anything. Ignored here as well as in the client, because clients already
+		// deployed will keep sending them.
+		//
+		// Measured in Chrome 150 with navigator.webdriver === false:
+		//   webdriver_configurable  descriptor present and configurable — WebIDL
+		//                           defines the attribute that way, so every browser
+		//                           reports what a patched one reports
+		//   chrome_runtime_missing  window.chrome present, chrome.runtime absent, on
+		//                           any page without a matching externally_connectable
+		//                           extension — i.e. almost every page
+		//
+		// They fired together on ordinary Chrome, which is why they cannot corroborate
+		// each other either.
+		inertSignals := map[string]bool{
+			"webdriver_configurable": true,
+			"chrome_runtime_missing": true,
+		}
+
 		if sigs, ok := playwright["signals"].([]interface{}); ok {
 			for _, s := range sigs {
 				if sig, ok := s.(string); ok {
+					if inertSignals[sig] {
+						continue
+					}
 					sigScore := 0.7
 					if v, exists := scoreMap[sig]; exists {
 						sigScore = v

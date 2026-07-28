@@ -21,11 +21,19 @@
         "eventDeltaVariance": 0,
         "mouseEventRate": 0,
         "scrollEvents": 0,
+        "scrollMorphology": {
+          "gestures": 0,
+          "instantGestures": 0,
+          "instantRatio": 0,
+          "maxStep": 0,
+          "distancePerEvent": 0,
+          "samples": 0
+        },
         "keyEvents": 12,
         "touchEvents": 0,
         "focusEvents": 11,
         "clickData": null,
-        "interactionDuration": 14330,
+        "interactionDuration": 14321,
         "inputForensics": {
           "coalescedSamples": 0,
           "coalescedEmptyRatio": 0,
@@ -35,8 +43,8 @@
           "pointerMoveZeroRatio": 0,
           "cadenceEvents": 11,
           "cadenceSilentGaps": 3,
-          "cadenceGapCV": 1.1985292675000707,
-          "cadenceSilentRatio": 0.7412929582003855,
+          "cadenceGapCV": 1.1992404216261823,
+          "cadenceSilentRatio": 0.7415796525614883,
           "teleportClicks": 0
         },
         "touchTotalPoints": 0,
@@ -172,7 +180,7 @@
         },
         "jsExecutionTime": {
           "mathOps": 0.09999999403953552,
-          "arrayOps": 0.09999999403953552,
+          "arrayOps": 0,
           "arrayLen": 1000,
           "stringOps": 0
         },
@@ -188,7 +196,7 @@
           "supported": true
         },
         "domRectFingerprint": {
-          "hash": "-354d91f8",
+          "hash": "7a5d03d2",
           "rectAWidth": 180.25,
           "rectBWidth": 111.453125,
           "rangeWidth": 180.25,
@@ -232,11 +240,13 @@
           "hasSegoeUI": false,
           "hasSFPro": false,
           "hasDejaVuSans": false,
+          "hasCalibri": false,
+          "hasMenlo": true,
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 8.372222222222263,
-          "frameTimeVariance": 0.381728395061189,
+          "avgFrameTime": 7.409333333333456,
+          "frameTimeVariance": 6.995541333333523,
           "frames": 10
         },
         "speechInfo": {
@@ -284,9 +294,9 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 1622.300000011921,
-        "firstInteractionToClick": 12706.699999988079,
-        "totalSessionTime": 14874.199999988079,
+        "pageLoadToFirstInteraction": 1623.1000000238419,
+        "firstInteractionToClick": 12697.299999982119,
+        "totalSessionTime": 14861.5,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
@@ -297,20 +307,42 @@
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 1621.800000011921,
-        "pageLoadToNow": 14873.90000000596,
+        "pageLoadToFirstInteraction": 1622.300000011921,
+        "pageLoadToNow": 14860.800000011921,
         "totalInteractionEvents": 7,
         "submit": {
           "method": "none",
           "eventsBeforeSubmit": 7,
           "hadTriggerEvent": false
         },
-        "textareaKeyboard": null
+        "textareaKeyboard": {
+          "message": {
+            "keyCount": 1,
+            "avgKeyInterval": 0,
+            "keyIntervalVariance": 0,
+            "keydownUpRatio": 1,
+            "pasteCount": 0,
+            "intervals": [],
+            "dwellTimes": [],
+            "rollovers": 0
+          }
+        },
+        "typing": {
+          "pasteShortcutMeta": 0,
+          "pasteShortcutControl": 0,
+          "selectAllShortcuts": 0,
+          "pasteEvents": 0,
+          "pasteInputs": 0,
+          "inputEvents": 0,
+          "inputsWithoutKeys": 0,
+          "inputsWithoutInputType": 0,
+          "keydownsBeforeInput": 1
+        }
       },
       "meta": {
-        "widgetId": "fcaptcha_ikruig6c2",
+        "widgetId": "fcaptcha_4v0ydpshy",
         "siteKey": "bench-capture",
-        "timestamp": 1785180248695,
+        "timestamp": 1785251146888,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

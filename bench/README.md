@@ -80,6 +80,22 @@ hidden:
   `devtools-open` persona that is the condition under test and is kept; for the
   rest it is cleared post-capture, recorded as `console-attached-cleared`.
 
+**Normalization must reproduce a measured browser, not an idealised one.** This is
+the rule the panel learned the hard way. `normalize.js` used to pin the
+`navigator.webdriver` descriptor non-configurable and add a `chrome.runtime`
+object, on the belief that a real Chrome has both. Measured in Chrome 150, it has
+neither: WebIDL defines the attribute as configurable, and `chrome.runtime` is
+only exposed to pages an extension declares `externally_connectable` for.
+
+The panel was therefore *cleaner than any real browser*, and — because the client
+had checks for exactly those two properties — no human persona could trip them.
+The bench reported a 0.00% false-positive rate for two signals that fire on every
+genuine Chrome, and could not have reported anything else.
+
+**Anything pinned in `normalize.js` is a signal this panel cannot see.** Pin as
+little as possible, pin it to values measured from a real browser, and treat a 0%
+rate for a pinned property as an artifact of the pinning rather than a result.
+
 **The honest way to close all of this** is captures from real browsers driven by
 real people. The corpus format accepts them directly — drop a `captured` sample
 into `corpus/captured/` and it is measured like any other. Until those exist,

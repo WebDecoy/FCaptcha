@@ -102,8 +102,21 @@ async function solve(challenge, signalsHash, opts = {}) {
   // all. Those came back at raw Node speed and the server flagged them "PoW
   // completed impossibly fast" — 4 of 99 human samples in CI, which is precisely
   // the tail probability. A per-batch check alone leaves that tail unpaced.
-  const owedMs = (nonce / hashRate) * 1000 - Number(process.hrtime.bigint() - started) / 1e6;
-  if (owedMs > 0) await sleep(owedMs);
+  // The settle has to be precise, not merely present. A short solve owes only a
+  // few milliseconds, and setTimeout cannot deliver those — under concurrency it
+  // routinely overshoots by tens of milliseconds, which for a small `nonce` drags
+  // the implied rate below the server's slow bound and earns the opposite
+  // complaint, "PoW timing suggests external processing". That is how the harness
+  // managed to trip both ends of the same check.
+  //
+  // So: sleep for the bulk, then spin for the remainder. Spinning is wasteful by
+  // design and bounded to a few milliseconds; the alternative is a duration that
+  // misreports how long the work took.
+  const owedMs = () => (nonce / hashRate) * 1000 - Number(process.hrtime.bigint() - started) / 1e6;
+  const SPIN_THRESHOLD_MS = 6;
+  const owed = owedMs();
+  if (owed > SPIN_THRESHOLD_MS) await sleep(owed - SPIN_THRESHOLD_MS);
+  while (owedMs() > 0) { /* spin to land on the target rate */ }
 
   const duration = Number(process.hrtime.bigint() - started) / 1e6;
   return {

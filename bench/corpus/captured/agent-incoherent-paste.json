@@ -36,11 +36,11 @@
           "x": 71,
           "y": 350,
           "button": 0,
-          "downTime": 195.59999999403954,
-          "upTime": 196.09999999403954,
-          "holdDuration": 0.5
+          "downTime": 133.09999999403954,
+          "upTime": 133.2000000178814,
+          "holdDuration": 0.10000002384185791
         },
-        "interactionDuration": 169,
+        "interactionDuration": 125,
         "inputForensics": {
           "coalescedSamples": 2,
           "coalescedEmptyRatio": 1,
@@ -50,7 +50,7 @@
           "pointerMoveZeroRatio": 0,
           "cadenceEvents": 13,
           "cadenceSilentGaps": 0,
-          "cadenceGapCV": 2.8795992488505755,
+          "cadenceGapCV": 3.150579370342222,
           "cadenceSilentRatio": 0,
           "teleportClicks": 0
         },
@@ -127,10 +127,8 @@
           "consoleAttached": true
         },
         "playwright": {
-          "detected": true,
-          "signals": [
-            "webdriver_configurable"
-          ]
+          "detected": false,
+          "signals": []
         },
         "stealthArtifacts": {
           "signals": []
@@ -188,8 +186,8 @@
           "timezoneOffset": 300
         },
         "jsExecutionTime": {
-          "mathOps": 0.19999998807907104,
-          "arrayOps": 0,
+          "mathOps": 0,
+          "arrayOps": 0.09999999403953552,
           "arrayLen": 1000,
           "stringOps": 0
         },
@@ -254,8 +252,8 @@
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 10.184888888888874,
-          "frameTimeVariance": 27.69516009876536,
+          "avgFrameTime": 9.259333333333334,
+          "frameTimeVariance": 6.813630222222248,
           "frames": 10
         },
         "speechInfo": {
@@ -305,21 +303,21 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 56.70000001788139,
-        "firstInteractionToClick": 111.59999999403954,
-        "totalSessionTime": 1914.300000011921,
+        "pageLoadToFirstInteraction": 25.099999994039536,
+        "firstInteractionToClick": 100,
+        "totalSessionTime": 668.8999999761581,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
-          "serverResponse": 3,
-          "domLoad": 35,
-          "fullLoad": 35
+          "serverResponse": 0,
+          "domLoad": 9,
+          "fullLoad": 9
         },
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 52,
-        "pageLoadToNow": 1907.7999999821186,
+        "pageLoadToFirstInteraction": 24.599999994039536,
+        "pageLoadToNow": 668.1999999880791,
         "totalInteractionEvents": 4,
         "submit": {
           "method": "none",
@@ -329,15 +327,15 @@
         "textareaKeyboard": {
           "message": {
             "keyCount": 2,
-            "avgKeyInterval": 0.6000000238418579,
+            "avgKeyInterval": 0.09999999403953552,
             "keyIntervalVariance": 0,
             "keydownUpRatio": 1,
             "pasteCount": 1,
             "intervals": [
-              0.6000000238418579
+              0.09999999403953552
             ],
             "dwellTimes": [
-              4
+              0.5
             ],
             "rollovers": 0
           }
@@ -355,9 +353,9 @@
         }
       },
       "meta": {
-        "widgetId": "fcaptcha_zfdqy08mc",
+        "widgetId": "fcaptcha_yoa0617jn",
         "siteKey": "bench-capture",
-        "timestamp": 1785201493118,
+        "timestamp": 1785251217206,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

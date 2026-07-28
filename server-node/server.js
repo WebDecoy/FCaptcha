@@ -569,13 +569,31 @@ function detectHeadless(signals, userAgent) {
       webdriver_configurable: 0.7,
       chrome_runtime_missing: 0.6,
     };
+    // Signals a genuine browser also produces, and therefore not evidence of
+    // anything. Ignored here as well as in the client, because clients already
+    // deployed will keep sending them.
+    //
+    // Measured in Chrome 150 with navigator.webdriver === false:
+    //   webdriver_configurable  descriptor present and configurable — WebIDL
+    //                           defines the attribute that way, so every browser
+    //                           reports what a patched one reports
+    //   chrome_runtime_missing  window.chrome present, chrome.runtime absent, on
+    //                           any page without a matching externally_connectable
+    //                           extension, i.e. almost every page
+    //
+    // They fired together on ordinary Chrome, so they cannot corroborate each
+    // other either.
+    const INERT_SIGNALS = new Set(['webdriver_configurable', 'chrome_runtime_missing']);
+
     for (const sig of playwrightSignals) {
+      if (INERT_SIGNALS.has(sig)) continue;
       const sigScore = scoreMap[sig] || 0.7;
       detections.push({
         category: 'headless', score: sigScore, confidence: 0.8,
         reason: `Playwright artifact detected: ${sig}`
       });
     }
+
   }
 
   return detections;
