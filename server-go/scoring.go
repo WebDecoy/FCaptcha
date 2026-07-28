@@ -383,6 +383,9 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	detections = append(detections, e.detectAutomation(signals)...)
 	detections = append(detections, e.detectCDP(signals)...)
 	detections = append(detections, e.detectBehavioral(signals)...)
+	// Input forensics v2 (PRD workstream C): typing cadence and modality, the
+	// paste-shortcut/platform contradiction, scroll morphology, font coherence.
+	detections = append(detections, e.detectInputForensics(signals)...)
 	detections = append(detections, e.detectTouchAuthenticity(signals, userAgent)...)
 	detections = append(detections, e.detectSensorEntropy(signals, userAgent)...)
 	detections = append(detections, e.detectTouchKinematics(signals)...)
@@ -416,7 +419,9 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 
 	// Form interaction analysis (credential stuffing & spam detection)
 	if formAnalysis, ok := signals["formAnalysis"].(map[string]interface{}); ok {
-		detections = append(detections, e.AnalyzeFormInteraction(formAnalysis)...)
+		// A visitor who moved a pointer or touched the screen has shown they are
+		// there; that changes how a paste-only form fill should be read.
+		detections = append(detections, e.AnalyzeFormInteraction(formAnalysis, hasHumanPresence(getMap(signals, "behavioral")))...)
 	}
 
 	// Calculate scores
@@ -719,6 +724,14 @@ func hasHumanMovementMarkers(behavioral map[string]interface{}) bool {
 	corrections := getFloat(behavioral, "overshootCorrections")
 	changes := getFloat(behavioral, "directionChanges")
 	return tremor >= 0.5 && (corrections >= 1 || changes >= 10)
+}
+
+// hasHumanPresence reports whether the visitor independently demonstrated they
+// were at the keyboard — a real pointer trajectory or a touch. It is not a
+// humanity verdict, just evidence that someone was there, which is enough to
+// change how an otherwise ambiguous form fill reads.
+func hasHumanPresence(behavioral map[string]interface{}) bool {
+	return getFloat(behavioral, "totalPoints") >= 5 || getFloat(behavioral, "touchEvents") >= 1
 }
 
 // isTouchModality reports whether this visitor is using a touch or pen device,

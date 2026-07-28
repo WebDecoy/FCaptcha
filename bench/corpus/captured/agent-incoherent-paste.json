@@ -1,10 +1,10 @@
 [
   {
-    "id": "agent/teleport-click/0000",
+    "id": "agent/incoherent-paste/0000",
     "label": "agent",
-    "group": "local-cdp-agent",
+    "group": "hosted-computer-use",
     "provenance": "captured",
-    "notes": "the default Playwright/Puppeteer click: pointer jumps straight to the target with no intervening movement. The canonical automation signature.",
+    "notes": "the ChatGPT-Agent contradiction from PRD §7.1: pastes with a keyboard shortcut that does not belong to the platform it claims. The PRD describes Ctrl+V under a MacIntel claim; this persona is the mirror image — Meta+V under a Win32 claim — because the recording host is a Mac, where Ctrl+V genuinely does nothing and so cannot produce the completed paste the detection requires. Same contradiction, testable on this hardware. Needs no threshold and no calibration, which is why it is worth having.",
     "signals": {
       "behavioral": {
         "totalPoints": 0,
@@ -29,28 +29,28 @@
           "distancePerEvent": 0,
           "samples": 0
         },
-        "keyEvents": 0,
+        "keyEvents": 4,
         "touchEvents": 0,
-        "focusEvents": 1,
+        "focusEvents": 3,
         "clickData": {
           "x": 71,
           "y": 350,
           "button": 0,
-          "downTime": 178.5,
-          "upTime": 178.59999999403954,
-          "holdDuration": 0.09999999403953552
+          "downTime": 195.59999999403954,
+          "upTime": 196.09999999403954,
+          "holdDuration": 0.5
         },
-        "interactionDuration": 171,
+        "interactionDuration": 169,
         "inputForensics": {
-          "coalescedSamples": 1,
+          "coalescedSamples": 2,
           "coalescedEmptyRatio": 1,
           "coalescedAvg": 1,
           "coalescedMax": 1,
-          "pointerMoveSamples": 0,
+          "pointerMoveSamples": 1,
           "pointerMoveZeroRatio": 0,
-          "cadenceEvents": 4,
+          "cadenceEvents": 13,
           "cadenceSilentGaps": 0,
-          "cadenceGapCV": 0.3333333664470326,
+          "cadenceGapCV": 2.8795992488505755,
           "cadenceSilentRatio": 0,
           "teleportClicks": 0
         },
@@ -71,7 +71,7 @@
         "touchUniqueIdentifiers": 0,
         "touchForceAllZero": false,
         "touchForceAllOne": false,
-        "pointerEvents": 3,
+        "pointerEvents": 6,
         "pointerAvgPressure": 0.16666666666666666,
         "pointerPressureVariance": 0.05555555555555556,
         "pointerMaxTilt": 0,
@@ -178,7 +178,7 @@
         "navigator": {
           "language": "en-US",
           "languageCount": 1,
-          "platform": "MacIntel",
+          "platform": "Win32",
           "hardwareConcurrency": 14,
           "deviceMemory": 32,
           "maxTouchPoints": 0,
@@ -188,7 +188,7 @@
           "timezoneOffset": 300
         },
         "jsExecutionTime": {
-          "mathOps": 0.09999999403953552,
+          "mathOps": 0.19999998807907104,
           "arrayOps": 0,
           "arrayLen": 1000,
           "stringOps": 0
@@ -254,8 +254,8 @@
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 7.411333333333333,
-          "frameTimeVariance": 6.866583111111092,
+          "avgFrameTime": 10.184888888888874,
+          "frameTimeVariance": 27.69516009876536,
           "frames": 10
         },
         "speechInfo": {
@@ -283,9 +283,11 @@
         },
         "workerConsistency": {
           "supported": true,
-          "consistent": true,
-          "mismatches": [],
-          "mismatchCount": 0
+          "consistent": false,
+          "mismatches": [
+            "platform"
+          ],
+          "mismatchCount": 1
         },
         "permissionProbe": {
           "supported": true,
@@ -303,44 +305,59 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 170.10000002384186,
-        "firstInteractionToClick": 0.5,
-        "totalSessionTime": 724.9000000059605,
+        "pageLoadToFirstInteraction": 56.70000001788139,
+        "firstInteractionToClick": 111.59999999403954,
+        "totalSessionTime": 1914.300000011921,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
-          "serverResponse": 0,
-          "domLoad": 9,
-          "fullLoad": 9
+          "serverResponse": 3,
+          "domLoad": 35,
+          "fullLoad": 35
         },
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 169.69999998807907,
-        "pageLoadToNow": 724.2999999821186,
-        "totalInteractionEvents": 1,
+        "pageLoadToFirstInteraction": 52,
+        "pageLoadToNow": 1907.7999999821186,
+        "totalInteractionEvents": 4,
         "submit": {
           "method": "none",
-          "eventsBeforeSubmit": 1,
+          "eventsBeforeSubmit": 4,
           "hadTriggerEvent": false
         },
-        "textareaKeyboard": null,
+        "textareaKeyboard": {
+          "message": {
+            "keyCount": 2,
+            "avgKeyInterval": 0.6000000238418579,
+            "keyIntervalVariance": 0,
+            "keydownUpRatio": 1,
+            "pasteCount": 1,
+            "intervals": [
+              0.6000000238418579
+            ],
+            "dwellTimes": [
+              4
+            ],
+            "rollovers": 0
+          }
+        },
         "typing": {
-          "pasteShortcutMeta": 0,
+          "pasteShortcutMeta": 1,
           "pasteShortcutControl": 0,
           "selectAllShortcuts": 0,
-          "pasteEvents": 0,
-          "pasteInputs": 0,
-          "inputEvents": 0,
+          "pasteEvents": 1,
+          "pasteInputs": 1,
+          "inputEvents": 1,
           "inputsWithoutKeys": 0,
           "inputsWithoutInputType": 0,
           "keydownsBeforeInput": 0
         }
       },
       "meta": {
-        "widgetId": "fcaptcha_8gtxsu2xw",
+        "widgetId": "fcaptcha_zfdqy08mc",
         "siteKey": "bench-capture",
-        "timestamp": 1785201417444,
+        "timestamp": 1785201493118,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

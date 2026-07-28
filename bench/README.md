@@ -30,8 +30,8 @@ This is the part to read before quoting anything from the output.
 **The corpus is captured, not sampled.** Traces come from a real Chromium driven
 through real input events, so the signal payloads are exactly what the client
 produces — including fields nobody remembered were there. What it is *not* is a
-sample of the human population. Eleven personas driven by scripted input are a
-structural stand-in for eleven kinds of user, not evidence about how often real
+sample of the human population. Fourteen personas driven by scripted input are a
+structural stand-in for fourteen kinds of user, not evidence about how often real
 users of each kind get flagged.
 
 So: **a 0% FPR here means "no sample in this corpus crossed the threshold". It
@@ -151,7 +151,7 @@ bench/
 
 ## What it found
 
-The first run against v1.17.0 surfaced six defects, all since fixed. They are
+The first runs against v1.17.0 surfaced seven defects, all since fixed. They are
 listed here because "the harness paid for itself" is a claim that should also be
 checkable.
 
@@ -193,10 +193,50 @@ checkable.
    removed from the Go server in v1.16.0, and Express's `trust proxy`, disabled
    in Node. Now `proxy_headers=False`.
 
+7. **Pasting was treated as a bot behaviour.** "Textarea filled mostly by paste"
+   fired on 100% of the `paste-by-human` persona. People paste addresses, error
+   messages, snippets and one-time codes constantly; a form filled by paste alone
+   is an ordinary afternoon. What distinguishes the spam bot is that pasting is
+   *all* it did, so the check now also requires the absence of pointer or touch
+   activity. Surfaced the moment a realistic pasting persona was added.
+
 Measured effect on the human panel: touch 0.385 → 0.040, keyboard-only 0.206 →
 0.040, screen-reader 0.190 → 0.035, elderly 0.299 → 0.097, motor-slow 0.289 →
 0.088. Agent true-positive rate at the PRD's 0.8 threshold: 0% → 100% for every
 captured class.
+
+---
+
+## Workstream C — what the corpus measured
+
+The typing, paste and scroll personas exist to calibrate input forensics v2 on
+real hardware, because the PRD is explicit that FP-Agent's published numbers are
+observations rather than constants — they move with browser version and machine
+load. These are this machine's:
+
+| signal | human | scripted agent |
+|---|---|---|
+| inter-key interval | min 114.6ms, median 226.9ms | max 25.9ms, median 7.9ms |
+| interval variance | 4549 | 8 |
+| key hold (dwell) | min 41.4ms, median 82.0ms | max 25.5ms, median 7.8ms |
+| scroll max step | 109px | 704px |
+
+The distributions do not overlap, so the shipped thresholds sit in the empty
+space between them rather than hugging either side. Re-derive them on your own
+hardware if you fork this.
+
+Two results worth recording because they changed the design:
+
+- **Gesture duration does not separate scrolling.** The obvious metric —
+  `scrollIntoView` produces a zero-duration gesture — measured 0.00 for *both*
+  populations, because three jumps 30ms apart segment into one gesture with a
+  plausible 60ms duration. Distance *per event* separates them cleanly instead:
+  a wheel notch moves tens of pixels and emits an event each time; an API call
+  covers the whole page in one.
+- **A human paste is arithmetically identical to a fast agent.** `paste-by-human`
+  measured 2 keystrokes 0.8ms apart with zero variance — exactly the shape the
+  cadence floor looks for. That is why the check requires ten keystrokes, no page
+  paste and no field paste before it will look at cadence at all.
 
 ### Two classes still score below the bar, and both should
 

@@ -137,14 +137,9 @@ function deriveVariant(sample, rng, index, pct = 0.15) {
   const signals = jitterTree(sample.signals, '');
 
   // A derived sample stands for *another person behaving similarly*, not for
-  // the same person seen again from a different address. Without this, every
-  // variant inherits its source's canvas hash, and the server — correctly —
-  // reports one fingerprint arriving from dozens of IPs, which is a botnet
-  // signature the harness would have manufactured itself.
-  //
-  // The server builds its fingerprint from canvasHash.hash, the WebGL renderer,
-  // the platform and the core count. Varying the canvas hash alone gives each
-  // variant a distinct device while leaving the rest of the environment intact.
+  // the same person seen again from a different address, so it needs its own
+  // device. (replay.js does the same for captured samples, which all came off
+  // one machine; doing it here too keeps the id stable across runs.)
   if (signals.environmental?.canvasHash) {
     signals.environmental = {
       ...signals.environmental,

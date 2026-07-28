@@ -688,9 +688,17 @@ function analyzeKeystrokeCadence(stats) {
 // Form Interaction Analysis (Credential Stuffing & Spam Detection)
 // =============================================================================
 
-function analyzeFormInteraction(formAnalysis) {
+/**
+ * @param {object} formAnalysis
+ * @param {object} [opts]
+ * @param {boolean} [opts.humanPresent] whether the visitor independently showed
+ *   they were there — real pointer or touch movement. Defaults to false so a
+ *   caller that does not know keeps the stricter behaviour.
+ */
+function analyzeFormInteraction(formAnalysis, opts = {}) {
   if (!formAnalysis) return [];
 
+  const humanPresent = opts.humanPresent === true;
   const detections = [];
   const submit = formAnalysis.submit || {};
 
@@ -761,8 +769,18 @@ function analyzeFormInteraction(formAnalysis) {
         });
       }
 
-      // Check for paste-heavy input (spam bots often paste content)
-      if (stats.pasteCount > 0 && stats.keyCount < 5) {
+      // Check for paste-heavy input (spam bots often paste content).
+      //
+      // Standing down when the visitor independently demonstrated they were
+      // present. Pasting is not a bot behaviour — people paste addresses, error
+      // messages, snippets and one-time codes constantly, and a form filled by
+      // paste alone is an ordinary afternoon. The bench human panel caught this
+      // firing on 100% of the paste-by-human persona.
+      //
+      // What actually distinguishes the spam bot is that pasting is ALL it did:
+      // no pointer trajectory, no touch, nothing but the content appearing. So
+      // the check now needs the paste AND the absence of a person.
+      if (stats.pasteCount > 0 && stats.keyCount < 5 && !humanPresent) {
         detections.push({
           category: 'bot',
           score: 0.6,

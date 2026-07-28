@@ -1,56 +1,100 @@
 [
   {
-    "id": "agent/teleport-click/0000",
-    "label": "agent",
-    "group": "local-cdp-agent",
+    "id": "human/scrolling/0000",
+    "label": "human",
+    "group": "scrolling",
     "provenance": "captured",
-    "notes": "the default Playwright/Puppeteer click: pointer jumps straight to the target with no intervening movement. The canonical automation signature.",
+    "notes": "human scrolling: several wheel gestures with real duration and a tail, landing at unrepeated offsets. Baseline for the scroll morphology of PRD §7.2.",
     "signals": {
       "behavioral": {
-        "totalPoints": 0,
-        "trajectoryLength": 0,
-        "avgVelocity": 0,
-        "velocityVariance": 0,
-        "avgAcceleration": 0,
-        "accelerationChanges": 0,
-        "microTremorScore": 0.5,
-        "straightLineRatio": 0,
-        "microMovements": 0,
-        "directionChanges": 0,
-        "eventDeltas": [],
-        "eventDeltaVariance": 0,
-        "mouseEventRate": 0,
-        "scrollEvents": 0,
+        "totalPoints": 39,
+        "trajectoryLength": 362.2612261031787,
+        "avgVelocity": 0.4969826184558282,
+        "velocityVariance": 0.14283757319756346,
+        "avgAcceleration": 0.0031939902501143787,
+        "accelerationChanges": 21,
+        "microTremorScore": 1,
+        "straightLineRatio": 0.21621621621621623,
+        "microMovements": 5,
+        "directionChanges": 13,
+        "eventDeltas": [
+          210.59999999403954,
+          23,
+          14.699999988079071,
+          20,
+          11.200000017881393,
+          9.099999994039536,
+          18.900000005960464,
+          26,
+          25.099999994039536,
+          15.800000011920929,
+          23.599999994039536,
+          22.900000005960464,
+          20.899999976158142,
+          11.800000011920929,
+          28,
+          19,
+          21,
+          20.19999998807907,
+          15.600000023841858,
+          11.899999976158142,
+          22.700000017881393,
+          14.900000005960464,
+          22,
+          29.799999982118607,
+          24.599999994039536,
+          25.100000023841858,
+          33,
+          17.099999994039536,
+          24.900000005960464,
+          24.299999982118607,
+          17.30000001192093,
+          33.599999994039536,
+          16.599999994039536,
+          16.700000017881393,
+          25.299999982118607,
+          24.5,
+          24.400000005960464,
+          236.19999998807907
+        ],
+        "eventDeltaVariance": 2083.160810040195,
+        "mouseEventRate": 32.43782749777928,
+        "scrollEvents": 59,
         "scrollMorphology": {
-          "gestures": 0,
+          "gestures": 9,
           "instantGestures": 0,
           "instantRatio": 0,
-          "maxStep": 0,
-          "distancePerEvent": 0,
-          "samples": 0
+          "avgDuration": 150.05555555555554,
+          "durationVariance": 2197.4091353711965,
+          "avgDistance": 394.3333333333333,
+          "distanceVariance": 24046,
+          "repeatedEndRatio": 0,
+          "maxStep": 109,
+          "distancePerEvent": 61.189655172413794,
+          "samples": 59
         },
         "keyEvents": 0,
         "touchEvents": 0,
         "focusEvents": 1,
         "clickData": {
-          "x": 71,
-          "y": 350,
+          "x": 61,
+          "y": 346,
           "button": 0,
-          "downTime": 178.5,
-          "upTime": 178.59999999403954,
-          "holdDuration": 0.09999999403953552
+          "downTime": 9181.399999976158,
+          "upTime": 9182.5,
+          "holdDuration": 1.100000023841858
         },
-        "interactionDuration": 171,
+        "interactionDuration": 9151,
         "inputForensics": {
-          "coalescedSamples": 1,
+          "coalescedSamples": 39,
           "coalescedEmptyRatio": 1,
           "coalescedAvg": 1,
           "coalescedMax": 1,
-          "pointerMoveSamples": 0,
-          "pointerMoveZeroRatio": 0,
-          "cadenceEvents": 4,
+          "pointerMoveSamples": 37,
+          "pointerMoveZeroRatio": 0.05405405405405406,
+          "cadenceEvents": 139,
           "cadenceSilentGaps": 0,
-          "cadenceGapCV": 0.3333333664470326,
+          "cadenceGapCV": 2.711720464165341,
           "cadenceSilentRatio": 0,
           "teleportClicks": 0
         },
@@ -71,25 +115,25 @@
         "touchUniqueIdentifiers": 0,
         "touchForceAllZero": false,
         "touchForceAllOne": false,
-        "pointerEvents": 3,
-        "pointerAvgPressure": 0.16666666666666666,
-        "pointerPressureVariance": 0.05555555555555556,
+        "pointerEvents": 41,
+        "pointerAvgPressure": 0.012195121951219513,
+        "pointerPressureVariance": 0.005948839976204639,
         "pointerMaxTilt": 0,
         "pointerHasNonMouseType": false,
         "pointerTypes": [
           "mouse"
         ],
-        "clickPrecision": 0,
-        "explorationRatio": 0,
-        "overshootCorrections": 0,
-        "hoverTime": 0,
-        "approachDirectness": 1,
-        "approachPoints": 0
+        "clickPrecision": 10.940356769776752,
+        "explorationRatio": 0.8969270054717601,
+        "overshootCorrections": 1,
+        "hoverTime": 260.59999999403954,
+        "approachDirectness": 0.39830482474724965,
+        "approachPoints": 20
       },
       "environmental": {
-        "webdriver": true,
+        "webdriver": false,
         "automationFlags": {
-          "webdriver": true,
+          "webdriver": false,
           "domAutomation": false,
           "domAutomationController": false,
           "_selenium": false,
@@ -110,12 +154,12 @@
           "__lastWatirAlert": false,
           "__lastWatirConfirm": false,
           "__lastWatirPrompt": false,
-          "plugins": 0,
+          "plugins": 5,
           "languages": true,
-          "mimeTypes": 0,
+          "mimeTypes": 2,
           "cookieEnabled": true,
           "doNotTrack": null,
-          "chrome": false,
+          "chrome": true,
           "chromeRuntime": false,
           "permissionsAPI": true
         },
@@ -124,16 +168,16 @@
           "signals": []
         },
         "cdpRuntime": {
-          "consoleAttached": true
+          "consoleAttached": false
         },
         "playwright": {
-          "detected": true,
-          "signals": [
-            "webdriver_configurable"
-          ]
+          "detected": false,
+          "signals": []
         },
         "stealthArtifacts": {
-          "signals": []
+          "signals": [
+            "patched_webgl_getparameter"
+          ]
         },
         "canvasHash": {
           "hash": "-7d69723a",
@@ -142,11 +186,11 @@
         },
         "webglInfo": {
           "supported": true,
-          "vendor": "Google Inc. (Google)",
-          "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Apple",
+          "renderer": "Apple M-series GPU",
           "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
           "shadingVersion": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
-          "suspiciousRenderer": true
+          "suspiciousRenderer": false
         },
         "audioInfo": {
           "supported": true,
@@ -156,11 +200,11 @@
         },
         "headlessIndicators": {
           "hasOuterDimensions": true,
-          "innerEqualsOuter": true,
+          "innerEqualsOuter": false,
           "screenColorDepth": 24,
           "screenPixelDepth": 24,
-          "connectionRtt": 0,
-          "notificationPermission": "denied",
+          "connectionRtt": 50,
+          "notificationPermission": "default",
           "hasBattery": true,
           "hasCredentials": true,
           "hasMediaDevices": true
@@ -254,8 +298,8 @@
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 7.411333333333333,
-          "frameTimeVariance": 6.866583111111092,
+          "avgFrameTime": 8.340888888888811,
+          "frameTimeVariance": 0.10590854320988365,
           "frames": 10
         },
         "speechInfo": {
@@ -289,9 +333,9 @@
         },
         "permissionProbe": {
           "supported": true,
-          "notificationPermission": "denied",
+          "notificationPermission": "default",
           "queryState": "prompt",
-          "contradiction": true
+          "contradiction": false
         },
         "sensor": {
           "motionEventCount": 1,
@@ -303,25 +347,25 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 170.10000002384186,
-        "firstInteractionToClick": 0.5,
-        "totalSessionTime": 724.9000000059605,
+        "pageLoadToFirstInteraction": 7944.4000000059605,
+        "firstInteractionToClick": 1205.0999999940395,
+        "totalSessionTime": 10515.40000000596,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
-          "serverResponse": 0,
-          "domLoad": 9,
-          "fullLoad": 9
+          "serverResponse": 4,
+          "domLoad": 42,
+          "fullLoad": 42
         },
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 169.69999998807907,
-        "pageLoadToNow": 724.2999999821186,
-        "totalInteractionEvents": 1,
+        "pageLoadToFirstInteraction": 1946.800000011921,
+        "pageLoadToNow": 10507.90000000596,
+        "totalInteractionEvents": 60,
         "submit": {
           "method": "none",
-          "eventsBeforeSubmit": 1,
+          "eventsBeforeSubmit": 60,
           "hadTriggerEvent": false
         },
         "textareaKeyboard": null,
@@ -338,14 +382,18 @@
         }
       },
       "meta": {
-        "widgetId": "fcaptcha_8gtxsu2xw",
+        "widgetId": "fcaptcha_sytk8dowd",
         "siteKey": "bench-capture",
-        "timestamp": 1785201417444,
+        "timestamp": 1785201413917,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",
         "timezone": "America/Chicago"
       }
-    }
+    },
+    "caveats": [
+      "environment-normalized",
+      "console-attached-cleared"
+    ]
   }
 ]

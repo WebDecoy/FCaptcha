@@ -1,56 +1,94 @@
 [
   {
-    "id": "agent/teleport-click/0000",
-    "label": "agent",
-    "group": "local-cdp-agent",
+    "id": "human/paste-by-human/0000",
+    "label": "human",
+    "group": "paste-by-human",
     "provenance": "captured",
-    "notes": "the default Playwright/Puppeteer click: pointer jumps straight to the target with no intervening movement. The canonical automation signature.",
+    "notes": "a real person pasting — from a password manager or their own clipboard. Humans paste constantly, so this is the persona the inter-key floors must never fire on. Uses the platform-correct shortcut for the claimed OS.",
     "signals": {
       "behavioral": {
-        "totalPoints": 0,
-        "trajectoryLength": 0,
-        "avgVelocity": 0,
-        "velocityVariance": 0,
-        "avgAcceleration": 0,
-        "accelerationChanges": 0,
-        "microTremorScore": 0.5,
-        "straightLineRatio": 0,
-        "microMovements": 0,
-        "directionChanges": 0,
-        "eventDeltas": [],
-        "eventDeltaVariance": 0,
-        "mouseEventRate": 0,
+        "totalPoints": 40,
+        "trajectoryLength": 473.2308384152996,
+        "avgVelocity": 0.47285365344058944,
+        "velocityVariance": 0.1934396997051392,
+        "avgAcceleration": 0.0050536440075737345,
+        "accelerationChanges": 22,
+        "microTremorScore": 1,
+        "straightLineRatio": 0.2894736842105263,
+        "microMovements": 6,
+        "directionChanges": 16,
+        "eventDeltas": [
+          1392.5,
+          314.30000001192093,
+          15.5,
+          25.599999994039536,
+          25,
+          15.400000005960464,
+          26.5,
+          24.80000001192093,
+          24.5,
+          25.5,
+          24.899999976158142,
+          25.5,
+          15.700000017881393,
+          7.9000000059604645,
+          19.69999998807907,
+          31.400000005960464,
+          24.900000005960464,
+          26.599999994039536,
+          11.5,
+          20.19999998807907,
+          25,
+          25,
+          16.5,
+          34,
+          16.200000017881393,
+          25.099999994039536,
+          16.599999994039536,
+          33.30000001192093,
+          16.599999994039536,
+          25.099999994039536,
+          16.599999994039536,
+          25,
+          33.30000001192093,
+          25.099999994039536,
+          16.900000005960464,
+          23.400000005960464,
+          34.69999998807907,
+          23.69999998807907,
+          281.80000001192093
+        ],
+        "eventDeltaVariance": 49609.594096286855,
+        "mouseEventRate": 14.225762856472869,
         "scrollEvents": 0,
         "scrollMorphology": {
           "gestures": 0,
           "instantGestures": 0,
           "instantRatio": 0,
-          "maxStep": 0,
-          "distancePerEvent": 0,
           "samples": 0
         },
-        "keyEvents": 0,
+        "keyEvents": 4,
         "touchEvents": 0,
-        "focusEvents": 1,
+        "focusEvents": 3,
         "clickData": {
-          "x": 71,
-          "y": 350,
+          "x": 63,
+          "y": 348,
           "button": 0,
-          "downTime": 178.5,
-          "upTime": 178.59999999403954,
-          "holdDuration": 0.09999999403953552
+          "downTime": 4456.199999988079,
+          "upTime": 4456.4000000059605,
+          "holdDuration": 0.20000001788139343
         },
-        "interactionDuration": 171,
+        "interactionDuration": 4447,
         "inputForensics": {
-          "coalescedSamples": 1,
+          "coalescedSamples": 40,
           "coalescedEmptyRatio": 1,
           "coalescedAvg": 1,
           "coalescedMax": 1,
-          "pointerMoveSamples": 0,
+          "pointerMoveSamples": 38,
           "pointerMoveZeroRatio": 0,
-          "cadenceEvents": 4,
+          "cadenceEvents": 89,
           "cadenceSilentGaps": 0,
-          "cadenceGapCV": 0.3333333664470326,
+          "cadenceGapCV": 3.7294159394223256,
           "cadenceSilentRatio": 0,
           "teleportClicks": 0
         },
@@ -71,25 +109,25 @@
         "touchUniqueIdentifiers": 0,
         "touchForceAllZero": false,
         "touchForceAllOne": false,
-        "pointerEvents": 3,
-        "pointerAvgPressure": 0.16666666666666666,
-        "pointerPressureVariance": 0.05555555555555556,
+        "pointerEvents": 44,
+        "pointerAvgPressure": 0.022727272727272728,
+        "pointerPressureVariance": 0.010847107438016541,
         "pointerMaxTilt": 0,
         "pointerHasNonMouseType": false,
         "pointerTypes": [
           "mouse"
         ],
-        "clickPrecision": 0,
-        "explorationRatio": 0,
-        "overshootCorrections": 0,
-        "hoverTime": 0,
-        "approachDirectness": 1,
-        "approachPoints": 0
+        "clickPrecision": 8.363097885951115,
+        "explorationRatio": 0.9184437556829036,
+        "overshootCorrections": 1,
+        "hoverTime": 305.5,
+        "approachDirectness": 0.38640354070644745,
+        "approachPoints": 20
       },
       "environmental": {
-        "webdriver": true,
+        "webdriver": false,
         "automationFlags": {
-          "webdriver": true,
+          "webdriver": false,
           "domAutomation": false,
           "domAutomationController": false,
           "_selenium": false,
@@ -110,12 +148,12 @@
           "__lastWatirAlert": false,
           "__lastWatirConfirm": false,
           "__lastWatirPrompt": false,
-          "plugins": 0,
+          "plugins": 5,
           "languages": true,
-          "mimeTypes": 0,
+          "mimeTypes": 2,
           "cookieEnabled": true,
           "doNotTrack": null,
-          "chrome": false,
+          "chrome": true,
           "chromeRuntime": false,
           "permissionsAPI": true
         },
@@ -124,16 +162,16 @@
           "signals": []
         },
         "cdpRuntime": {
-          "consoleAttached": true
+          "consoleAttached": false
         },
         "playwright": {
-          "detected": true,
-          "signals": [
-            "webdriver_configurable"
-          ]
+          "detected": false,
+          "signals": []
         },
         "stealthArtifacts": {
-          "signals": []
+          "signals": [
+            "patched_webgl_getparameter"
+          ]
         },
         "canvasHash": {
           "hash": "-7d69723a",
@@ -142,11 +180,11 @@
         },
         "webglInfo": {
           "supported": true,
-          "vendor": "Google Inc. (Google)",
-          "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver)",
+          "vendor": "Apple",
+          "renderer": "Apple M-series GPU",
           "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
           "shadingVersion": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
-          "suspiciousRenderer": true
+          "suspiciousRenderer": false
         },
         "audioInfo": {
           "supported": true,
@@ -156,11 +194,11 @@
         },
         "headlessIndicators": {
           "hasOuterDimensions": true,
-          "innerEqualsOuter": true,
+          "innerEqualsOuter": false,
           "screenColorDepth": 24,
           "screenPixelDepth": 24,
-          "connectionRtt": 0,
-          "notificationPermission": "denied",
+          "connectionRtt": 50,
+          "notificationPermission": "default",
           "hasBattery": true,
           "hasCredentials": true,
           "hasMediaDevices": true
@@ -188,7 +226,7 @@
           "timezoneOffset": 300
         },
         "jsExecutionTime": {
-          "mathOps": 0.09999999403953552,
+          "mathOps": 0,
           "arrayOps": 0,
           "arrayLen": 1000,
           "stringOps": 0
@@ -254,8 +292,8 @@
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 7.411333333333333,
-          "frameTimeVariance": 6.866583111111092,
+          "avgFrameTime": 10.189777777777737,
+          "frameTimeVariance": 28.04510261728294,
           "frames": 10
         },
         "speechInfo": {
@@ -289,9 +327,9 @@
         },
         "permissionProbe": {
           "supported": true,
-          "notificationPermission": "denied",
+          "notificationPermission": "default",
           "queryState": "prompt",
-          "contradiction": true
+          "contradiction": false
         },
         "sensor": {
           "motionEventCount": 1,
@@ -303,49 +341,68 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 170.10000002384186,
-        "firstInteractionToClick": 0.5,
-        "totalSessionTime": 724.9000000059605,
+        "pageLoadToFirstInteraction": 1634.5,
+        "firstInteractionToClick": 2812.2000000178814,
+        "totalSessionTime": 4994.800000011921,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
-          "serverResponse": 0,
-          "domLoad": 9,
-          "fullLoad": 9
+          "serverResponse": 1,
+          "domLoad": 11,
+          "fullLoad": 11
         },
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 169.69999998807907,
-        "pageLoadToNow": 724.2999999821186,
-        "totalInteractionEvents": 1,
+        "pageLoadToFirstInteraction": 1633.9000000059605,
+        "pageLoadToNow": 4994.0999999940395,
+        "totalInteractionEvents": 4,
         "submit": {
           "method": "none",
-          "eventsBeforeSubmit": 1,
+          "eventsBeforeSubmit": 4,
           "hadTriggerEvent": false
         },
-        "textareaKeyboard": null,
+        "textareaKeyboard": {
+          "message": {
+            "keyCount": 2,
+            "avgKeyInterval": 0.800000011920929,
+            "keyIntervalVariance": 0,
+            "keydownUpRatio": 1,
+            "pasteCount": 1,
+            "intervals": [
+              0.800000011920929
+            ],
+            "dwellTimes": [
+              2.5999999940395355
+            ],
+            "rollovers": 0
+          }
+        },
         "typing": {
-          "pasteShortcutMeta": 0,
+          "pasteShortcutMeta": 1,
           "pasteShortcutControl": 0,
           "selectAllShortcuts": 0,
-          "pasteEvents": 0,
-          "pasteInputs": 0,
-          "inputEvents": 0,
+          "pasteEvents": 1,
+          "pasteInputs": 1,
+          "inputEvents": 1,
           "inputsWithoutKeys": 0,
           "inputsWithoutInputType": 0,
           "keydownsBeforeInput": 0
         }
       },
       "meta": {
-        "widgetId": "fcaptcha_8gtxsu2xw",
+        "widgetId": "fcaptcha_gh07mijcg",
         "siteKey": "bench-capture",
-        "timestamp": 1785201417444,
+        "timestamp": 1785199877846,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",
         "timezone": "America/Chicago"
       }
-    }
+    },
+    "caveats": [
+      "environment-normalized",
+      "console-attached-cleared"
+    ]
   }
 ]

@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from clientip import ProxyTrust
 from sitekeys import SiteKeyGuard
+from inputforensics import detect_input_forensics
 
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
 app = FastAPI(title="FCaptcha", version="1.17.0")
@@ -407,6 +408,22 @@ def get_nested(d: dict, *keys, default=None):
         else:
             return default
     return d
+
+
+def _has_human_presence(b: Dict[str, Any]) -> bool:
+    """Whether the visitor independently demonstrated they were at the keyboard.
+
+    A real pointer trajectory or a touch. Not a humanity verdict, just evidence
+    that someone was there, which is enough to change how an otherwise ambiguous
+    form fill reads.
+    """
+    return _num_or(b.get("totalPoints"), 0) >= 5 or _num_or(b.get("touchEvents"), 0) >= 1
+
+
+def _num_or(value: Any, default: float) -> float:
+    if isinstance(value, bool):
+        return default
+    return float(value) if isinstance(value, (int, float)) else default
 
 
 def _has_human_movement_markers(b: Dict[str, Any]) -> bool:
@@ -1366,6 +1383,13 @@ def run_verification(
             ThreatCategory.DECLARED_AI, d["score"], d["confidence"], d["reason"]
         ))
 
+    # Input forensics v2 (PRD workstream C): typing cadence and modality, the
+    # paste-shortcut/platform contradiction, scroll morphology, font coherence.
+    for d in detect_input_forensics(signals):
+        detections.append(Detection(
+            ThreatCategory(d["category"]), d["score"], d["confidence"], d["reason"]
+        ))
+
     # HTTP-level detectors
     if headers:
         for d in analyze_headers(headers, peer_trusted):
@@ -1398,7 +1422,7 @@ def run_verification(
     # Form interaction analysis (credential stuffing & spam detection)
     form_analysis = signals.get("formAnalysis")
     if form_analysis:
-        for d in analyze_form_interaction(form_analysis):
+        for d in analyze_form_interaction(form_analysis, _has_human_presence(signals.get('behavioral') or {})):
             detections.append(Detection(
                 ThreatCategory.BOT, d["score"], d["confidence"], d["reason"]
             ))
