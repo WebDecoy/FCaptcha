@@ -22,11 +22,23 @@ import (
 	"github.com/go-chi/cors"
 )
 
-// resolveClientPath finds client/fcaptcha.js at startup so the widget can be
-// served from the same origin as the API (matches the Node and Python servers).
-// FCAPTCHA_CLIENT_PATH wins; otherwise we probe a few sensible defaults so this
-// works for `go run .` from server-go/, a built binary alongside the repo, and
-// the Docker image (which COPYs the file to /app/client/fcaptcha.js).
+// resolveClientPath finds fcaptcha.js at startup so the widget can be served
+// from the same origin as the API (matches the Node and Python servers).
+// FCAPTCHA_CLIENT_PATH wins; otherwise probe the layouts this binary actually
+// ships in.
+//
+// The `static/` entries are load-bearing and were missing until #23. The Docker
+// image copies the widget to /app/static/fcaptcha.js — that has been its layout
+// since the image was introduced, and /demo/ is served from ./static/demo right
+// below. This function arrived three months later probing only `client/`, with a
+// comment asserting the image copied to /app/client/fcaptcha.js. It did not.
+//
+// The file was present in every published image the whole time; nothing looked
+// for it. /fcaptcha.js returned 404, and because the shipped demo page loads the
+// widget from that path, the demo in the image never initialised either.
+//
+// docker/Dockerfile and this list have to agree. There is a CI job that builds
+// the image and fetches /fcaptcha.js so they cannot drift apart again in silence.
 func resolveClientPath() string {
 	if p := os.Getenv("FCAPTCHA_CLIENT_PATH"); p != "" {
 		return p
@@ -34,12 +46,14 @@ func resolveClientPath() string {
 	candidates := []string{
 		"./client/fcaptcha.js",
 		"../client/fcaptcha.js",
+		"./static/fcaptcha.js", // docker/Dockerfile layout
 	}
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Dir(exe)
 		candidates = append(candidates,
 			filepath.Join(dir, "client", "fcaptcha.js"),
 			filepath.Join(dir, "..", "client", "fcaptcha.js"),
+			filepath.Join(dir, "static", "fcaptcha.js"),
 		)
 	}
 	for _, c := range candidates {

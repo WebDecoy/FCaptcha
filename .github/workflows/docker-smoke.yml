@@ -1,0 +1,74 @@
+name: Docker image smoke test
+
+# Builds the published image and checks it actually serves what it ships.
+#
+# Issue #23: the image copied the widget to /app/static/fcaptcha.js while the
+# server only looked in client/, so /fcaptcha.js returned 404 in every release
+# for roughly three months. The file was present the whole time — nothing
+# fetched it to find out. Unit tests could not catch it because the mismatch
+# lived between the Dockerfile and the Go source, not inside either.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker/**'
+      - 'server-go/**'
+      - 'client/**'
+      - '.github/workflows/docker-smoke.yml'
+  pull_request:
+    paths:
+      - 'docker/**'
+      - 'server-go/**'
+      - 'client/**'
+      - '.github/workflows/docker-smoke.yml'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -f docker/Dockerfile -t fcaptcha-smoke .
+
+      - name: Start it
+        run: |
+          docker run -d --name fcaptcha-smoke -p 3000:3000 fcaptcha-smoke
+          for _ in $(seq 1 40); do
+            curl -sf http://localhost:3000/health >/dev/null && exit 0
+            sleep 0.5
+          done
+          echo "container never became healthy"; docker logs fcaptcha-smoke; exit 1
+
+      - name: The widget must be served, not 404
+        run: |
+          code=$(curl -s -o /tmp/widget.js -w '%{http_code}' http://localhost:3000/fcaptcha.js)
+          if [ "$code" != "200" ]; then
+            echo "::error::/fcaptcha.js returned $code — the image ships the widget but does not serve it (see #23)"
+            docker logs fcaptcha-smoke
+            exit 1
+          fi
+          grep -q "FCaptcha" /tmp/widget.js || { echo "::error::/fcaptcha.js served something that is not the widget"; exit 1; }
+          echo "widget served, $(wc -c < /tmp/widget.js) bytes"
+
+      - name: The startup log must not warn about a missing widget
+        run: |
+          if docker logs fcaptcha-smoke 2>&1 | grep -q "will return 404"; then
+            echo "::error::server logged that it could not find the widget"
+            docker logs fcaptcha-smoke
+            exit 1
+          fi
+
+      # The demo page loads the widget from /fcaptcha.js, so it was collateral
+      # damage in #23: the page returned 200 while the widget behind it 404'd.
+      - name: The shipped demo page must load and reference a widget that exists
+        run: |
+          curl -sf http://localhost:3000/demo/ -o /tmp/demo.html || { echo "::error::/demo/ did not load"; exit 1; }
+          src=$(grep -o 'src="[^"]*fcaptcha[^"]*"' /tmp/demo.html | head -1 | sed 's/src="//;s/"//')
+          echo "demo loads the widget from: $src"
+          curl -sf "http://localhost:3000${src}" >/dev/null || { echo "::error::the demo's widget URL $src does not resolve"; exit 1; }
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f fcaptcha-smoke || true
