@@ -20,7 +20,7 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 - **Single click or invisible** - Checkbox mode like Turnstile/reCAPTCHA v2, or invisible mode like reCAPTCHA v3
 - **AI agent detection** - Catches vision agents (screenshot→API→click), DOM/CDP-driven agents (Claude in Chrome, Operator-style computer use), and synthetic input that reports `isTrusted: true` — via input-event forensics and LLM think-time cadence
 - **Declared & verified agents** - Flags self-declaring agents (ClaudeBot, GPTBot, ChatGPT-User, PerplexityBot, Bytespider…) and *cryptographically verifies* Web Bot Auth (RFC 9421) signed requests against the agent's published key directory, surfaced as a distinct category so your app can *allow* polite/verified agents and block the rest
-- **Proof of Work** - Server-verified SHA-256 hashcash with 256-bit HMAC signing, per-challenge nonces, and signal commitment that binds the challenge to the collected signals
+- **Proof of Work** - Server-verified SHA-256 hashcash with 256-bit HMAC signing, per-challenge nonces, and signal commitment that binds the challenge to the collected signals. A liveness and timing gate rather than a cost function — see [what it does and does not buy you](#what-the-proof-of-work-does-and-does-not-buy-you)
 - **Comprehensive bot detection** - Headless browsers, WebDriver, Puppeteer, Playwright, Selenium, plus CDP console-attach detection
 - **Behavioral biometrics** - 40+ signals including micro-tremor, velocity/acceleration curves, trajectory analysis, coalesced pointer events, and teleport-click detection
 - **Mobile-native** - Touch kinematics and passive device-sensor entropy, with accessibility exemptions for keyboard-only and touch users
@@ -266,9 +266,33 @@ Before any verification, clients must solve a SHA-256 hashcash challenge:
 - **Hardened** - 256-bit HMAC-signed challenges, one-time use, replay-protected, with a server-generated per-challenge nonce the client must echo back
 - **Signal commitment** - the client hashes its collected signals into the PoW input (`prefix:signalsHash:nonce`) and the server verifies the signals weren't tampered with after solving
 - **Difficulty scaling** - datacenter IPs and high-rate requesters get harder puzzles
-- **Forces compute cost** - each attempt requires ~100-500ms of CPU time
+- **Costs a real browser ~100-600ms** - measured: 0.12s on a desktop, 0.58s on a throttled low-end phone
 
-This makes credential stuffing expensive: even if a bot passes all other checks, it still burns compute for every attempt.
+### What the proof of work does and does not buy you
+
+It is a **liveness and timing gate, not a cost function.** Be clear-eyed about this,
+because the distinction decides whether the design is doing what you think.
+
+The parts that hold up are the un-spoofable ones. The server signs each challenge,
+allows it once, and measures the gap between issuing it and receiving a solution on
+its own clock. A solution returned in under 1.5 seconds is scored as too fast
+regardless of what the client claims, so a visitor cannot arrive with a
+pre-computed answer, and each token costs an attacker a real 1.5 seconds of wall
+clock per identity.
+
+The part that does not hold up is the compute cost. `powTiming.duration` is
+reported by the client, so an attacker who solves on fast hardware, reports a
+browser-plausible duration and waits out the server-side floor scores **identically
+to a real browser** — measured at 0.097 against 0.097 on the bench corpus. SHA-256
+having GPUs and ASICs behind it is therefore not the weakness it looks like: the
+compute was never the constraint, and swapping in a memory-hard function
+(Argon2id, RandomX) would not change that. It would only make honest low-end
+phones pay 3-11x more wall clock and 64MB of RAM. Measured, that trade is not
+worth making — see [bench/POW-PRIMITIVE.md](bench/POW-PRIMITIVE.md) for the numbers.
+
+If you want proof of work to genuinely raise an attacker's cost, the lever is the
+server-measured elapsed time, not the hash. That is what adaptive difficulty
+should key on.
 
 ### Behavioral Biometrics
 - Mouse trajectory, velocity, and acceleration curves
