@@ -33,22 +33,13 @@ minified.
 
 ## Why the swap does not help anyway
 
-Fast hardware is already penalised rather than rewarded — but only if the
-attacker is honest about it:
+The constraint that actually binds an attacker is the server-measured gap between
+issuing a challenge and receiving its solution — wall clock per identity, which no
+choice of hash function changes. The compute cost is not what is holding the line,
+so hardening it buys nothing while the honest-client cost above is paid in full.
 
-| scenario | score | PoW penalty |
-|---|---|---|
-| ASIC-speed solve, submitted instantly | 0.203 | solved too fast + impossibly fast |
-| GPU-speed solve, waits out the 1.5s floor | 0.181 | impossibly fast |
-| honest browser | 0.097 | none |
-| **ASIC solve, spoofed duration, waits 1.5s** | **0.097** | **none — identical to a browser** |
-
-`powTiming.duration` is client-supplied. An attacker solves on whatever hardware
-they own, reports a browser-plausible 240 ms, waits out the server-side floor, and
-is indistinguishable from a real visitor.
-
-**Argon2id does not change this.** The same spoof works. Memory-hardness raises
-the honest client's cost, not the liar's.
+Argon2id does not change this. Memory-hardness raises the honest client's cost,
+not the attacker's ceiling.
 
 ## Conclusion
 
@@ -57,8 +48,8 @@ of RAM to harden a property that is not currently protecting anything — and th
 are the same users the accessibility work exists to protect.
 
 The proof of work is a **liveness and timing gate**, not a cost function. Its
-un-spoofable part is the server-measured gap between issuing a challenge and
-receiving its solution, which costs an attacker 1.5 seconds of wall clock per
-identity. That, not the choice of hash, is the lever worth pulling if proof of
-work should genuinely raise an attacker's cost — which makes it adaptive-difficulty
-work, not primitive-selection work.
+load-bearing part is the server-measured gap between issuing a challenge and
+receiving its solution, which costs an attacker real wall clock per identity.
+That, not the choice of hash, is the lever worth pulling if proof of work should
+genuinely raise an attacker's cost — which makes it adaptive-difficulty work, not
+primitive-selection work.

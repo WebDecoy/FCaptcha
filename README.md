@@ -280,15 +280,17 @@ regardless of what the client claims, so a visitor cannot arrive with a
 pre-computed answer, and each token costs an attacker a real 1.5 seconds of wall
 clock per identity.
 
-The part that does not hold up is the compute cost. `powTiming.duration` is
-reported by the client, so an attacker who solves on fast hardware, reports a
-browser-plausible duration and waits out the server-side floor scores **identically
-to a real browser** — measured at 0.097 against 0.097 on the bench corpus. SHA-256
-having GPUs and ASICs behind it is therefore not the weakness it looks like: the
-compute was never the constraint, and swapping in a memory-hard function
-(Argon2id, RandomX) would not change that. It would only make honest low-end
-phones pay 3-11x more wall clock and 64MB of RAM. Measured, that trade is not
-worth making — see [bench/POW-PRIMITIVE.md](bench/POW-PRIMITIVE.md) for the numbers.
+What the compute cost does **not** do is price an attacker out. Treat the hash as
+a gate, not a toll, and do not lean on it as a rate limiter — that job belongs to
+the timing floor above, and to IP and site-key limits.
+
+This is also why SHA-256 having GPUs and ASICs behind it is not the weakness it
+appears to be, and why swapping in a memory-hard function (Argon2id, RandomX)
+would not help. Measured in a real browser, a difficulty-1 Argon2id search at
+64MiB costs a throttled low-end phone **6.46s** against **0.58s** for what ships
+today, plus a 64MB allocation and 28KB of WASM. That is a large, regressive cost
+to honest mobile users for no gain in the constraint that actually binds. Numbers
+in [bench/POW-PRIMITIVE.md](bench/POW-PRIMITIVE.md).
 
 If you want proof of work to genuinely raise an attacker's cost, the lever is the
 server-measured elapsed time, not the hash. That is what adaptive difficulty
