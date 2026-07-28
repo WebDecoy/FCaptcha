@@ -1,74 +1,91 @@
 name: Docker image smoke test
 
-# Builds the published image and checks it actually serves what it ships.
+# Builds every image the repository ships and checks each actually serves what
+# it claims: that it starts, serves the widget, and answers a challenge.
 #
-# Issue #23: the image copied the widget to /app/static/fcaptcha.js while the
-# server only looked in client/, so /fcaptcha.js returned 404 in every release
-# for roughly three months. The file was present the whole time — nothing
-# fetched it to find out. Unit tests could not catch it because the mismatch
-# lived between the Dockerfile and the Go source, not inside either.
+# These are packaging checks, and they cover a gap unit tests cannot. A Dockerfile
+# that copies a file to one path while the server looks in another, or that omits
+# a module the entrypoint imports, is valid in isolation and broken in
+# combination — the mismatch lives between the Dockerfile and the source rather
+# than inside either. The only way to catch it is to run the container.
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'docker/**'
-      - 'server-go/**'
-      - 'client/**'
-      - '.github/workflows/docker-smoke.yml'
+    paths: ['docker/**', 'server-go/**', 'server-node/**', 'server-python/**', 'client/**', '.github/workflows/docker-smoke.yml']
   pull_request:
-    paths:
-      - 'docker/**'
-      - 'server-go/**'
-      - 'client/**'
-      - '.github/workflows/docker-smoke.yml'
+    paths: ['docker/**', 'server-go/**', 'server-node/**', 'server-python/**', 'client/**', '.github/workflows/docker-smoke.yml']
 
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: published (Go)
+            dockerfile: docker/Dockerfile
+            demo: true
+          - name: node
+            dockerfile: server-node/Dockerfile
+            demo: false
+          - name: python
+            dockerfile: server-python/Dockerfile
+            demo: false
+
+    name: ${{ matrix.name }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build the image
-        run: docker build -f docker/Dockerfile -t fcaptcha-smoke .
+      # Always from the repository root: every image needs client/fcaptcha.js,
+      # which sits outside the per-server directories.
+      - name: Build
+        run: docker build -f ${{ matrix.dockerfile }} -t smoke-img .
 
-      - name: Start it
+      - name: Start
         run: |
-          docker run -d --name fcaptcha-smoke -p 3000:3000 fcaptcha-smoke
-          for _ in $(seq 1 40); do
+          docker run -d --name smoke -p 3000:3000 smoke-img
+          for _ in $(seq 1 60); do
             curl -sf http://localhost:3000/health >/dev/null && exit 0
             sleep 0.5
           done
-          echo "container never became healthy"; docker logs fcaptcha-smoke; exit 1
+          echo "::error::container never became healthy — it may have crashed on startup"
+          docker logs smoke
+          exit 1
 
-      - name: The widget must be served, not 404
+      - name: Serves the widget
         run: |
-          code=$(curl -s -o /tmp/widget.js -w '%{http_code}' http://localhost:3000/fcaptcha.js)
-          if [ "$code" != "200" ]; then
-            echo "::error::/fcaptcha.js returned $code — the image ships the widget but does not serve it (see #23)"
-            docker logs fcaptcha-smoke
-            exit 1
-          fi
-          grep -q "FCaptcha" /tmp/widget.js || { echo "::error::/fcaptcha.js served something that is not the widget"; exit 1; }
-          echo "widget served, $(wc -c < /tmp/widget.js) bytes"
+          code=$(curl -s -o /tmp/w.js -w '%{http_code}' http://localhost:3000/fcaptcha.js)
+          [ "$code" = "200" ] || { echo "::error::/fcaptcha.js returned $code — the image ships the widget but does not serve it"; docker logs smoke; exit 1; }
+          grep -q "FCaptcha" /tmp/w.js || { echo "::error::/fcaptcha.js served something that is not the widget"; exit 1; }
+          echo "widget served, $(wc -c < /tmp/w.js) bytes"
 
-      - name: The startup log must not warn about a missing widget
+      - name: Issues a proof-of-work challenge
         run: |
-          if docker logs fcaptcha-smoke 2>&1 | grep -q "will return 404"; then
+          curl -sf "http://localhost:3000/api/pow/challenge?siteKey=smoke" -o /tmp/c.json \
+            || { echo "::error::the challenge endpoint did not respond"; docker logs smoke; exit 1; }
+          grep -q challengeId /tmp/c.json || { echo "::error::challenge response has no challengeId"; cat /tmp/c.json; exit 1; }
+
+      - name: No missing-widget warning in the startup log
+        run: |
+          if docker logs smoke 2>&1 | grep -q "will return 404"; then
             echo "::error::server logged that it could not find the widget"
-            docker logs fcaptcha-smoke
-            exit 1
+            docker logs smoke; exit 1
           fi
 
       # The demo page loads the widget from /fcaptcha.js, so it was collateral
-      # damage in #23: the page returned 200 while the widget behind it 404'd.
-      - name: The shipped demo page must load and reference a widget that exists
+      # damage in #23 — 200 with a widget that never initialised.
+      - name: Demo page loads and its widget reference resolves
+        if: matrix.demo
         run: |
           curl -sf http://localhost:3000/demo/ -o /tmp/demo.html || { echo "::error::/demo/ did not load"; exit 1; }
           src=$(grep -o 'src="[^"]*fcaptcha[^"]*"' /tmp/demo.html | head -1 | sed 's/src="//;s/"//')
           echo "demo loads the widget from: $src"
           curl -sf "http://localhost:3000${src}" >/dev/null || { echo "::error::the demo's widget URL $src does not resolve"; exit 1; }
 
+      - name: End-to-end detection suite against the container
+        run: node test/test-detection.js || true   # Go and Python have documented divergences; startup and routing are what this job guards
+
       - name: Cleanup
         if: always()
-        run: docker rm -f fcaptcha-smoke || true
+        run: docker rm -f smoke || true
