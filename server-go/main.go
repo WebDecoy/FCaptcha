@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"log"
@@ -179,6 +180,10 @@ func main() {
 	siteKeys := SiteKeyGuardFromEnv()
 	log.Printf("site keys: %s", siteKeys.Describe())
 
+	// Holds a JA4 fingerprint per live connection, populated during the TLS
+	// handshake. Stays empty unless this process terminates TLS — see ja4.go.
+	ja4s := newJA4Store(maxTrackedJA4Conns)
+
 	// Middleware
 	//
 	// Deliberately no middleware.RealIP: it overwrites r.RemoteAddr from
@@ -221,8 +226,8 @@ func main() {
 
 	// Routes
 	r.Get("/health", healthHandler)
-	r.Post("/api/verify", verifyHandler(engine, proxyTrust, siteKeys))
-	r.Post("/api/score", invisibleScoreHandler(engine, proxyTrust, siteKeys))
+	r.Post("/api/verify", verifyHandler(engine, proxyTrust, siteKeys, ja4s))
+	r.Post("/api/score", invisibleScoreHandler(engine, proxyTrust, siteKeys, ja4s))
 	r.Post("/api/token/verify", tokenVerifyHandler(engine, proxyTrust))
 	r.Get("/api/pow/challenge", powChallengeHandler(engine, proxyTrust, siteKeys))
 	r.Get("/api/challenge", challengeHandler(engine))
@@ -252,10 +257,39 @@ func main() {
 		}()
 	}
 
+	// Optional direct TLS termination, off by default.
+	//
+	// Set FCAPTCHA_TLS_CERT and FCAPTCHA_TLS_KEY to have this process terminate
+	// TLS itself, which is the only arrangement where a JA4 fingerprint can be
+	// computed here — the ClientHello is consumed by whoever completes the
+	// handshake. Behind Railway, Cloudflare or nginx that is not us, and the
+	// TRUSTED_JA4_HEADERS path remains the way to get a fingerprint.
+	certFile := os.Getenv("FCAPTCHA_TLS_CERT")
+	keyFile := os.Getenv("FCAPTCHA_TLS_KEY")
+	serveTLS := certFile != "" && keyFile != ""
+
+	if serveTLS {
+		srv.TLSConfig = TLSConfigWithJA4(&tls.Config{MinVersion: tls.VersionTLS12}, ja4s)
+		log.Printf("native JA4: on (terminating TLS locally)")
+	} else {
+		trustedJA4 := GetTrustedJA4HeaderNames()
+		if len(trustedJA4) > 0 {
+			log.Printf("native JA4: off (not terminating TLS); reading %s from trusted proxies", strings.Join(trustedJA4, ", "))
+		} else {
+			log.Printf("native JA4: off (not terminating TLS, and no TRUSTED_JA4_HEADERS set) — no TLS fingerprint available")
+		}
+	}
+
 	// Graceful shutdown
 	go func() {
 		log.Printf("FCaptcha server starting on port %s", port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		var err error
+		if serveTLS {
+			err = srv.ListenAndServeTLS(certFile, keyFile)
+		} else {
+			err = srv.ListenAndServe()
+		}
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
 	}()
@@ -340,7 +374,7 @@ func webBotAuthDetections(engine *ScoringEngine, r *http.Request) []DetectionRes
 	return engine.CheckWebBotAuth(ctx, webbotauth.RequestFromHTTP(r, webbotauth.WithScheme(scheme)))
 }
 
-func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGuard) http.HandlerFunc {
+func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGuard, ja4s *ja4Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req VerifyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -414,7 +448,7 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 		// passed as preDetections so the verified/forged verdict is scored.
 		webBotAuth := webBotAuthDetections(engine, r)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, peerTrusted, webBotAuth, req.PowSolution)
+		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, req.PowSolution)
 
 		// Add signal commitment detections to results
 		if len(extraDetections) > 0 {
@@ -459,7 +493,7 @@ type InvisibleScoreRequest struct {
 	PowTiming   *PowTiming             `json:"powTiming,omitempty"`
 }
 
-func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGuard) http.HandlerFunc {
+func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGuard, ja4s *ja4Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req InvisibleScoreRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -524,7 +558,7 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 		// Web Bot Auth: verify signed-agent requests (see verifyHandler).
 		webBotAuth := webBotAuthDetections(engine, r)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, peerTrusted, webBotAuth, req.PowSolution)
+		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, req.PowSolution)
 		if len(scoreExtraDetections) > 0 {
 			result.Detections = append(scoreExtraDetections, result.Detections...)
 		}
