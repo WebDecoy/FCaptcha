@@ -46,5 +46,9 @@ docs/
 # Bench harness: replay output and captured-corpus scratch. The corpus itself
 # (bench/corpus/) IS committed — it is the measurement baseline, and a benchmark
 # whose inputs are not in the repo cannot be reproduced or argued with.
-bench/*.json
+#
+# Narrow, because `bench/*.json` also swallowed package.json: the harness could
+# not be installed from a fresh clone, and CI could not run anything through npm
+# in that directory.
+bench/*results*.json
 bench/test-results/

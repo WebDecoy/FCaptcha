@@ -16,15 +16,12 @@ WORKDIR /app/server-python
 COPY server-python/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Every module server.py imports. Copying the entrypoint alone leaves the image
-# unable to start, and nothing in a Dockerfile review makes that visible — keep
-# this list in step with server.py's imports.
-COPY server-python/server.py \
-     server-python/detection.py \
-     server-python/clientip.py \
-     server-python/sitekeys.py \
-     server-python/inputforensics.py \
-     ./
+# All of it, rather than a list of modules to keep in step with server.py's
+# imports. That list was the defect: a module added to the server and not to the
+# Dockerfile produces an image that crashes on startup, which no Dockerfile
+# review makes visible and which the previous instruction here did not prevent.
+COPY server-python/*.py ./
+RUN rm -f test_*.py
 
 # Sibling of server-python/, so ../client/fcaptcha.js resolves.
 COPY client/fcaptcha.js /app/client/fcaptcha.js
