@@ -95,6 +95,16 @@ async function solve(challenge, signalsHash, opts = {}) {
     }
   }
 
+  // Settle up for the final partial batch.
+  //
+  // Difficulty-4 solve lengths are geometric with a mean of 65536, so roughly 3%
+  // of solves finish inside the first batch and never reach the pacing check at
+  // all. Those came back at raw Node speed and the server flagged them "PoW
+  // completed impossibly fast" — 4 of 99 human samples in CI, which is precisely
+  // the tail probability. A per-batch check alone leaves that tail unpaced.
+  const owedMs = (nonce / hashRate) * 1000 - Number(process.hrtime.bigint() - started) / 1e6;
+  if (owedMs > 0) await sleep(owedMs);
+
   const duration = Number(process.hrtime.bigint() - started) / 1e6;
   return {
     challengeId: challenge.challengeId,
