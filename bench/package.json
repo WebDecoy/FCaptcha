@@ -7,7 +7,7 @@
     "bench": "node run-bench.js",
     "capture": "node capture/record.js",
     "install-browsers": "playwright install chromium",
-    "test": "node --test \"lib/*.test.js\""
+    "test": "node --test lib/*.test.js"
   },
   "devDependencies": {
     "playwright": "^1.49.0"
