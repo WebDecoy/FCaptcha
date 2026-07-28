@@ -31,7 +31,7 @@ from suspicion import (
 )
 
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
-app = FastAPI(title="FCaptcha", version="1.20.0")
+app = FastAPI(title="FCaptcha", version="1.21.0")
 
 # Which peers may speak for another client via X-Forwarded-For / X-Real-IP and
 # the TLS-fingerprint headers. See clientip.py.
