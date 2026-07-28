@@ -27,18 +27,14 @@ import (
 // FCAPTCHA_CLIENT_PATH wins; otherwise probe the layouts this binary actually
 // ships in.
 //
-// The `static/` entries are load-bearing and were missing until #23. The Docker
-// image copies the widget to /app/static/fcaptcha.js — that has been its layout
-// since the image was introduced, and /demo/ is served from ./static/demo right
-// below. This function arrived three months later probing only `client/`, with a
-// comment asserting the image copied to /app/client/fcaptcha.js. It did not.
+// The `static/` entry is load-bearing: docker/Dockerfile copies the widget to
+// /app/static/fcaptcha.js, and /demo/ is served from ./static/demo just below.
+// This list and that Dockerfile have to agree, and a mismatch is silent — the
+// widget endpoint simply returns 404 while the file sits in the image.
 //
-// The file was present in every published image the whole time; nothing looked
-// for it. /fcaptcha.js returned 404, and because the shipped demo page loads the
-// widget from that path, the demo in the image never initialised either.
-//
-// docker/Dockerfile and this list have to agree. There is a CI job that builds
-// the image and fetches /fcaptcha.js so they cannot drift apart again in silence.
+// docker-smoke.yml builds each image and fetches /fcaptcha.js so the two cannot
+// drift apart unnoticed. If you move the widget in a Dockerfile, add its new
+// location here.
 func resolveClientPath() string {
 	if p := os.Getenv("FCAPTCHA_CLIENT_PATH"); p != "" {
 		return p
