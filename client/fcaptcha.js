@@ -1055,14 +1055,36 @@
     _recordSubmit(_e) {
       const now = performance.now();
 
-      // Check what triggered the submit
-      const lastEvents = this.eventLog.slice(-5);
-      const recentKeydown = lastEvents.find(ev => ev.type === 'keydown' && now - ev.time < 100);
-      const recentMousedown = lastEvents.find(ev => ev.type === 'mousedown' && now - ev.time < 100);
+      // What gesture triggered this submit?
+      //
+      // Two things were wrong here and both punished real people.
+      //
+      // `touchstart` is recorded in the event log but was never consulted — only
+      // keydown and mousedown were. A tap produces a compatibility mousedown, but
+      // it can lag or be suppressed, so a genuine mobile submit was liable to be
+      // classified programmatic. Same shape as the touch exemption bug fixed in
+      // v1.18.0, and observed on real demo traffic.
+      //
+      // The window was also 100ms, measured from the gesture to the submit event.
+      // A click has to travel mousedown -> mouseup -> click -> submit, through any
+      // validation the page does, and on a loaded or low-end device that is easily
+      // more than 100ms. Widening it costs little: an agent that dispatches a
+      // synthetic gesture before submitting evades either way, so the check really
+      // only separates "a gesture happened" from "nothing happened at all".
+      //
+      // Selecting by time rather than by the last five entries, because scroll
+      // events share this log and could push the real trigger out of the window.
+      const RECENT_GESTURE_MS = 500;
+      const recent = this.eventLog.filter(ev => now - ev.time < RECENT_GESTURE_MS);
+      const recentKeydown = recent.find(ev => ev.type === 'keydown');
+      const recentMousedown = recent.find(ev => ev.type === 'mousedown');
+      const recentTouch = recent.find(ev => ev.type === 'touchstart');
 
       let method = 'unknown';
       if (recentKeydown) {
         method = 'keyboard'; // Enter key or similar
+      } else if (recentTouch) {
+        method = 'touch'; // tap on a phone or tablet
       } else if (recentMousedown) {
         method = 'mouse'; // Mouse click
       } else if (!this.submitData) {
@@ -1079,7 +1101,7 @@
           timeSinceFirstInteraction: this.firstInteractionTime ? now - this.firstInteractionTime : null,
           timeSinceLastInteraction: this.lastInteractionTime ? now - this.lastInteractionTime : null,
           eventsBeforeSubmit: this.totalEvents,
-          hadTriggerEvent: method === 'keyboard' || method === 'mouse'
+          hadTriggerEvent: method === 'keyboard' || method === 'mouse' || method === 'touch'
         };
       }
     }
@@ -1322,21 +1344,32 @@
         );
         if (pwKeys.length > 0) signals.push('playwright_globals');
 
-        // Check if navigator.webdriver was deleted or reconfigured
+        // Check if navigator.webdriver was deleted.
+        //
+        // Deletion is deliberate tampering: the property is defined on
+        // Navigator.prototype in every current browser, so its absence cannot
+        // happen by accident.
+        //
+        // What is NOT checked here any more is whether the descriptor is
+        // *configurable*. That was reported as `webdriver_configurable` and
+        // treated as an automation artifact, and it is not one — WebIDL defines
+        // the attribute as configurable, so an ordinary browser reports exactly
+        // what a patched one does. Measured in Chrome 150 with
+        // navigator.webdriver === false: descriptor present, configurable true.
         const proto = Object.getPrototypeOf(navigator);
         const desc = Object.getOwnPropertyDescriptor(proto, 'webdriver');
         if (!desc) {
-          // Property was deleted from prototype — browsers always have it
           signals.push('webdriver_deleted');
-        } else if (desc.configurable !== false) {
-          signals.push('webdriver_configurable');
         }
 
-        // Check for missing chrome.runtime in Chrome UA
-        const isChrome = /Chrome\//.test(navigator.userAgent) && !/Edg\//.test(navigator.userAgent);
-        if (isChrome && window.chrome && !window.chrome.runtime) {
-          signals.push('chrome_runtime_missing');
-        }
+        // chrome.runtime is NOT checked either, for the same reason. It is only
+        // exposed to a page when an extension declares externally_connectable
+        // matching it, so on an ordinary site an ordinary Chrome has no
+        // chrome.runtime at all. Measured in Chrome 150: window.chrome present,
+        // chrome.runtime absent, on a page with no such extension.
+        //
+        // Both checks fired together on genuine browsers, which is the worst
+        // shape a signal can have: common, correlated, and confidently wrong.
 
         return { detected: signals.length > 0, signals };
       } catch (e) {

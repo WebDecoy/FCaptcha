@@ -1678,6 +1678,111 @@ async function testForwardingHeaderTrust() {
   }
 }
 
+async function testGenuineBrowserArtifacts() {
+  log('\n[Genuine-Browser Artifact Signals]', colors.cyan);
+
+  // Measured in a real Chrome 150 with navigator.webdriver === false: the
+  // webdriver descriptor is present and configurable, and chrome.runtime is
+  // absent on any page without a matching externally_connectable extension.
+  // Both were being reported as Playwright artifacts and scored, so an ordinary
+  // Chrome visitor carried a headless-category score of 0.771.
+  const realChrome = await makeRequest('/api/verify', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9', 'Accept-Encoding': 'gzip, deflate, br',
+    },
+    body: {
+      siteKey: 'test',
+      signals: {
+        behavioral: { totalPoints: 40, trajectoryLength: 320, microTremorScore: 0.7, approachPoints: 18, directionChanges: 15, overshootCorrections: 2, velocityVariance: 0.08 },
+        environmental: {
+          playwright: { detected: true, signals: ['webdriver_configurable', 'chrome_runtime_missing'] },
+          webdriver: false,
+          automationFlags: { chrome: true, plugins: 5, platform: 'MacIntel' },
+          navigator: { platform: 'MacIntel' }
+        }
+      }
+    }
+  });
+  assertDetection(realChrome, 'headless', false, "A genuine Chrome's signals raise no headless detection");
+  assertScore(realChrome, 0, 0.3, 'A genuine Chrome is allowed');
+
+  // The signals that DO mean something must still work. Deleting the webdriver
+  // property is deliberate tampering — no shipped browser omits it.
+  const tampered = await makeRequest('/api/verify', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/150.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    body: {
+      siteKey: 'test',
+      signals: {
+        behavioral: { totalPoints: 40, trajectoryLength: 320, microTremorScore: 0.7, approachPoints: 18 },
+        environmental: {
+          playwright: { detected: true, signals: ['webdriver_deleted', 'playwright_globals'] },
+          automationFlags: { chrome: true, plugins: 5, platform: 'MacIntel' }
+        }
+      }
+    }
+  });
+  assertDetection(tampered, 'headless', true, 'Deleted webdriver and Playwright globals are still detected');
+}
+
+async function testTouchSubmitIsNotProgrammatic() {
+  log('\n[Touch Form Submission]', colors.cyan);
+
+  // A tap produces a compatibility mousedown that can lag or be suppressed, and
+  // the classifier previously consulted only keydown and mousedown within 100ms.
+  // A genuine mobile submit was therefore liable to be read as programmatic.
+  const mobileSignals = (method) => ({
+    siteKey: 'test',
+    signals: {
+      behavioral: {
+        totalPoints: 0, trajectoryLength: 0, approachPoints: 0,
+        touchEvents: 1, touchTotalPoints: 1, pointerHasNonMouseType: true,
+        keyEvents: 0, interactionDuration: 4000
+      },
+      environmental: {
+        automationFlags: { platform: 'iPhone', chrome: false, plugins: 0 },
+        navigator: { platform: 'iPhone', maxTouchPoints: 5 }
+      },
+      formAnalysis: {
+        pageLoadToFirstInteraction: 2200,
+        submit: { method, timeSincePageLoad: 9000, eventsBeforeSubmit: 12, hadTriggerEvent: method !== 'programmatic_click' }
+      }
+    }
+  });
+  const mobileHeaders = {
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+    'Accept-Language': 'en-US,en;q=0.9',
+  };
+
+  const tapped = await makeRequest('/api/verify', { headers: mobileHeaders, body: mobileSignals('touch') });
+  const tappedFlagged = (tapped.detections || []).some(d => /submitted programmatically/i.test(d.reason));
+  if (!tappedFlagged) {
+    passed++;
+    results.push({ name: 'A tap-submitted form is not flagged as programmatic', status: 'PASS' });
+    log('  ✓ A tap-submitted form is not flagged as programmatic', colors.green);
+  } else {
+    failed++;
+    results.push({ name: 'A tap-submitted form is not flagged as programmatic', status: 'FAIL' });
+    log('  ✗ A tap-submitted form is not flagged as programmatic', colors.red);
+  }
+
+  // The check still has to work: a real programmatic submit is still caught.
+  const scripted = await makeRequest('/api/verify', { headers: mobileHeaders, body: mobileSignals('programmatic_click') });
+  const scriptedFlagged = (scripted.detections || []).some(d => /submitted programmatically/i.test(d.reason));
+  if (scriptedFlagged) {
+    passed++;
+    results.push({ name: 'A programmatic submit is still flagged', status: 'PASS' });
+    log('  ✓ A programmatic submit is still flagged', colors.green);
+  } else {
+    failed++;
+    results.push({ name: 'A programmatic submit is still flagged', status: 'FAIL' });
+    log('  ✗ A programmatic submit is still flagged', colors.red);
+  }
+}
+
 async function testMobileSensorDetection() {
   log('\n[Mobile Sensor & Touch Authenticity]', colors.cyan);
 
@@ -2270,6 +2375,8 @@ async function runTests() {
   await testTightenedExemptions();
   await testAccessibilityFalsePositives();
   await testForwardingHeaderTrust();
+  await testGenuineBrowserArtifacts();
+  await testTouchSubmitIsNotProgrammatic();
   await testMobileSensorDetection();
   await testProofOfWork();
   await testSignalCommitment();

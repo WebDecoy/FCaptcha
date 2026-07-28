@@ -675,12 +675,30 @@ def detect_headless(signals: Dict, user_agent: str) -> List[Detection]:
             "webdriver_configurable": 0.7,
             "chrome_runtime_missing": 0.6,
         }
+        # Signals a genuine browser also produces, and therefore not evidence of
+        # anything. Ignored here as well as in the client, because clients already
+        # deployed will keep sending them.
+        #
+        # Measured in Chrome 150 with navigator.webdriver === False:
+        #   webdriver_configurable  descriptor present and configurable - WebIDL
+        #                           defines the attribute that way
+        #   chrome_runtime_missing  window.chrome present, chrome.runtime absent,
+        #                           on any page without a matching
+        #                           externally_connectable extension
+        #
+        # They fired together on ordinary Chrome, so they cannot corroborate each
+        # other either.
+        inert_signals = {"webdriver_configurable", "chrome_runtime_missing"}
+
         for sig in playwright.get("signals", []):
+            if sig in inert_signals:
+                continue
             sig_score = score_map.get(sig, 0.7)
             detections.append(Detection(
                 ThreatCategory.HEADLESS, sig_score, 0.8,
                 f"Playwright artifact detected: {sig}"
             ))
+
 
     return detections
 
