@@ -9,62 +9,64 @@
       "behavioral": {
         "totalPoints": 40,
         "trajectoryLength": 473.2308384152996,
-        "avgVelocity": 0.47285365344058944,
-        "velocityVariance": 0.1934396997051392,
-        "avgAcceleration": 0.0050536440075737345,
-        "accelerationChanges": 22,
+        "avgVelocity": 0.5158899429089463,
+        "velocityVariance": 0.22547978249826933,
+        "avgAcceleration": 0.0056684383612041625,
+        "accelerationChanges": 20,
         "microTremorScore": 1,
         "straightLineRatio": 0.2894736842105263,
         "microMovements": 6,
         "directionChanges": 16,
         "eventDeltas": [
-          1392.5,
-          314.30000001192093,
-          15.5,
-          25.599999994039536,
-          25,
-          15.400000005960464,
-          26.5,
-          24.80000001192093,
-          24.5,
-          25.5,
-          24.899999976158142,
-          25.5,
-          15.700000017881393,
-          7.9000000059604645,
-          19.69999998807907,
-          31.400000005960464,
+          1401.800000011921,
+          314.89999997615814,
+          22.5,
           24.900000005960464,
-          26.599999994039536,
-          11.5,
-          20.19999998807907,
-          25,
-          25,
-          16.5,
-          34,
-          16.200000017881393,
-          25.099999994039536,
-          16.599999994039536,
-          33.30000001192093,
-          16.599999994039536,
-          25.099999994039536,
-          16.599999994039536,
-          25,
-          33.30000001192093,
-          25.099999994039536,
           16.900000005960464,
-          23.400000005960464,
-          34.69999998807907,
+          15.699999988079071,
+          26.200000017881393,
+          24.599999994039536,
+          24.80000001192093,
+          25,
+          25,
+          25.399999976158142,
+          14.5,
+          7.200000017881393,
+          19.599999994039536,
           23.69999998807907,
-          281.80000001192093
+          17.80000001192093,
+          25.69999998807907,
+          12,
+          20.900000005960464,
+          25,
+          15.900000005960464,
+          16.599999994039536,
+          25.80000001192093,
+          16.5,
+          25,
+          16.599999994039536,
+          33.400000005960464,
+          16.599999994039536,
+          16.69999998807907,
+          16.600000023841858,
+          25.099999994039536,
+          33.29999998211861,
+          24.900000005960464,
+          15.800000011920929,
+          17.69999998807907,
+          24.900000005960464,
+          16.69999998807907,
+          279.40000000596046
         ],
-        "eventDeltaVariance": 49609.594096286855,
-        "mouseEventRate": 14.225762856472869,
+        "eventDeltaVariance": 50387.641460127816,
+        "mouseEventRate": 14.536996656522257,
         "scrollEvents": 0,
         "scrollMorphology": {
           "gestures": 0,
           "instantGestures": 0,
           "instantRatio": 0,
+          "maxStep": 0,
+          "distancePerEvent": 0,
           "samples": 0
         },
         "keyEvents": 4,
@@ -74,11 +76,11 @@
           "x": 63,
           "y": 348,
           "button": 0,
-          "downTime": 4456.199999988079,
-          "upTime": 4456.4000000059605,
+          "downTime": 4395.799999982119,
+          "upTime": 4396,
           "holdDuration": 0.20000001788139343
         },
-        "interactionDuration": 4447,
+        "interactionDuration": 4386,
         "inputForensics": {
           "coalescedSamples": 40,
           "coalescedEmptyRatio": 1,
@@ -88,7 +90,7 @@
           "pointerMoveZeroRatio": 0,
           "cadenceEvents": 89,
           "cadenceSilentGaps": 0,
-          "cadenceGapCV": 3.7294159394223256,
+          "cadenceGapCV": 3.8196811542812217,
           "cadenceSilentRatio": 0,
           "teleportClicks": 0
         },
@@ -120,7 +122,7 @@
         "clickPrecision": 8.363097885951115,
         "explorationRatio": 0.9184437556829036,
         "overshootCorrections": 1,
-        "hoverTime": 305.5,
+        "hoverTime": 296.09999999403954,
         "approachDirectness": 0.38640354070644745,
         "approachPoints": 20
       },
@@ -226,7 +228,7 @@
           "timezoneOffset": 300
         },
         "jsExecutionTime": {
-          "mathOps": 0,
+          "mathOps": 0.09999999403953552,
           "arrayOps": 0,
           "arrayLen": 1000,
           "stringOps": 0
@@ -292,8 +294,8 @@
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 10.189777777777737,
-          "frameTimeVariance": 28.04510261728294,
+          "avgFrameTime": 10.185999999999998,
+          "frameTimeVariance": 27.551034666667203,
           "frames": 10
         },
         "speechInfo": {
@@ -341,21 +343,21 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 1634.5,
-        "firstInteractionToClick": 2812.2000000178814,
-        "totalSessionTime": 4994.800000011921,
+        "pageLoadToFirstInteraction": 1633,
+        "firstInteractionToClick": 2752,
+        "totalSessionTime": 4933.5,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
           "serverResponse": 1,
-          "domLoad": 11,
-          "fullLoad": 11
+          "domLoad": 12,
+          "fullLoad": 12
         },
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 1633.9000000059605,
-        "pageLoadToNow": 4994.0999999940395,
+        "pageLoadToFirstInteraction": 1632.7000000178814,
+        "pageLoadToNow": 4932.800000011921,
         "totalInteractionEvents": 4,
         "submit": {
           "method": "none",
@@ -365,15 +367,15 @@
         "textareaKeyboard": {
           "message": {
             "keyCount": 2,
-            "avgKeyInterval": 0.800000011920929,
+            "avgKeyInterval": 2.4000000059604645,
             "keyIntervalVariance": 0,
             "keydownUpRatio": 1,
             "pasteCount": 1,
             "intervals": [
-              0.800000011920929
+              2.4000000059604645
             ],
             "dwellTimes": [
-              2.5999999940395355
+              5.5
             ],
             "rollovers": 0
           }
@@ -391,9 +393,9 @@
         }
       },
       "meta": {
-        "widgetId": "fcaptcha_gh07mijcg",
+        "widgetId": "fcaptcha_tdn03oyhq",
         "siteKey": "bench-capture",
-        "timestamp": 1785199877846,
+        "timestamp": 1785251199873,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

@@ -33,7 +33,7 @@
         "touchEvents": 0,
         "focusEvents": 0,
         "clickData": null,
-        "interactionDuration": 82,
+        "interactionDuration": 80,
         "inputForensics": {
           "coalescedSamples": 0,
           "coalescedEmptyRatio": 0,
@@ -118,10 +118,8 @@
           "consoleAttached": true
         },
         "playwright": {
-          "detected": true,
-          "signals": [
-            "webdriver_configurable"
-          ]
+          "detected": false,
+          "signals": []
         },
         "stealthArtifacts": {
           "signals": []
@@ -179,7 +177,7 @@
           "timezoneOffset": 300
         },
         "jsExecutionTime": {
-          "mathOps": 0,
+          "mathOps": 0.19999998807907104,
           "arrayOps": 0,
           "arrayLen": 1000,
           "stringOps": 0
@@ -245,8 +243,8 @@
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 10.077777777777776,
-          "frameTimeVariance": 28.315061728395055,
+          "avgFrameTime": 10.177777777777777,
+          "frameTimeVariance": 27.463950617283952,
           "frames": 10
         },
         "speechInfo": {
@@ -296,19 +294,19 @@
       "temporal": {
         "pageLoadToFirstInteraction": null,
         "firstInteractionToClick": null,
-        "totalSessionTime": 609.9000000059605,
+        "totalSessionTime": 607.3999999761581,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
           "serverResponse": 1,
-          "domLoad": 9,
-          "fullLoad": 9
+          "domLoad": 10,
+          "fullLoad": 10
         },
         "pow": null
       },
       "formAnalysis": {
         "pageLoadToFirstInteraction": null,
-        "pageLoadToNow": 609.4000000059605,
+        "pageLoadToNow": 606.7000000178814,
         "totalInteractionEvents": 0,
         "submit": {
           "method": "none",
@@ -339,9 +337,9 @@
         }
       },
       "meta": {
-        "widgetId": "fcaptcha_1goyzs8ol",
+        "widgetId": "fcaptcha_ges9r4nh3",
         "siteKey": "bench-capture",
-        "timestamp": 1785201414830,
+        "timestamp": 1785251215279,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

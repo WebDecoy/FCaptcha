@@ -21,11 +21,19 @@
         "eventDeltaVariance": 0,
         "mouseEventRate": 0,
         "scrollEvents": 0,
+        "scrollMorphology": {
+          "gestures": 0,
+          "instantGestures": 0,
+          "instantRatio": 0,
+          "maxStep": 0,
+          "distancePerEvent": 0,
+          "samples": 0
+        },
         "keyEvents": 0,
         "touchEvents": 0,
         "focusEvents": 0,
         "clickData": null,
-        "interactionDuration": 101,
+        "interactionDuration": 100,
         "inputForensics": {
           "coalescedSamples": 0,
           "coalescedEmptyRatio": 0,
@@ -110,10 +118,8 @@
           "consoleAttached": true
         },
         "playwright": {
-          "detected": true,
-          "signals": [
-            "webdriver_configurable"
-          ]
+          "detected": false,
+          "signals": []
         },
         "stealthArtifacts": {
           "signals": []
@@ -171,7 +177,7 @@
           "timezoneOffset": 300
         },
         "jsExecutionTime": {
-          "mathOps": 0.09999999403953552,
+          "mathOps": 0.10000002384185791,
           "arrayOps": 0,
           "arrayLen": 1000,
           "stringOps": 0
@@ -188,7 +194,7 @@
           "supported": true
         },
         "domRectFingerprint": {
-          "hash": "-354d91f8",
+          "hash": "7a5d03d2",
           "rectAWidth": 180.25,
           "rectBWidth": 111.453125,
           "rangeWidth": 180.25,
@@ -232,11 +238,13 @@
           "hasSegoeUI": false,
           "hasSFPro": false,
           "hasDejaVuSans": false,
+          "hasCalibri": false,
+          "hasMenlo": true,
           "supported": true
         },
         "rafConsistency": {
           "avgFrameTime": 10.18888888888889,
-          "frameTimeVariance": 27.729876543209937,
+          "frameTimeVariance": 27.423209876543158,
           "frames": 10
         },
         "speechInfo": {
@@ -286,31 +294,42 @@
       "temporal": {
         "pageLoadToFirstInteraction": null,
         "firstInteractionToClick": null,
-        "totalSessionTime": 632.6000000238419,
+        "totalSessionTime": 631.0999999940395,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
           "serverResponse": 0,
-          "domLoad": 10,
-          "fullLoad": 10
+          "domLoad": 12,
+          "fullLoad": 13
         },
         "pow": null
       },
       "formAnalysis": {
         "pageLoadToFirstInteraction": null,
-        "pageLoadToNow": 631.9000000059605,
+        "pageLoadToNow": 630.3999999761581,
         "totalInteractionEvents": 0,
         "submit": {
           "method": "none",
           "eventsBeforeSubmit": 0,
           "hadTriggerEvent": false
         },
-        "textareaKeyboard": null
+        "textareaKeyboard": null,
+        "typing": {
+          "pasteShortcutMeta": 0,
+          "pasteShortcutControl": 0,
+          "selectAllShortcuts": 0,
+          "pasteEvents": 0,
+          "pasteInputs": 0,
+          "inputEvents": 0,
+          "inputsWithoutKeys": 0,
+          "inputsWithoutInputType": 0,
+          "keydownsBeforeInput": 0
+        }
       },
       "meta": {
-        "widgetId": "fcaptcha_0td2hrlp6",
+        "widgetId": "fcaptcha_f0y5oa2rm",
         "siteKey": "bench-capture",
-        "timestamp": 1785180289685,
+        "timestamp": 1785251226130,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

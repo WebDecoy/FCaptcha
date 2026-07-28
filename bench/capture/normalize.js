@@ -50,15 +50,25 @@
 function normalizeEnvironment() {
   const proto = Object.getPrototypeOf(navigator);
 
-  // navigator.webdriver: true under automation, false otherwise. The client also
-  // checks the property descriptor — deleting it entirely is itself a tell
-  // ("webdriver_deleted"), and leaving it configurable is another
-  // ("webdriver_configurable"), so redefine it the way a real browser has it:
-  // present, false, and non-configurable.
+  // navigator.webdriver: true under automation, false otherwise. Restore the
+  // value, and nothing else.
+  //
+  // This used to also pin the descriptor non-configurable, on the belief that a
+  // real browser reports it that way. It does not — WebIDL defines the attribute
+  // as configurable and Chrome 150 reports `configurable: true` with
+  // navigator.webdriver false. Pinning it made the panel *more* pristine than any
+  // real browser, and because the client had a `webdriver_configurable` check, it
+  // meant no human persona could ever trip that check. The bench was structurally
+  // unable to disagree about it, and duly reported a 0% false-positive rate for a
+  // signal that fires on every genuine Chrome.
+  //
+  // The rule this cost us: normalization must reproduce what a real browser
+  // reports, not an idealised version of it. Anything pinned here is a signal the
+  // panel cannot see, so pin as little as possible and pin it to measured values.
   try {
     Object.defineProperty(proto, 'webdriver', {
       get: () => false,
-      configurable: false,
+      configurable: true,
       enumerable: true,
     });
   } catch (_) {
@@ -94,17 +104,16 @@ function normalizeEnvironment() {
     /* ignore */
   }
 
-  // window.chrome and chrome.runtime exist in a real Chrome and are absent in
-  // headless. Their absence under a Chrome user agent is a direct contradiction.
+  // window.chrome exists in a real Chrome and is absent in headless, so restore
+  // the object — but NOT chrome.runtime.
+  //
+  // chrome.runtime is only exposed to a page when an extension declares
+  // externally_connectable matching it. Chrome 150 on an ordinary site has none,
+  // so adding it here was another way of making the panel unrealistically clean,
+  // and it hid the `chrome_runtime_missing` check the same way the descriptor
+  // pinning hid `webdriver_configurable`.
   if (!window.chrome) {
     window.chrome = {};
-  }
-  if (!window.chrome.runtime) {
-    window.chrome.runtime = {
-      connect: () => ({ onMessage: { addListener: () => {} }, postMessage: () => {} }),
-      sendMessage: () => {},
-      id: undefined,
-    };
   }
   if (!window.chrome.csi) window.chrome.csi = () => ({});
   if (!window.chrome.loadTimes) window.chrome.loadTimes = () => ({});
