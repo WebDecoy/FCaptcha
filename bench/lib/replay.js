@@ -27,6 +27,42 @@
 const crypto = require('crypto');
 const { buildVerifyBody } = require('./pow');
 
+/**
+ * Gives each sample its own device fingerprint.
+ *
+ * Every capture in the corpus came off one physical machine, so they all carry
+ * the same canvas hash and WebGL renderer. Replayed with a distinct client IP
+ * each — which they need, see below — that reads to the server as one device
+ * arriving from fourteen addresses, which is a botnet signature the harness
+ * manufactured for itself. It duly fired "Fingerprint seen from many IPs" on
+ * the human panel.
+ *
+ * Fourteen personas stand for fourteen people, and fourteen people have fourteen
+ * laptops. The server builds its fingerprint from the canvas hash, the WebGL
+ * renderer, the platform and the core count; varying the canvas hash per sample
+ * is enough to separate them while leaving every other environmental signal
+ * exactly as captured.
+ */
+function distinguishDevice(signals, id) {
+  const canvas = signals.environmental && signals.environmental.canvasHash;
+  if (!canvas) return signals;
+
+  return {
+    ...signals,
+    environmental: {
+      ...signals.environmental,
+      canvasHash: {
+        ...canvas,
+        hash: crypto
+          .createHash('sha256')
+          .update(`device:${id}:${canvas.hash || ''}`)
+          .digest('hex')
+          .slice(0, 32),
+      },
+    },
+  };
+}
+
 /** RFC 5737 TEST-NET-2 and TEST-NET-3: reserved, routable nowhere, in no CIDR list. */
 const NEUTRAL_PREFIXES = ['198.51.100', '203.0.113'];
 
@@ -62,7 +98,7 @@ async function replaySample(serverUrl, sample, opts = {}) {
     const { body, difficulty } = await buildVerifyBody(
       serverUrl,
       siteKey,
-      sample.signals,
+      distinguishDevice(sample.signals, sample.id),
       headers
     );
 
@@ -116,4 +152,4 @@ async function replayCorpus(serverUrl, samples, opts = {}) {
   return results;
 }
 
-module.exports = { DEFAULT_UA, neutralIpFor, replayCorpus, replaySample };
+module.exports = { DEFAULT_UA, distinguishDevice, neutralIpFor, replayCorpus, replaySample };

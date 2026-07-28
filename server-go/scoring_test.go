@@ -575,7 +575,7 @@ func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {
 			},
 		},
 	}
-	if got := e.AnalyzeFormInteraction(filled); !hasReasonContaining(got, "filled programmatically") {
+	if got := e.AnalyzeFormInteraction(filled, false); !hasReasonContaining(got, "filled programmatically") {
 		t.Errorf("expected programmatic-fill detection, got %+v", got)
 	}
 
@@ -588,7 +588,7 @@ func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {
 			},
 		},
 	}
-	if got := e.AnalyzeFormInteraction(typed); hasReasonContaining(got, "filled programmatically") {
+	if got := e.AnalyzeFormInteraction(typed, false); hasReasonContaining(got, "filled programmatically") {
 		t.Errorf("typed content should not trip programmatic-fill, got %+v", got)
 	}
 }

@@ -1,10 +1,10 @@
 [
   {
-    "id": "agent/teleport-click/0000",
+    "id": "agent/programmatic-fill/0000",
     "label": "agent",
-    "group": "local-cdp-agent",
+    "group": "dom-a11y-reader",
     "provenance": "captured",
-    "notes": "the default Playwright/Puppeteer click: pointer jumps straight to the target with no intervening movement. The canonical automation signature.",
+    "notes": "text assigned straight into the DOM with a dispatched input event — the bare-change-event shape the PRD attributes to in-browser agents. No keystrokes at all, and the synthetic event carries no inputType.",
     "signals": {
       "behavioral": {
         "totalPoints": 0,
@@ -31,26 +31,19 @@
         },
         "keyEvents": 0,
         "touchEvents": 0,
-        "focusEvents": 1,
-        "clickData": {
-          "x": 71,
-          "y": 350,
-          "button": 0,
-          "downTime": 178.5,
-          "upTime": 178.59999999403954,
-          "holdDuration": 0.09999999403953552
-        },
-        "interactionDuration": 171,
+        "focusEvents": 0,
+        "clickData": null,
+        "interactionDuration": 82,
         "inputForensics": {
-          "coalescedSamples": 1,
-          "coalescedEmptyRatio": 1,
-          "coalescedAvg": 1,
-          "coalescedMax": 1,
+          "coalescedSamples": 0,
+          "coalescedEmptyRatio": 0,
+          "coalescedAvg": 0,
+          "coalescedMax": 0,
           "pointerMoveSamples": 0,
           "pointerMoveZeroRatio": 0,
-          "cadenceEvents": 4,
+          "cadenceEvents": 0,
           "cadenceSilentGaps": 0,
-          "cadenceGapCV": 0.3333333664470326,
+          "cadenceGapCV": 0,
           "cadenceSilentRatio": 0,
           "teleportClicks": 0
         },
@@ -71,14 +64,12 @@
         "touchUniqueIdentifiers": 0,
         "touchForceAllZero": false,
         "touchForceAllOne": false,
-        "pointerEvents": 3,
-        "pointerAvgPressure": 0.16666666666666666,
-        "pointerPressureVariance": 0.05555555555555556,
+        "pointerEvents": 0,
+        "pointerAvgPressure": 0,
+        "pointerPressureVariance": 0,
         "pointerMaxTilt": 0,
         "pointerHasNonMouseType": false,
-        "pointerTypes": [
-          "mouse"
-        ],
+        "pointerTypes": [],
         "clickPrecision": 0,
         "explorationRatio": 0,
         "overshootCorrections": 0,
@@ -188,7 +179,7 @@
           "timezoneOffset": 300
         },
         "jsExecutionTime": {
-          "mathOps": 0.09999999403953552,
+          "mathOps": 0,
           "arrayOps": 0,
           "arrayLen": 1000,
           "stringOps": 0
@@ -254,8 +245,8 @@
           "supported": true
         },
         "rafConsistency": {
-          "avgFrameTime": 7.411333333333333,
-          "frameTimeVariance": 6.866583111111092,
+          "avgFrameTime": 10.077777777777776,
+          "frameTimeVariance": 28.315061728395055,
           "frames": 10
         },
         "speechInfo": {
@@ -303,44 +294,54 @@
         }
       },
       "temporal": {
-        "pageLoadToFirstInteraction": 170.10000002384186,
-        "firstInteractionToClick": 0.5,
-        "totalSessionTime": 724.9000000059605,
+        "pageLoadToFirstInteraction": null,
+        "firstInteractionToClick": null,
+        "totalSessionTime": 609.9000000059605,
         "performanceTiming": {
           "dnsLookup": 0,
           "tcpConnection": 0,
-          "serverResponse": 0,
+          "serverResponse": 1,
           "domLoad": 9,
           "fullLoad": 9
         },
         "pow": null
       },
       "formAnalysis": {
-        "pageLoadToFirstInteraction": 169.69999998807907,
-        "pageLoadToNow": 724.2999999821186,
-        "totalInteractionEvents": 1,
+        "pageLoadToFirstInteraction": null,
+        "pageLoadToNow": 609.4000000059605,
+        "totalInteractionEvents": 0,
         "submit": {
           "method": "none",
-          "eventsBeforeSubmit": 1,
+          "eventsBeforeSubmit": 0,
           "hadTriggerEvent": false
         },
-        "textareaKeyboard": null,
+        "textareaKeyboard": {
+          "message": {
+            "keyCount": 0,
+            "avgKeyInterval": 0,
+            "keyIntervalVariance": 0,
+            "keydownUpRatio": 0,
+            "pasteCount": 0,
+            "contentLength": 43,
+            "noKeyboardEvents": true
+          }
+        },
         "typing": {
           "pasteShortcutMeta": 0,
           "pasteShortcutControl": 0,
           "selectAllShortcuts": 0,
           "pasteEvents": 0,
           "pasteInputs": 0,
-          "inputEvents": 0,
-          "inputsWithoutKeys": 0,
-          "inputsWithoutInputType": 0,
+          "inputEvents": 1,
+          "inputsWithoutKeys": 1,
+          "inputsWithoutInputType": 1,
           "keydownsBeforeInput": 0
         }
       },
       "meta": {
-        "widgetId": "fcaptcha_8gtxsu2xw",
+        "widgetId": "fcaptcha_1goyzs8ol",
         "siteKey": "bench-capture",
-        "timestamp": 1785201417444,
+        "timestamp": 1785201414830,
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36",
         "screenSize": "1280x720",
         "viewportSize": "1280x720",

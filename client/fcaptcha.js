@@ -225,6 +225,105 @@
 
     // Aggregate the input-event forensics into a compact object consumed by the
     // server's detectCDP / detectVisionAI. All thresholds live server-side.
+    /**
+     * Scroll morphology: the *shape* of scrolling, not the amount.
+     *
+     * A wheel, a trackpad and a finger all produce a burst of scroll events
+     * spread over hundreds of milliseconds, because a scroll is a physical
+     * gesture with acceleration and a tail. `element.scrollIntoView()` produces
+     * a single event, or a few in one frame, and lands on the same offsets
+     * every time because it is aiming at the same elements.
+     *
+     * So this segments the raw event buffer into gestures — consecutive events
+     * separated by less than a pause — and reports how long each took and how
+     * far it went. A population of zero-duration gestures means the page was
+     * scrolled by an API call rather than by a hand. That is an architecture
+     * tell as much as a bot tell: DOM-driven agents jump, vision-driven ones
+     * emit short bursts, people produce long variable ones.
+     *
+     * Reports distributions, never raw offsets: where on a page someone
+     * scrolled is more revealing about them than how they got there.
+     */
+    _analyzeScrollMorphology() {
+      const events = this.scrollEvents;
+      if (events.length < 2) {
+        return {
+          gestures: 0, instantGestures: 0, instantRatio: 0,
+          maxStep: 0, distancePerEvent: 0, samples: events.length
+        };
+      }
+
+      // A gap this long means the hand stopped and started again. Short enough
+      // that two flicks do not merge, long enough that one flick does not split.
+      const GESTURE_GAP_MS = 200;
+
+      const gestures = [];
+      let start = 0;
+      for (let i = 1; i <= events.length; i++) {
+        const ended = i === events.length || events[i].t - events[i - 1].t > GESTURE_GAP_MS;
+        if (!ended) continue;
+
+        const first = events[start];
+        const last = events[i - 1];
+        gestures.push({
+          duration: last.t - first.t,
+          distance: Math.abs(last.y - first.y) + Math.abs(last.x - first.x),
+          events: i - start
+        });
+        start = i;
+      }
+
+      const durations = gestures.map(g => g.duration);
+      const distances = gestures.map(g => g.distance);
+      const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+      const variance = (a) => {
+        if (a.length < 2) return 0;
+        const m = mean(a);
+        return a.reduce((acc, v) => acc + Math.pow(v - m, 2), 0) / a.length;
+      };
+
+      // A gesture that began and ended in the same instant did not involve a
+      // hand. One frame of slack so a fast real flick is not miscounted.
+      const instant = gestures.filter(g => g.duration <= 16).length;
+
+      // The sharper tell is how far the page moved per event.
+      //
+      // A wheel notch or a trackpad flick advances tens of pixels and emits an
+      // event for each, so a person covering 2000px produces dozens of them.
+      // `scrollIntoView` covers the same 2000px in a single event, because it is
+      // aiming at an element rather than turning a wheel. Measured here: a human
+      // scroll averaged 58px per event, an agent jump around 700px.
+      //
+      // Duration alone misses this — three jumps 30ms apart segment into one
+      // gesture with a plausible-looking 60ms duration.
+      let maxStep = 0;
+      for (let i = 1; i < events.length; i++) {
+        const step = Math.abs(events[i].y - events[i - 1].y) + Math.abs(events[i].x - events[i - 1].x);
+        if (step > maxStep) maxStep = step;
+      }
+      const totalDistance = distances.reduce((a, b) => a + b, 0);
+      const distancePerEvent = events.length > 1 ? totalDistance / (events.length - 1) : 0;
+
+      // Repeated landing offsets: scrollIntoView aims at elements, so it stops
+      // at the same y over and over. Rounded to absorb sub-pixel differences.
+      const endOffsets = gestures.map(g => Math.round(events[0].y + g.distance));
+      const uniqueEnds = new Set(endOffsets).size;
+
+      return {
+        gestures: gestures.length,
+        instantGestures: instant,
+        instantRatio: gestures.length ? instant / gestures.length : 0,
+        avgDuration: mean(durations),
+        durationVariance: variance(durations),
+        avgDistance: mean(distances),
+        distanceVariance: variance(distances),
+        repeatedEndRatio: gestures.length ? 1 - uniqueEnds / gestures.length : 0,
+        maxStep,
+        distancePerEvent,
+        samples: events.length
+      };
+    }
+
     _analyzeInputForensics() {
       const gaps = this._cadenceGaps;
       let silentGaps = 0;
@@ -348,6 +447,7 @@
         eventDeltaVariance,
         mouseEventRate,
         scrollEvents: this.scrollEvents.length,
+        scrollMorphology: this._analyzeScrollMorphology(),
         keyEvents: this.keyEvents.length,
         touchEvents: this.touchEvents.length,
         focusEvents: this.focusEvents.length,
@@ -627,7 +727,9 @@
         avgAcceleration: 0, accelerationChanges: 0, microTremorScore: 0.5,
         straightLineRatio: 0, microMovements: 0, directionChanges: 0,
         eventDeltas: [], eventDeltaVariance: 0, mouseEventRate: 0,
-        scrollEvents: this.scrollEvents.length, keyEvents: this.keyEvents.length,
+        scrollEvents: this.scrollEvents.length,
+        scrollMorphology: this._analyzeScrollMorphology(),
+        keyEvents: this.keyEvents.length,
         touchEvents: this.touchEvents.length, focusEvents: this.focusEvents.length,
         clickData: this.clickData, interactionDuration: Date.now() - this.startTime,
         inputForensics: this._analyzeInputForensics(),
@@ -746,6 +848,19 @@
       this.textareaStats = new Map(); // Per-textarea keyboard analysis
       this.submitData = null;
 
+      // Typing modality — see _recordModalityKey. Shape only, no content.
+      this.typing = {
+        pasteShortcutMeta: 0,      // Meta+V  (macOS muscle memory)
+        pasteShortcutControl: 0,   // Ctrl+V  (Windows/Linux)
+        selectAllShortcuts: 0,
+        pasteEvents: 0,            // real `paste` events, anywhere on the page
+        pasteInputs: 0,            // input events the browser attributes to a paste
+        inputEvents: 0,
+        inputsWithoutKeys: 0,      // text appeared with no keystroke behind it
+        inputsWithoutInputType: 0, // synthetic events carry no inputType
+        keydownsBeforeInput: 0     // running counter, reset on each input
+      };
+
       this._setupListeners();
     }
 
@@ -759,6 +874,13 @@
       // Track textarea keyboard patterns (spam detection)
       document.addEventListener('keydown', (e) => this._recordTextareaKey(e), { passive: true });
       document.addEventListener('keyup', (e) => this._recordTextareaKey(e), { passive: true });
+
+      // Typing modality (see _recordModality). Document-level and field-agnostic:
+      // unlike the textarea keystroke stats, this records only *how* text arrived,
+      // never what or where, so it is safe to run across every field including
+      // password inputs a password manager fills.
+      document.addEventListener('keydown', (e) => this._recordModalityKey(e), { passive: true });
+      document.addEventListener('input', (e) => this._recordModalityInput(e), { passive: true });
 
       // Track form submissions
       document.addEventListener('submit', (e) => this._recordSubmit(e), { capture: true });
@@ -850,6 +972,60 @@
           }
         }
       }
+    }
+
+    /**
+     * Typing modality: how did text get into a field?
+     *
+     * Real keystrokes, a paste, a paste keyboard shortcut, or a value assigned
+     * straight into the DOM all leave different traces, and agents differ from
+     * each other as much as they differ from people — some drive keystrokes,
+     * some fire Ctrl+V, some dispatch a bare `input`/`change` event.
+     *
+     * The most useful thing here is not a timing threshold but a
+     * *contradiction*: an agent that fires Ctrl+V while its own navigator
+     * reports MacIntel has told us two incompatible things about itself. Mac
+     * users paste with Meta+V. That check needs no calibration, no distribution
+     * and no per-machine tuning, which is what makes it worth having.
+     *
+     * Records shape only — which modifier accompanied a paste shortcut, and how
+     * many inputs arrived with no keystroke behind them. Never key identities
+     * (beyond the single 'v'), never field names, never content. That is why it
+     * can safely run document-wide while the keystroke-cadence stats stay
+     * confined to textareas.
+     */
+    _recordModalityKey(e) {
+      const t = this.typing;
+      if (e.key === 'v' || e.key === 'V') {
+        // Which modifier the visitor's muscle memory reached for. On macOS that
+        // is Meta; on Windows and Linux it is Control. Recording both lets the
+        // server compare against the platform the client claims.
+        if (e.metaKey && !e.ctrlKey) t.pasteShortcutMeta++;
+        else if (e.ctrlKey && !e.metaKey) t.pasteShortcutControl++;
+      }
+      if (e.key === 'a' || e.key === 'A') {
+        // Select-all before paste — the Comet-on-Windows shape noted in the PRD.
+        if (e.metaKey || e.ctrlKey) t.selectAllShortcuts++;
+      }
+      if (!['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab'].includes(e.key)) {
+        t.keydownsBeforeInput++;
+      }
+    }
+
+    _recordModalityInput(e) {
+      const t = this.typing;
+      t.inputEvents++;
+
+      // An input event with no keystroke and no paste behind it is a value that
+      // was assigned, not typed. `inputType` distinguishes the browser's own
+      // account of what happened; it is absent on synthetic events, which is
+      // itself the tell.
+      const inputType = e.inputType || null;
+      if (inputType === null) t.inputsWithoutInputType++;
+      else if (inputType.startsWith('insertFromPaste')) t.pasteInputs++;
+
+      if (t.keydownsBeforeInput === 0 && t.pasteEvents === 0) t.inputsWithoutKeys++;
+      t.keydownsBeforeInput = 0;
     }
 
     _interceptFormSubmit() {
@@ -975,12 +1151,20 @@
         },
 
         // Textarea analysis (spam detection)
-        textareaKeyboard: Object.keys(textareaAnalysis).length > 0 ? textareaAnalysis : null
+        textareaKeyboard: Object.keys(textareaAnalysis).length > 0 ? textareaAnalysis : null,
+
+        // Typing modality (see _recordModalityKey)
+        typing: { ...this.typing }
       };
     }
 
     // Track paste events on textareas
     recordPaste(e) {
+      // Page-wide modality counter first: a human pasting into a login field is
+      // still a human pasting, and the modality checks need to know that even
+      // though the per-textarea stats deliberately do not look at that field.
+      this.typing.pasteEvents++;
+
       if (e.target?.tagName !== 'TEXTAREA') return;
 
       const textareaId = e.target.id || e.target.name || 'unnamed';
@@ -1761,6 +1945,12 @@
           hasSegoeUI: detectedFonts.includes('Segoe UI'),
           hasSFPro: detectedFonts.includes('SF Pro'),
           hasDejaVuSans: detectedFonts.includes('DejaVu Sans'),
+          // OS-coherence markers (PRD §7.3). Calibri ships with Windows/Office;
+          // Menlo is macOS-only. Reported so the server can score a font list
+          // that *contradicts* the claimed platform — never raw enumeration,
+          // which fires on privacy extensions and minimal Linux installs.
+          hasCalibri: detectedFonts.includes('Calibri'),
+          hasMenlo: detectedFonts.includes('Menlo'),
           supported: true
         };
       } catch (e) {

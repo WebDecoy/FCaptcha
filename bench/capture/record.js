@@ -65,7 +65,16 @@ const PAGE_HTML = (server) => `<!doctype html>
   <p>Some text above the widget so tab traversal and scrolling have somewhere to go.</p>
   <p><a href="#one">first link</a> &middot; <a href="#two">second link</a></p>
   <label>Name <input id="name" type="text" autocomplete="off"></label>
+  <p><label>Message<br><textarea id="message" rows="4" cols="40"></textarea></label></p>
   <div id="captcha"></div>
+  <!-- Filler so the page is genuinely scrollable: scroll morphology cannot be
+       captured on a page that fits in the viewport. It sits AFTER the widget so
+       the checkbox stays reachable without scrolling — a persona that has to
+       scroll before it can click is measuring the page layout, not itself. -->
+  <div id="filler" style="height:2400px;background:linear-gradient(#fff,#eee)">
+    <p style="padding-top:600px">mid-page marker</p>
+    <p style="padding-top:600px">lower marker</p>
+  </div>
   <script src="${server}/fcaptcha.js"></script>
   <script>
     window.__captured = null;

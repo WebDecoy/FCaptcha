@@ -354,6 +354,87 @@ const HUMAN_PERSONAS = {
     run: (ctx) => desktopMouse(ctx),
   },
 
+  typing: {
+    evidence:
+      'human typing into a textarea: log-normal inter-key intervals with real ' +
+      'hold times, produced by actual key events rather than a scripted delay. ' +
+      'Exercises the inter-key/hold floors of PRD §7.1.',
+    async run(ctx) {
+      const { page, rng } = ctx;
+      const box = page.locator('#message');
+      await box.click();
+      await sleep(rng.range(200, 600));
+
+      // Log-normal around ~130ms median, which is where ordinary prose typing
+      // sits. The spread matters more than the centre: a human's variance is
+      // what separates them, not their speed.
+      const text = 'the quick brown fox jumps over the lazy dog';
+      for (const ch of text) {
+        const interval = Math.min(600, Math.max(45, Math.exp(rng.gaussian(4.8, 0.45))));
+        await page.keyboard.press(ch === ' ' ? 'Space' : ch, {
+          delay: Math.max(25, rng.gaussian(75, 22)), // hold time
+        });
+        await sleep(interval);
+      }
+      await sleep(rng.range(300, 900));
+      await desktopMouse(ctx);
+    },
+  },
+
+  'paste-by-human': {
+    evidence:
+      'a real person pasting — from a password manager or their own clipboard. ' +
+      'Humans paste constantly, so this is the persona the inter-key floors must ' +
+      'never fire on. Uses the platform-correct shortcut for the claimed OS.',
+    async run(ctx) {
+      const { page, rng } = ctx;
+      const box = page.locator('#message');
+      await box.click();
+      await sleep(rng.range(400, 1200));
+
+      // Put something on the clipboard, then paste it the way a Mac user does.
+      // normalize.js leaves navigator.platform as this machine reports it, so
+      // Meta is the coherent choice here — the incoherence check must NOT fire.
+      await page.evaluate(() => navigator.clipboard.writeText('pasted by a person').catch(() => {}));
+      await page.keyboard.press('Meta+V');
+      await sleep(rng.range(500, 1400));
+      await desktopMouse(ctx);
+    },
+  },
+
+  scrolling: {
+    evidence:
+      'human scrolling: several wheel gestures with real duration and a tail, ' +
+      'landing at unrepeated offsets. Baseline for the scroll morphology of ' +
+      'PRD §7.2.',
+    async run(ctx) {
+      const { page, rng } = ctx;
+      await sleep(rng.range(300, 800));
+
+      for (let g = 0; g < 4; g++) {
+        // One gesture = a burst of wheel deltas over a few hundred ms, the way
+        // a finger on a wheel or trackpad actually delivers them.
+        const steps = rng.int(6, 12);
+        for (let i = 0; i < steps; i++) {
+          await page.mouse.wheel(0, rng.range(40, 110));
+          await sleep(rng.range(12, 34));
+        }
+        await sleep(rng.range(350, 900)); // reading pause between gestures
+      }
+
+      // Scroll back up the same way, then click — the widget is above the
+      // filler, so a persona that only scrolls down cannot reach it.
+      for (let g = 0; g < 5; g++) {
+        for (let i = 0; i < rng.int(6, 12); i++) {
+          await page.mouse.wheel(0, -rng.range(40, 110));
+          await sleep(rng.range(12, 34));
+        }
+        await sleep(rng.range(200, 500));
+      }
+      await desktopMouse(ctx);
+    },
+  },
+
   'privacy-extension': {
     evidence:
       'privacy extension (Brave / CanvasBlocker style): canvas readback and WebGL ' +
@@ -390,6 +471,94 @@ const HUMAN_PERSONAS = {
  * and are labeled synthetic there.
  */
 const AGENT_PERSONAS = {
+  'scripted-typing': {
+    normalize: false,
+    class: 'local-cdp-agent',
+    evidence:
+      'agent typing at a programmed delay: keystrokes are real events but the ' +
+      'cadence is a constant, so inter-key variance collapses. The FP-Agent ' +
+      'shapes (Manus 1.39ms, Browser Use 5.31ms, Skyvern 9.52ms) are all this ' +
+      'pattern at different speeds.',
+    async run({ page }) {
+      const box = page.locator('#message');
+      await box.click();
+      await page.keyboard.type('the quick brown fox jumps over the lazy dog', { delay: 6 });
+      await page.waitForTimeout(40);
+      const target = page.locator('#captcha .fcaptcha-checkbox, #captcha [role=checkbox]').first();
+      await target.click();
+    },
+  },
+
+  'programmatic-fill': {
+    normalize: false,
+    class: 'dom-a11y-reader',
+    evidence:
+      'text assigned straight into the DOM with a dispatched input event — the ' +
+      'bare-change-event shape the PRD attributes to in-browser agents. No ' +
+      'keystrokes at all, and the synthetic event carries no inputType.',
+    async run({ page }) {
+      await page.evaluate(() => {
+        const el = document.querySelector('#message');
+        el.value = 'the quick brown fox jumps over the lazy dog';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      await page.waitForTimeout(60);
+      const target = page.locator('#captcha .fcaptcha-checkbox, #captcha [role=checkbox]').first();
+      await target.evaluate((el) => el.click());
+    },
+  },
+
+  'scroll-jump': {
+    normalize: false,
+    class: 'local-cdp-agent',
+    evidence:
+      'scrollIntoView navigation: the page jumps to each target in a single ' +
+      'frame and lands on the same element offsets every time. Zero-duration ' +
+      'gestures at repeated offsets, the DOM-driven architecture tell of §7.2.',
+    async run({ page }) {
+      await page.evaluate(() => {
+        document.querySelector('#filler p').scrollIntoView();
+      });
+      await page.waitForTimeout(30);
+      await page.evaluate(() => {
+        document.querySelectorAll('#filler p')[1].scrollIntoView();
+      });
+      await page.waitForTimeout(30);
+      await page.evaluate(() => document.querySelector('#captcha').scrollIntoView());
+      await page.waitForTimeout(30);
+      const target = page.locator('#captcha .fcaptcha-checkbox, #captcha [role=checkbox]').first();
+      await target.click();
+    },
+  },
+
+  'incoherent-paste': {
+    normalize: false,
+    class: 'hosted-computer-use',
+    evidence:
+      'the ChatGPT-Agent contradiction from PRD §7.1: pastes with a keyboard ' +
+      'shortcut that does not belong to the platform it claims. The PRD describes ' +
+      'Ctrl+V under a MacIntel claim; this persona is the mirror image — Meta+V ' +
+      'under a Win32 claim — because the recording host is a Mac, where Ctrl+V ' +
+      'genuinely does nothing and so cannot produce the completed paste the ' +
+      'detection requires. Same contradiction, testable on this hardware. ' +
+      'Needs no threshold and no calibration, which is why it is worth having.',
+    initScript: () => {
+      // Claim Windows while running on macOS. The contradiction is between the
+      // claim and the modifier the "user" reached for.
+      Object.defineProperty(navigator, 'platform', { get: () => 'Win32', configurable: true });
+    },
+    async run({ page }) {
+      const box = page.locator('#message');
+      await box.click();
+      await page.evaluate(() => navigator.clipboard.writeText('filled by an agent').catch(() => {}));
+      await page.keyboard.press('Meta+V');
+      await page.waitForTimeout(80);
+      const target = page.locator('#captcha .fcaptcha-checkbox, #captcha [role=checkbox]').first();
+      await target.click();
+    },
+  },
+
   'teleport-click': {
     class: 'local-cdp-agent',
     normalize: false,

@@ -1016,7 +1016,10 @@ func analyzeKeystrokeCadence(stats map[string]interface{}) *DetectionResult {
 // =============================================================================
 
 // AnalyzeFormInteraction checks form submission patterns for credential stuffing and spam
-func (e *ScoringEngine) AnalyzeFormInteraction(formAnalysis map[string]interface{}) []DetectionResult {
+// AnalyzeFormInteraction scores form-filling behaviour. humanPresent says
+// whether the visitor independently showed they were there — real pointer or
+// touch movement — which changes how a paste-only fill should be read.
+func (e *ScoringEngine) AnalyzeFormInteraction(formAnalysis map[string]interface{}, humanPresent bool) []DetectionResult {
 	var detections []DetectionResult
 
 	if formAnalysis == nil {
@@ -1108,7 +1111,20 @@ func (e *ScoringEngine) AnalyzeFormInteraction(formAnalysis map[string]interface
 			}
 
 			// Check for paste-heavy input
-			if pasteCount > 0 && keyCount < 5 {
+			// Check for paste-heavy input (spam bots often paste content).
+			//
+			// Standing down when the visitor independently demonstrated they
+			// were present. Pasting is not a bot behaviour — people paste
+			// addresses, error messages, snippets and one-time codes
+			// constantly, and a form filled by paste alone is an ordinary
+			// afternoon. The bench human panel caught this firing on 100% of
+			// the paste-by-human persona.
+			//
+			// What actually distinguishes the spam bot is that pasting is ALL
+			// it did: no pointer trajectory, no touch, nothing but the content
+			// appearing. So the check now needs the paste AND the absence of a
+			// person.
+			if pasteCount > 0 && keyCount < 5 && !humanPresent {
 				detections = append(detections, DetectionResult{
 					Category:   CategoryBot,
 					Score:      0.6,

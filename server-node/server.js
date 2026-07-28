@@ -12,6 +12,7 @@ const detection = require('./detection');
 const webbotauth = require('./webbotauth');
 const { ProxyTrust } = require('./clientip');
 const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
+const { detectInputForensics } = require('./inputforensics');
 
 const app = express();
 app.use(cors());
@@ -1319,6 +1320,9 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
     ...detectAutomation(signals),
     ...detectCDP(signals),
     ...detectBehavioral(signals),
+    // Input forensics v2 (PRD workstream C): typing cadence and modality, the
+    // paste-shortcut/platform contradiction, scroll morphology, font coherence.
+    ...detectInputForensics(signals),
     ...detectTouchAuthenticity(signals, userAgent),
     ...detectSensorEntropy(signals, userAgent),
     ...detectTouchKinematics(signals),
@@ -1364,7 +1368,11 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
   // Add form interaction analysis (credential stuffing & spam detection)
   const formAnalysis = signals.formAnalysis;
   if (formAnalysis) {
-    const formDetections = detection.analyzeFormInteraction(formAnalysis);
+    // A visitor who moved a pointer or touched the screen has shown they are
+    // there; that changes how a paste-only form fill should be read.
+    const beh = signals.behavioral || {};
+    const humanPresent = (beh.totalPoints ?? 0) >= 5 || (beh.touchEvents ?? 0) >= 1;
+    const formDetections = detection.analyzeFormInteraction(formAnalysis, { humanPresent });
     detections.push(...formDetections);
   }
 

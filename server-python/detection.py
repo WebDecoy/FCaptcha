@@ -705,7 +705,14 @@ def _analyze_keystroke_cadence(stats: Dict) -> Optional[Dict]:
 # Form Interaction Analysis (Credential Stuffing & Spam Detection)
 # =============================================================================
 
-def analyze_form_interaction(form_analysis: Optional[Dict]) -> List[Dict]:
+def analyze_form_interaction(form_analysis: Optional[Dict], human_present: bool = False) -> List[Dict]:
+    """Score form-filling behaviour.
+
+    human_present says whether the visitor independently showed they were there -
+    real pointer or touch movement - which changes how a paste-only fill should
+    be read. Defaults to False so a caller that does not know keeps the stricter
+    behaviour.
+    """
     """Analyze form submission patterns for credential stuffing and spam."""
     if not form_analysis:
         return []
@@ -785,7 +792,19 @@ def analyze_form_interaction(form_analysis: Optional[Dict]) -> List[Dict]:
                 })
 
             # Check for paste-heavy input (spam bots often paste content)
-            if paste_count > 0 and key_count < 5:
+            # Check for paste-heavy input (spam bots often paste content).
+            #
+            # Standing down when the visitor independently demonstrated they were
+            # present. Pasting is not a bot behaviour - people paste addresses,
+            # error messages, snippets and one-time codes constantly, and a form
+            # filled by paste alone is an ordinary afternoon. The bench human panel
+            # caught this firing on 100% of the paste-by-human persona.
+            #
+            # What actually distinguishes the spam bot is that pasting is ALL it
+            # did: no pointer trajectory, no touch, nothing but the content
+            # appearing. So the check now needs the paste AND the absence of a
+            # person.
+            if paste_count > 0 and key_count < 5 and not human_present:
                 detections.append({
                     "category": "bot",
                     "score": 0.6,
