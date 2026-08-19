@@ -61,6 +61,11 @@ type VerificationResult struct {
 	Detections     []DetectionResult
 	CategoryScores map[string]float64
 	Recommendation string
+	// Reason explains a token withheld for something other than the score:
+	// "pow_not_satisfied" or "hostname_not_allowed". Empty otherwise. Without it
+	// an integrator whose score is comfortably under the threshold has no way to
+	// tell why no token came back.
+	Reason string
 }
 
 // PoWChallenge for server-verified proof of work
@@ -350,11 +355,25 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	detections := make([]DetectionResult, 0, len(preDetections)+8)
 	detections = append(detections, preDetections...)
 
-	// Verify PoW if provided
+	// Verify PoW if provided.
+	//
+	// powSatisfied records whether the caller actually completed the challenge
+	// this server issued. It gates token issuance below rather than only feeding
+	// the score, because a proof of work is a precondition, not evidence: the
+	// widget solves one on every path and aborts rather than submit without it,
+	// so a request that arrives without a valid solution did not come from the
+	// widget at all.
+	//
+	// Scoring it alone was not enough. The final score is a weighted sum, so the
+	// bot category contributes at most its 0.13 weight — every PoW failure
+	// firing at once reached 0.1298 against a 0.5 threshold, and a bare `curl`
+	// with no solution and no signals was issued a valid token. The detections
+	// were all correct; the aggregation discarded them.
 	var pow *PoWSolution
 	if len(powSolution) > 0 {
 		pow = powSolution[0]
 	}
+	powSatisfied := false
 	if pow != nil && pow.ChallengeID != "" {
 		powResult := e.VerifyPoWSolution(pow, siteKey, pow.SignalsHash)
 		if !powResult.Valid {
@@ -363,7 +382,13 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 				Score:      0.7,
 				Confidence: 0.8,
 				Reason:     "PoW verification failed: " + powResult.Reason,
+				// A solution that does not verify against a challenge this
+				// server issued is not weak evidence of automation, it is proof
+				// the challenge was not completed. See applyDispositiveFloor.
+				Dispositive: true,
 			})
+		} else {
+			powSatisfied = true
 		}
 
 		// Verify challenge nonce binding
@@ -373,11 +398,16 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 				clientNonce = getString(meta, "challengeNonce")
 			}
 			if clientNonce == "" || clientNonce != powResult.Nonce {
+				// The solution verifies but the signals it commits to are not
+				// the ones presented, so the work was done for a different
+				// payload. Revokes the pass granted above.
+				powSatisfied = false
 				detections = append(detections, DetectionResult{
-					Category:   CategoryBot,
-					Score:      0.9,
-					Confidence: 0.9,
-					Reason:     "Challenge nonce mismatch (signals not bound to challenge)",
+					Category:    CategoryBot,
+					Score:       0.9,
+					Confidence:  0.9,
+					Reason:      "Challenge nonce mismatch (signals not bound to challenge)",
+					Dispositive: true,
 				})
 			}
 		}
@@ -411,10 +441,11 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	} else {
 		// No PoW solution provided - hard fail
 		detections = append(detections, DetectionResult{
-			Category:   CategoryBot,
-			Score:      0.9,
-			Confidence: 0.95,
-			Reason:     "No PoW solution provided",
+			Category:    CategoryBot,
+			Score:       0.9,
+			Confidence:  0.95,
+			Reason:      "No PoW solution provided",
+			Dispositive: true,
 		})
 	}
 
@@ -499,7 +530,28 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	// detection layer has nothing to say about it and the refusal is reported as
 	// its own reason rather than smuggled in as a bot verdict.
 	hostnameAllowed := e.allowedHostnames.Permits(hostname)
-	success := finalScore < 0.5 && hostnameAllowed
+
+	// Three independent conditions, deliberately not folded into the score.
+	//
+	// powSatisfied is the one that matters most: a score threshold answers "how
+	// suspicious is this visitor", which is the wrong question to ask of someone
+	// who never completed the challenge. Gating here means no future reweighting
+	// can reopen the bypass, and it holds even if the dispositive floor is
+	// lowered or removed.
+	success := finalScore < 0.5 && hostnameAllowed && powSatisfied
+
+	// Name the failed precondition whenever one fails, not only when the score
+	// would otherwise have allowed. Gating it on the score made the PoW case
+	// unreachable — a PoW failure is dispositive, so it floors the score at 0.9
+	// and the branch never fired — which is exactly the case a caller most needs
+	// explained.
+	withheldReason := ""
+	switch {
+	case !powSatisfied:
+		withheldReason = "pow_not_satisfied"
+	case !hostnameAllowed:
+		withheldReason = "hostname_not_allowed"
+	}
 
 	var token string
 	if success {
@@ -524,6 +576,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 		Detections:     detections,
 		CategoryScores: categoryScores,
 		Recommendation: recommendation,
+		Reason:         withheldReason,
 	}
 }
 

@@ -1350,6 +1350,19 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
 
   // Verify PoW if provided
   let powValid = false;
+  // powSatisfied records whether the caller actually completed the challenge
+  // this server issued. It gates token issuance below rather than only feeding
+  // the score, because a proof of work is a precondition, not evidence: the
+  // widget solves one on every path and aborts rather than submit without it,
+  // so a request that arrives without a valid solution did not come from the
+  // widget at all.
+  //
+  // Scoring it alone was not enough. The final score is a weighted sum, so the
+  // bot category contributes at most its 0.13 weight — every PoW failure firing
+  // at once reached 0.1298 against a 0.5 threshold, and a bare `curl` with no
+  // solution and no signals was issued a valid token. The detections were all
+  // correct; the aggregation discarded them.
+  let powSatisfied = false;
   let powVerification = null;
   if (powSolution && powSolution.challengeId) {
     powVerification = powChallengeStore.verify(
@@ -1366,19 +1379,30 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
         category: 'bot',
         score: 0.7,
         confidence: 0.8,
-        reason: `PoW verification failed: ${powVerification.reason}`
+        reason: `PoW verification failed: ${powVerification.reason}`,
+        // A solution that does not verify against a challenge this server
+        // issued is not weak evidence of automation, it is proof the challenge
+        // was not completed. See DISPOSITIVE_FLOOR.
+        dispositive: true
       });
+    } else {
+      powSatisfied = true;
     }
 
     // Verify challenge nonce binding
     if (powValid && powVerification.nonce) {
       const clientNonce = signals.meta?.challengeNonce;
       if (!clientNonce || clientNonce !== powVerification.nonce) {
+        // The solution verifies but the signals it commits to are not the ones
+        // presented, so the work was done for a different payload. Revokes the
+        // pass granted above.
+        powSatisfied = false;
         detections.push({
           category: 'bot',
           score: 0.9,
           confidence: 0.9,
-          reason: 'Challenge nonce mismatch (signals not bound to challenge)'
+          reason: 'Challenge nonce mismatch (signals not bound to challenge)',
+          dispositive: true
         });
       }
     }
@@ -1410,7 +1434,8 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
       category: 'bot',
       score: 0.9,
       confidence: 0.95,
-      reason: 'No PoW solution provided'
+      reason: 'No PoW solution provided',
+      dispositive: true
     });
   }
 
@@ -1500,7 +1525,24 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
   // detection layer has nothing to say about it and the refusal is reported as
   // its own reason rather than smuggled in as a bot verdict.
   const hostnameAllowed = ALLOWED_HOSTNAMES.permits(hostname);
-  const success = finalScore < 0.5 && hostnameAllowed;
+
+  // Three independent conditions, deliberately not folded into the score.
+  //
+  // powSatisfied is the one that matters most: a score threshold answers "how
+  // suspicious is this visitor", which is the wrong question to ask of someone
+  // who never completed the challenge. Gating here means no future reweighting
+  // can reopen the bypass, and it holds even if the dispositive floor is
+  // lowered or removed.
+  const success = finalScore < 0.5 && hostnameAllowed && powSatisfied;
+
+  // Name the failed precondition whenever one fails, not only when the score
+  // would otherwise have allowed. Gating it on the score made the PoW case
+  // unreachable — a PoW failure is dispositive, so it floors the score at 0.9
+  // and the branch never fired — which is exactly the case a caller most needs
+  // explained.
+  let withheldReason = '';
+  if (!powSatisfied) withheldReason = 'pow_not_satisfied';
+  else if (!hostnameAllowed) withheldReason = 'hostname_not_allowed';
 
   const token = success
     ? generateToken(ip, siteKey, finalScore, {
@@ -1522,7 +1564,8 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
     recommendation,
     categoryScores,
     detections,
-    ...(hostnameAllowed ? {} : { reason: 'hostname_not_allowed', hostname })
+    ...(withheldReason ? { reason: withheldReason } : {}),
+    ...(hostnameAllowed ? {} : { hostname })
   };
 }
 

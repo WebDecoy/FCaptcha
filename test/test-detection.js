@@ -58,6 +58,36 @@ async function makeRequest(endpoint, options = {}) {
   }
 }
 
+// A verification that completes the real challenge handshake: fetch a challenge,
+// stamp its nonce into signals.meta, commit the signals into the PoW input,
+// solve, and wait out the server's timing floor.
+//
+// Needed because a proof of work is now a precondition for a token rather than
+// one more scored signal. A payload posted without one is dispositively a
+// non-browser, so it floors at 0.9 no matter how human the rest of it looks —
+// which is correct, and which makes "a legitimate visitor scores low" impossible
+// to assert without modelling a legitimate visitor properly.
+//
+// Detection-only assertions deliberately keep using makeRequest: they ask
+// whether a payload trips a given detector, and that answer does not depend on
+// the handshake. Only the tests that assert on the final score need this.
+//
+// Reuses the bench harness's solver rather than carrying a second copy of the
+// scheme; it depends on nothing outside Node's crypto module.
+const { buildVerifyBody } = require('../bench/lib/pow.js');
+
+async function makeVerifiedRequest(options = {}) {
+  const requested = options.body || {};
+  const siteKey = requested.siteKey || 'test-site-key';
+  const { body } = await buildVerifyBody(
+    SERVER_URL,
+    siteKey,
+    requested.signals || {},
+    options.headers || {}
+  );
+  return makeRequest('/api/verify', { ...options, body: { ...requested, ...body } });
+}
+
 function assertDetection(result, category, shouldDetect, testName) {
   const detections = result.detections || [];
   const hasCategory = detections.some(d => d.category === category);
@@ -231,7 +261,7 @@ async function testStealthArtifactDetection() {
   // FP-safety: privacy-extension-style native patches (patched_*) and a
   // consistent human session must NOT raise the score — these artifacts are
   // collected for observability but intentionally never scored.
-  const privacyExtResult = await makeRequest('/api/verify', {
+  const privacyExtResult = await makeVerifiedRequest({
     headers: chromeHeaders,
     body: {
       siteKey: 'test',
@@ -314,7 +344,7 @@ async function testHeaderAnalysis() {
   assertDetection(badLangResult, 'bot', true, 'Detects invalid Accept-Language');
 
   // Good headers (should have low score)
-  const goodHeadersResult = await makeRequest('/api/verify', {
+  const goodHeadersResult = await makeVerifiedRequest({
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -395,7 +425,7 @@ async function testBrowserConsistency() {
   assertDetection(noTouchResult, 'bot', true, 'Detects mobile UA without touch support');
 
   // Consistent browser (should pass)
-  const consistentResult = await makeRequest('/api/verify', {
+  const consistentResult = await makeVerifiedRequest({
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -453,7 +483,7 @@ async function testBehavioralSignals() {
   assertScore(botBehaviorResult, 0.3, 1.0, 'Bot-like behavior gets high score');
 
   // Human-like behavior
-  const humanBehaviorResult = await makeRequest('/api/verify', {
+  const humanBehaviorResult = await makeVerifiedRequest({
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -686,7 +716,7 @@ async function testFormAnalysis() {
   assertDetection(fastTypingResult, 'bot', true, 'Detects impossibly fast textarea typing');
 
   // Test legitimate form submission
-  const legitimateResult = await makeRequest('/api/verify', {
+  const legitimateResult = await makeVerifiedRequest({
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -762,7 +792,7 @@ async function testKeystrokeCadence() {
   { let s = 42; function r() { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }
     for (let i = 0; i < 30; i++) humanDwellTimes.push(25 + r() * 50); }
 
-  const humanCadenceResult = await makeRequest('/api/verify', {
+  const humanCadenceResult = await makeVerifiedRequest({
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -965,8 +995,9 @@ async function testKeystrokeCadence() {
 async function testTokenVerification() {
   log('\n[Token Verification]', colors.cyan);
 
-  // First get a valid token
-  const verifyResult = await makeRequest('/api/verify', {
+  // First get a valid token. Must complete the real handshake: a token is only
+  // issued to a caller that solved the challenge.
+  const verifyResult = await makeVerifiedRequest({
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -1243,7 +1274,7 @@ async function testAdvancedDetections() {
   assertDetection(zeroDOMRectResult, 'headless', true, 'Detects zero-dimension DOMRect');
 
   // Test legitimate advanced signals (should pass)
-  const legitimateAdvancedResult = await makeRequest('/api/verify', {
+  const legitimateAdvancedResult = await makeVerifiedRequest({
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
       'Accept-Language': 'en-US,en;q=0.9',
@@ -1460,6 +1491,45 @@ async function testMissingPoWHardFail() {
 
   // Score should be higher than before (0.135 from bot alone)
   assertScore(noPoWResult, 0.1, 1.0, 'Missing PoW raises score significantly');
+
+  // The bypass found on 2026-08-19: this exact request — no PoW, no browser —
+  // was issued a valid token, because the bot category contributes at most its
+  // 0.13 weight to a 0.5 threshold no matter how conclusive the evidence. A
+  // proof of work is now a precondition, checked outside the score.
+  if (!noPoWResult.token && noPoWResult.success === false) {
+    passed++;
+    log(`  ✓ Missing PoW is refused a token outright`, colors.green);
+  } else {
+    failed++;
+    log(`  ✗ Missing PoW was issued a token (score ${noPoWResult.score})`, colors.red);
+  }
+
+  if (noPoWResult.reason === 'pow_not_satisfied') {
+    passed++;
+    log(`  ✓ Refusal names the failed precondition`, colors.green);
+  } else {
+    failed++;
+    log(`  ✗ Expected reason 'pow_not_satisfied', got '${noPoWResult.reason}'`, colors.red);
+  }
+
+  // A solution referencing a challenge the server never issued must fare no
+  // better than sending none at all.
+  const forgedPoW = await makeRequest('/api/verify', {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0' },
+    body: {
+      siteKey: 'test-site-key',
+      signals: { behavioral: { totalPoints: 80, trajectoryLength: 350, approachPoints: 12 } },
+      powSolution: { challengeId: 'forged', nonce: 1, hash: '0000deadbeef', signalsHash: 'x' },
+    },
+  });
+
+  if (!forgedPoW.token && forgedPoW.success === false) {
+    passed++;
+    log(`  ✓ Forged PoW is refused a token outright`, colors.green);
+  } else {
+    failed++;
+    log(`  ✗ Forged PoW was issued a token (score ${forgedPoW.score})`, colors.red);
+  }
 }
 
 async function testTightenedExemptions() {
@@ -1711,7 +1781,7 @@ async function testGenuineBrowserArtifacts() {
   // absent on any page without a matching externally_connectable extension.
   // Both were being reported as Playwright artifacts and scored, so an ordinary
   // Chrome visitor carried a headless-category score of 0.771.
-  const realChrome = await makeRequest('/api/verify', {
+  const realChrome = await makeVerifiedRequest({
     headers: {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
       'Accept-Language': 'en-US,en;q=0.9', 'Accept-Encoding': 'gzip, deflate, br',

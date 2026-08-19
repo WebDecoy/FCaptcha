@@ -455,6 +455,31 @@ Datacenter addresses, high request rates and exceeded rate limits raise the time
 floor only — never the difficulty. See [what proof of work does and does not buy
 you](#what-the-proof-of-work-does-and-does-not-buy-you) for why.
 
+### Preconditions: what a token requires beyond a good score
+
+A token is issued only when **all** of these hold. They are checked outside the
+score on purpose — a score threshold answers "how suspicious is this visitor",
+which is the wrong question to ask of a caller that never completed the
+challenge:
+
+| Precondition | `reason` when it fails |
+|---|---|
+| The score is below the success threshold (0.5) | (score speaks for itself) |
+| A **valid proof of work** for a challenge this server issued, with the signals bound to it | `pow_not_satisfied` |
+| The minting origin is permitted, if `FCAPTCHA_ALLOWED_HOSTNAMES` is set | `hostname_not_allowed` |
+
+The widget solves a proof of work on every path and aborts rather than submit
+without one, so a request that arrives without a valid solution did not come from
+the widget. Missing, forged, or unbound solutions are also `dispositive`: they
+floor the reported score at 0.9, so an integrator risk-banding on the score sees
+the same verdict the gate did.
+
+This matters more than it looks. The final score is a weighted sum across ~12
+categories, so **any one category contributes at most its own weight** — the
+`bot` category caps at 0.13 against a 0.5 threshold. Before v1.23.0 that meant a
+bare `curl` with no proof of work and no browser was issued a valid token: every
+detector fired correctly and the aggregation discarded the verdict.
+
 ### POST /api/verify
 Verify a checkbox CAPTCHA submission.
 
