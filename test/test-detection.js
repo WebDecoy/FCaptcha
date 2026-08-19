@@ -10,6 +10,15 @@
 
 const SERVER_URL = process.argv[2] || 'http://localhost:3000';
 
+// Token verification is a server-to-server call and requires the secret. The
+// default matches the servers' own fallback, so `node test/test-detection.js`
+// against a dev server keeps working with no setup; point it at a configured
+// deployment by exporting the same value the server has.
+const VERIFY_SECRET =
+  process.env.FCAPTCHA_VERIFY_SECRET ||
+  process.env.FCAPTCHA_SECRET ||
+  'dev-secret-change-in-production';
+
 // Colors for terminal output
 const colors = {
   reset: '\x1b[0m',
@@ -986,7 +995,7 @@ async function testTokenVerification() {
   if (verifyResult.token) {
     // Verify the token
     const tokenResult = await makeRequest('/api/token/verify', {
-      body: { token: verifyResult.token }
+      body: { token: verifyResult.token, secret: VERIFY_SECRET }
     });
 
     if (tokenResult.valid) {
@@ -1002,7 +1011,7 @@ async function testTokenVerification() {
 
   // Test invalid token
   const invalidResult = await makeRequest('/api/token/verify', {
-    body: { token: 'invalid-token-here' }
+    body: { token: 'invalid-token-here', secret: VERIFY_SECRET }
   });
 
   if (!invalidResult.valid) {
@@ -1011,6 +1020,22 @@ async function testTokenVerification() {
   } else {
     failed++;
     log(`  ✗ Invalid token was accepted`, colors.red);
+  }
+
+  // A correct token with the wrong secret must be refused: this endpoint used to
+  // accept any caller, so the gate is worth asserting rather than assuming.
+  if (verifyResult.token) {
+    const unauthorized = await makeRequest('/api/token/verify', {
+      body: { token: verifyResult.token, secret: 'not-the-secret' }
+    });
+
+    if (!unauthorized.valid && unauthorized.reason === 'invalid_secret') {
+      passed++;
+      log(`  ✓ Token verification refuses a wrong secret`, colors.green);
+    } else {
+      failed++;
+      log(`  ✗ Wrong secret was accepted: ${JSON.stringify(unauthorized)}`, colors.red);
+    }
   }
 }
 

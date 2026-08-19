@@ -247,13 +247,13 @@ func TestNativeJA4TakesPrecedenceOverHeader(t *testing.T) {
 	}
 
 	// Both available: the native one is the one that gets scored.
-	both := e.VerifyWithHeaders(map[string]interface{}{}, "1.2.3.4", "site", "ua", headers, "", nativeFP, true, nil)
+	both := e.VerifyWithHeaders(map[string]interface{}{}, "1.2.3.4", "site", "ua", headers, "", nativeFP, true, nil, TokenBinding{})
 	if got := matchedTool(both); got != "native-source tool" {
 		t.Errorf("native JA4 should take precedence, matched %q", got)
 	}
 
 	// No native fingerprint (something upstream terminated TLS): fall back.
-	fallback := e.VerifyWithHeaders(map[string]interface{}{}, "1.2.3.4", "site", "ua", headers, "", "", true, nil)
+	fallback := e.VerifyWithHeaders(map[string]interface{}{}, "1.2.3.4", "site", "ua", headers, "", "", true, nil, TokenBinding{})
 	if got := matchedTool(fallback); got != "header-source tool" {
 		t.Errorf("should fall back to the trusted header, matched %q", got)
 	}

@@ -13,6 +13,7 @@ This guide covers installing and deploying FCaptcha for development and producti
 - [Docker Deployment](#docker-deployment)
 - [Production Setup](#production-setup)
 - [Configuration Reference](#configuration-reference)
+- [Upgrading to 1.22.0](#upgrading-to-1220)
 - [Verification](#verification)
 - [Troubleshooting](#troubleshooting)
 
@@ -443,6 +444,9 @@ export REDIS_URL=redis://localhost:6379
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `FCAPTCHA_SECRET` | Yes | - | Secret key for signing tokens (min 16 chars) |
+| `FCAPTCHA_VERIFY_SECRET` | No | `FCAPTCHA_SECRET` | Credential your backend sends as `secret` when verifying a token. Split it from the signing key so a leaked verify credential cannot also mint tokens |
+| `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | No | off | Restore the pre-1.22.0 behaviour where token verification accepted any caller. Migration cover for one release — see [Upgrading to 1.22.0](#upgrading-to-1220) |
+| `FCAPTCHA_ALLOWED_HOSTNAMES` | No | (any) | Comma-separated hostnames permitted to mint tokens, matched against the request `Origin` (then `Referer`) |
 | `PORT` | No | 3000 | Server port |
 | `REDIS_URL` | No | - | Redis URL for distributed state |
 | `NODE_ENV` | No | development | Set to `production` for Node.js |
@@ -564,6 +568,39 @@ startup log and the warning above rather than assuming.
 | 0.7 - 1.0 | Block | Reject request |
 
 ---
+
+## Upgrading to 1.22.0
+
+Two changes need action before you deploy.
+
+**1. Token verification now requires the secret.**
+
+`POST /api/token/verify` used to accept the `secret` parameter and ignore it, so
+any caller who could reach the endpoint could spend a token. It is now checked.
+If your backend already sends `secret` (as the README has always shown), nothing
+changes. If it does not, either add it:
+
+```diff
+  POST /api/token/verify
+- {"token": "..."}
++ {"token": "...", "secret": "<FCAPTCHA_SECRET>"}
+```
+
+or set `FCAPTCHA_LEGACY_UNAUTH_VERIFY=true` to keep the old behaviour for one
+release while you update. A wrong or missing secret answers `401`.
+
+**2. The token format is now identical across the three servers.**
+
+Go emitted padded base64url, Node unpadded, and Python signed a payload with
+different JSON spacing — so no two implementations could verify each other's
+tokens. This went unnoticed because each server only ever verified its own. All
+three now emit unpadded base64url over a compact, sorted-key payload, and all
+three accept the old encodings, so a rolling deploy is safe and tokens in flight
+keep working.
+
+This only mattered if you ran a **mixed fleet** (say Go and Node behind one load
+balancer) or migrated between implementations; in that setup verification was
+failing intermittently before and works now.
 
 ## Verification
 

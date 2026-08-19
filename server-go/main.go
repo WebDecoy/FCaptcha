@@ -152,6 +152,26 @@ func main() {
 		secretKey = "dev-secret-change-in-production"
 	}
 
+	// The credential a backend presents to validate a token. Defaults to the
+	// signing key, which is what the README has always documented, but can be
+	// separated: the signing key is a long-lived secret that must never leave
+	// the server, while this one is handed to every backend that verifies.
+	// Splitting them means a leaked verify credential does not let the holder
+	// mint tokens.
+	verifySecret := os.Getenv("FCAPTCHA_VERIFY_SECRET")
+	if verifySecret == "" {
+		verifySecret = secretKey
+	}
+
+	// Token verification used to accept anyone who could reach the endpoint: all
+	// three servers read `secret` out of the body and dropped it. Enforcing it
+	// is a breaking change for deployments that never sent one, so there is one
+	// release of escape hatch before the parameter becomes mandatory outright.
+	requireVerifySecret := !envFlagEnabled("FCAPTCHA_LEGACY_UNAUTH_VERIFY")
+	if !requireVerifySecret {
+		log.Printf("WARNING: FCAPTCHA_LEGACY_UNAUTH_VERIFY enabled — token verification accepts any caller. This escape hatch will be removed; send `secret` from your backend instead.")
+	}
+
 	verdictLoggingEnabled = envFlagEnabled("FCAPTCHA_LOG_VERDICTS")
 	verdictLogIncludeRaw = envFlagEnabled("FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW")
 	if verdictLoggingEnabled {
@@ -238,9 +258,21 @@ func main() {
 	r.Get("/health", healthHandler)
 	r.Post("/api/verify", verifyHandler(engine, proxyTrust, siteKeys, ja4s))
 	r.Post("/api/score", invisibleScoreHandler(engine, proxyTrust, siteKeys, ja4s))
-	r.Post("/api/token/verify", tokenVerifyHandler(engine, proxyTrust))
+	r.Post("/api/token/verify", tokenVerifyHandler(engine, proxyTrust, verifySecret, requireVerifySecret))
 	r.Get("/api/pow/challenge", powChallengeHandler(engine, proxyTrust, siteKeys))
 	r.Get("/api/challenge", challengeHandler(engine))
+
+	// Turnstile / reCAPTCHA / hCaptcha drop-in compatibility.
+	//
+	// Same contract, three paths, because the path is hardcoded in the SDKs and
+	// plugins we want to be usable against FCaptcha: pointing an existing
+	// integration at this server should be a base-URL change and nothing else.
+	// See siteverify.go for the adapter itself.
+	log.Printf("allowed hostnames: %s", engine.allowedHostnames.Describe())
+	compat := siteverifyHandler(engine, proxyTrust, NewIdempotencyStore(), verifySecret, requireVerifySecret)
+	r.Post("/turnstile/v0/siteverify", compat)
+	r.Post("/recaptcha/api/siteverify", compat)
+	r.Post("/siteverify", compat)
 
 	// Server
 	srv := &http.Server{
@@ -333,6 +365,8 @@ type VerifyRequest struct {
 	SiteKey     string                 `json:"siteKey"`
 	Signals     map[string]interface{} `json:"signals"`
 	SignalsJson string                 `json:"signalsJson,omitempty"`
+	Action      string                 `json:"action,omitempty"`
+	CData       string                 `json:"cdata,omitempty"`
 	PowSolution *PoWSolution           `json:"powSolution,omitempty"`
 	PowTiming   *PowTiming             `json:"powTiming,omitempty"`
 }
@@ -458,7 +492,7 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 		// passed as preDetections so the verified/forged verdict is scored.
 		webBotAuth := webBotAuthDetections(engine, r)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, req.PowSolution)
+		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, req.PowSolution)
 
 		// Add signal commitment detections to results
 		if len(extraDetections) > 0 {
@@ -499,6 +533,7 @@ type InvisibleScoreRequest struct {
 	Signals     map[string]interface{} `json:"signals"`
 	SignalsJson string                 `json:"signalsJson,omitempty"`
 	Action      string                 `json:"action"`
+	CData       string                 `json:"cdata,omitempty"`
 	PowSolution *PoWSolution           `json:"powSolution,omitempty"`
 	PowTiming   *PowTiming             `json:"powTiming,omitempty"`
 }
@@ -568,7 +603,7 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 		// Web Bot Auth: verify signed-agent requests (see verifyHandler).
 		webBotAuth := webBotAuthDetections(engine, r)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, req.PowSolution)
+		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, req.PowSolution)
 		if len(scoreExtraDetections) > 0 {
 			result.Detections = append(scoreExtraDetections, result.Detections...)
 		}
@@ -579,7 +614,11 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 			"success":        result.Success,
 			"score":          result.Score,
 			"token":          result.Token,
-			"action":         req.Action,
+			// Echo the sanitized form, not the raw input: this is what got
+			// signed into the token, so a caller comparing the two sees the
+			// same value.
+			"action":         SanitizeAction(req.Action),
+			"cdata":          SanitizeCData(req.CData),
 			"recommendation": result.Recommendation,
 		}
 
@@ -594,12 +633,31 @@ type TokenVerifyRequest struct {
 	Secret string `json:"secret"`
 }
 
-func tokenVerifyHandler(engine *ScoringEngine, trust *ProxyTrust) http.HandlerFunc {
+func tokenVerifyHandler(engine *ScoringEngine, trust *ProxyTrust, verifySecret string, requireSecret bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req TokenVerifyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "Invalid request body", http.StatusBadRequest)
 			return
+		}
+
+		// The secret gate. This endpoint is the boundary between "a browser
+		// finished a challenge" and "my backend believes it", so it is
+		// server-to-server and needs a credential — without one, anyone who can
+		// reach the host can spend a token they observed, and the single-use
+		// guard then denies the real user.
+		if requireSecret {
+			w.Header().Set("Content-Type", "application/json")
+			if req.Secret == "" {
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(map[string]interface{}{"valid": false, "reason": "missing_secret"})
+				return
+			}
+			if !SecretMatches(req.Secret, verifySecret) {
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(map[string]interface{}{"valid": false, "reason": "invalid_secret"})
+				return
+			}
 		}
 
 		// Extract client IP for verification

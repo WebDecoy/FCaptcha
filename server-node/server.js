@@ -14,12 +14,49 @@ const { ProxyTrust } = require('./clientip');
 const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 const { detectInputForensics } = require('./inputforensics');
+const {
+  ERROR_CODES,
+  HostnameAllowlist,
+  IdempotencyStore,
+  requestHostname,
+  sanitizeAction,
+  sanitizeCdata,
+  secretMatches,
+  siteverify
+} = require('./siteverify');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+// The siteverify contract accepts form-encoded bodies as well as JSON, and most
+// PHP and Python integrations in the wild post form-encoded. Parsing both here
+// costs nothing on the JSON path.
+app.use(express.urlencoded({ extended: false }));
 
 const SECRET_KEY = process.env.FCAPTCHA_SECRET || 'dev-secret-change-in-production';
+
+// The credential a backend presents to validate a token. Defaults to the signing
+// key, which is what the README has always documented, but can be separated:
+// the signing key is a long-lived secret that must never leave the server, while
+// this one is handed to every backend that verifies. Splitting them means a
+// leaked verify credential does not let the holder mint tokens.
+const VERIFY_SECRET = process.env.FCAPTCHA_VERIFY_SECRET || SECRET_KEY;
+
+// Token verification used to accept anyone who could reach the endpoint: all
+// three servers read `secret` out of the body and dropped it. Enforcing it is a
+// breaking change for deployments that never sent one, so there is one release
+// of escape hatch before the parameter becomes mandatory outright.
+const LEGACY_UNAUTH_VERIFY = /^(1|true|yes|on)$/i.test(
+  process.env.FCAPTCHA_LEGACY_UNAUTH_VERIFY || ''
+);
+
+// Optional: restrict which page origins may mint tokens. Off by default so
+// zero-config self-hosting keeps working. See siteverify.js.
+const ALLOWED_HOSTNAMES = HostnameAllowlist.fromEnv();
+
+// Lets a caller retry a validation that timed out without burning the token.
+const IDEMPOTENCY = new IdempotencyStore();
+
 const PORT = process.env.PORT || 3000;
 const TRUSTED_JA4_HEADERS = detection.getTrustedJA4HeaderNames();
 
@@ -1184,13 +1221,26 @@ function applyDispositiveFloor(score, detections) {
   return selfDeclared ? Math.max(score, DISPOSITIVE_FLOOR) : score;
 }
 
-function generateToken(ip, siteKey, score) {
+// Bind the token to the page that minted it and to the action it was minted
+// for. All three ride inside the signed payload, so a token issued for
+// `action=login` on example.com cannot be replayed against a password-reset
+// endpoint or presented from a site that lifted the key — the backend compares
+// what siteverify reports against what it expected.
+//
+// Empty strings rather than omitted keys: the signing payload is a sorted-key
+// JSON serialisation, so a token whose key set varies with what the browser
+// happened to send would be a second payload shape to keep in sync across three
+// languages. Fixed shape, empty when unknown.
+function generateToken(ip, siteKey, score, binding = {}) {
   const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8);
   const data = {
     site_key: siteKey,
     timestamp: Math.floor(Date.now() / 1000),
     score: Math.round(score * 1000) / 1000,
-    ip_hash: ipHash
+    ip_hash: ipHash,
+    hostname: binding.hostname || '',
+    action: binding.action || '',
+    cdata: binding.cdata || ''
   };
 
   const payload = JSON.stringify(data, Object.keys(data).sort());
@@ -1234,12 +1284,19 @@ function verifyToken(token, ip = null) {
     // Mark token as used (prevents replay)
     tokenStore.markUsed(sig);
 
+    // hostname/action/cdata default to '' so a token minted before they existed
+    // still verifies and reports the same shape. The signature covers whatever
+    // keys the token actually carries, so old four-key tokens validate
+    // unchanged — this is additive, not a format break.
     return {
       valid: true,
       site_key: decoded.site_key,
       timestamp: decoded.timestamp,
       score: decoded.score,
-      ip_hash: decoded.ip_hash
+      ip_hash: decoded.ip_hash,
+      hostname: decoded.hostname || '',
+      action: decoded.action || '',
+      cdata: decoded.cdata || ''
     };
   } catch (e) {
     return { valid: false, reason: e.message };
@@ -1433,8 +1490,25 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
   else if (finalScore < 0.6) recommendation = 'challenge';
   else recommendation = 'block';
 
-  const success = finalScore < 0.5;
-  const token = success ? generateToken(ip, siteKey, finalScore) : null;
+  // The hostname comes from the request headers rather than the request body:
+  // it is what the browser reported about the page, not what the page claimed
+  // about itself.
+  const hostname = requestHostname(headers);
+
+  // An unlisted hostname withholds the token but does not touch the score. The
+  // visitor is not the problem — a key registered to another site is — so the
+  // detection layer has nothing to say about it and the refusal is reported as
+  // its own reason rather than smuggled in as a bot verdict.
+  const hostnameAllowed = ALLOWED_HOSTNAMES.permits(hostname);
+  const success = finalScore < 0.5 && hostnameAllowed;
+
+  const token = success
+    ? generateToken(ip, siteKey, finalScore, {
+        hostname,
+        action: sanitizeAction(opts.action),
+        cdata: sanitizeCdata(opts.cdata)
+      })
+    : null;
 
   // Feed the ledger so the next challenge this source asks for is priced on
   // what it just did.
@@ -1447,7 +1521,8 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
     timestamp: Math.floor(Date.now() / 1000),
     recommendation,
     categoryScores,
-    detections
+    detections,
+    ...(hostnameAllowed ? {} : { reason: 'hostname_not_allowed', hostname })
   };
 }
 
@@ -1475,7 +1550,7 @@ function collectHeaders(req) {
 }
 
 app.post('/api/verify', async (req, res) => {
-  const { siteKey: rawSiteKey, signals, powSolution, signalsJson, powTiming } = req.body;
+  const { siteKey: rawSiteKey, signals, powSolution, signalsJson, powTiming, action, cdata } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
   // Bound the state an unvalidated siteKey can allocate (limits.js).
   const siteKey = SITE_KEYS.normalize(rawSiteKey, ip);
@@ -1491,13 +1566,13 @@ app.post('/api/verify', async (req, res) => {
   // Web Bot Auth verification needs the raw request; its verdict is scored.
   const webBotAuth = await verifyWebBotAuth(req);
 
-  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted });
+  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted, action, cdata });
   logVerdict('verify', siteKey, result);
   res.json(result);
 });
 
 app.post('/api/score', async (req, res) => {
-  const { siteKey: rawSiteKey, signals, action, powSolution, signalsJson, powTiming } = req.body;
+  const { siteKey: rawSiteKey, signals, action, cdata, powSolution, signalsJson, powTiming } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
   const siteKey = SITE_KEYS.normalize(rawSiteKey, ip);
   const userAgent = req.headers['user-agent'] || '';
@@ -1512,25 +1587,65 @@ app.post('/api/score', async (req, res) => {
   // Web Bot Auth verification needs the raw request; its verdict is scored.
   const webBotAuth = await verifyWebBotAuth(req);
 
-  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted });
+  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted, action, cdata });
   logVerdict('score', siteKey, result);
   res.json({
     success: result.success,
     score: result.score,
     token: result.token,
-    action: action || '',
+    // Echo the sanitized form, not the raw input: this is what got signed into
+    // the token, so a caller comparing the two sees the same value.
+    action: sanitizeAction(action),
+    cdata: sanitizeCdata(cdata),
     recommendation: result.recommendation
   });
 });
 
 app.post('/api/token/verify', (req, res) => {
-  const { token } = req.body;
+  const { token, secret } = req.body;
+
+  // The secret gate. This endpoint is the boundary between "a browser finished a
+  // challenge" and "my backend believes it", so it is server-to-server and needs
+  // a credential — without one, anyone who can reach the host can spend a token
+  // they observed, and the single-use guard then denies the real user.
+  if (!LEGACY_UNAUTH_VERIFY) {
+    if (!secret) {
+      return res.status(401).json({ valid: false, reason: 'missing_secret' });
+    }
+    if (!secretMatches(secret, VERIFY_SECRET)) {
+      return res.status(401).json({ valid: false, reason: 'invalid_secret' });
+    }
+  }
 
   // Extract client IP for verification
   const ip = PROXY_TRUST.clientIP(req);
 
   res.json(verifyToken(token, ip));
 });
+
+// Turnstile / reCAPTCHA / hCaptcha drop-in compatibility.
+//
+// Same contract, three paths, because the path is hardcoded in the SDKs and
+// plugins we want to be usable against FCaptcha: pointing an existing
+// integration at this server should be a base-URL change and nothing else.
+// See siteverify.js for the adapter itself.
+function siteverifyHandler(req, res) {
+  res.json(
+    siteverify({
+      body: req.body,
+      // Bind to this server's token store, so replay state is shared with the
+      // native endpoint rather than kept in a parallel universe.
+      verifyToken,
+      expectedSecret: VERIFY_SECRET,
+      idempotencyStore: IDEMPOTENCY,
+      requireSecret: !LEGACY_UNAUTH_VERIFY
+    })
+  );
+}
+
+app.post('/turnstile/v0/siteverify', siteverifyHandler);
+app.post('/recaptcha/api/siteverify', siteverifyHandler);
+app.post('/siteverify', siteverifyHandler);
 
 // PoW Challenge endpoint - client fetches this on page load
 app.get('/api/pow/challenge', (req, res) => {

@@ -405,8 +405,8 @@ func TestVerifyWithHeadersScoresPreDetections(t *testing.T) {
 	e := NewScoringEngine("test-secret")
 	pre := []DetectionResult{webBotAuthVerified("https://agent.example", "thumb", "ed25519")}
 
-	base := e.VerifyWithHeaders(map[string]interface{}{}, "1.2.3.4", "site", "ua", nil, "", "", false, nil)
-	withPre := e.VerifyWithHeaders(map[string]interface{}{}, "1.2.3.4", "site", "ua", nil, "", "", false, pre)
+	base := e.VerifyWithHeaders(map[string]interface{}{}, "1.2.3.4", "site", "ua", nil, "", "", false, nil, TokenBinding{})
+	withPre := e.VerifyWithHeaders(map[string]interface{}{}, "1.2.3.4", "site", "ua", nil, "", "", false, pre, TokenBinding{})
 
 	if base.CategoryScores["declared_ai"] != 0 {
 		t.Fatalf("precondition: expected no declared_ai in base, got %v", base.CategoryScores["declared_ai"])

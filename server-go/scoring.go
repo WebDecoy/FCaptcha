@@ -189,6 +189,9 @@ type ScoringEngine struct {
 	weights          map[ThreatCategory]float64
 	uaPatterns       []*regexp.Regexp
 	webBotAuth       *webbotauth.Verifier
+	// Which page origins may mint tokens. Unrestricted unless the operator sets
+	// FCAPTCHA_ALLOWED_HOSTNAMES; see siteverify.go.
+	allowedHostnames *HostnameAllowlist
 }
 
 // webBotAuthTimeout bounds the whole Web Bot Auth verification, including the
@@ -272,7 +275,8 @@ func NewScoringEngine(secretKey string) *ScoringEngine {
 			CategoryBot:         0.13,
 			CategoryDeclaredAI:  0.02,
 		},
-		uaPatterns: compileUAPatterns(),
+		uaPatterns:       compileUAPatterns(),
+		allowedHostnames: HostnameAllowlistFromEnv(),
 		// Open directories: FCaptcha wants to attempt verification of ANY
 		// claimed agent identity — the interesting outcome is a signature that
 		// claims an identity and fails to prove it. An allowlist would silently
@@ -334,10 +338,15 @@ func compileUAPatterns() []*regexp.Regexp {
 // nativeJA4 is a fingerprint this process computed from the ClientHello (see
 // ja4.go), empty when something upstream terminated TLS.
 //
-// NOTE: this parameter list has now grown three times and is due a request-context
-// struct. Left positional for now so the vendored copy in fcaptcha-cloud stays a
-// straight file copy rather than a port.
-func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash, nativeJA4 string, peerTrusted bool, preDetections []DetectionResult, powSolution ...*PoWSolution) *VerificationResult {
+// binding carries what the issued token should be bound to beyond its score.
+// Only Action and CData are read from it: Hostname is derived here from the
+// request headers, because a caller that could state the hostname could state
+// any hostname, which is exactly what the binding exists to prevent.
+//
+// NOTE: this parameter list has now grown four times and is overdue a
+// request-context struct. Left positional for now so the vendored copy in
+// fcaptcha-cloud stays a straight file copy rather than a port.
+func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash, nativeJA4 string, peerTrusted bool, preDetections []DetectionResult, binding TokenBinding, powSolution ...*PoWSolution) *VerificationResult {
 	detections := make([]DetectionResult, 0, len(preDetections)+8)
 	detections = append(detections, preDetections...)
 
@@ -479,11 +488,26 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 		recommendation = "block"
 	}
 
-	success := finalScore < 0.5
+	// The hostname comes from the request headers rather than the caller: it is
+	// what the browser reported about the page, not what the page claimed about
+	// itself. Overriding whatever the caller put in binding.Hostname is
+	// deliberate — see the doc comment.
+	hostname := RequestHostname(headers)
+
+	// An unlisted hostname withholds the token but does not touch the score. The
+	// visitor is not the problem — a key registered to another site is — so the
+	// detection layer has nothing to say about it and the refusal is reported as
+	// its own reason rather than smuggled in as a bot verdict.
+	hostnameAllowed := e.allowedHostnames.Permits(hostname)
+	success := finalScore < 0.5 && hostnameAllowed
 
 	var token string
 	if success {
-		token = e.generateToken(ip, siteKey, finalScore)
+		token = e.generateToken(ip, siteKey, finalScore, TokenBinding{
+			Hostname: hostname,
+			Action:   SanitizeAction(binding.Action),
+			CData:    SanitizeCData(binding.CData),
+		})
 	}
 
 	// Feed the ledger so the next challenge this source asks for is priced on
@@ -505,7 +529,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 
 // Verify performs full verification (backward compatible)
 func (e *ScoringEngine) Verify(signals map[string]interface{}, ip, siteKey, userAgent string) *VerificationResult {
-	return e.VerifyWithHeaders(signals, ip, siteKey, userAgent, nil, "", "", false, nil, nil)
+	return e.VerifyWithHeaders(signals, ip, siteKey, userAgent, nil, "", "", false, nil, TokenBinding{}, nil)
 }
 
 // GenerateChallenge creates a new PoW challenge (legacy)
@@ -672,7 +696,7 @@ func (e *ScoringEngine) VerifyToken(token string) map[string]interface{} {
 func (e *ScoringEngine) VerifyTokenWithIP(token, ip string) map[string]interface{} {
 	result := make(map[string]interface{})
 
-	decoded, err := base64.URLEncoding.DecodeString(token)
+	decoded, err := decodeTokenBase64(token)
 	if err != nil {
 		result["valid"] = false
 		result["reason"] = "invalid_encoding"
@@ -739,6 +763,13 @@ func (e *ScoringEngine) VerifyTokenWithIP(token, ip string) map[string]interface
 	result["timestamp"] = data["timestamp"]
 	result["score"] = data["score"]
 	result["ip_hash"] = data["ip_hash"]
+	// hostname/action/cdata default to "" so a token minted before they existed
+	// still verifies and reports the same shape. The signature covers whatever
+	// keys the token actually carries, so old four-key tokens validate
+	// unchanged — this is additive, not a format break.
+	result["hostname"] = stringField(data, "hostname")
+	result["action"] = stringField(data, "action")
+	result["cdata"] = stringField(data, "cdata")
 	return result
 }
 
@@ -2017,7 +2048,18 @@ func (e *ScoringEngine) calculateFinalScore(categoryScores map[string]float64) f
 // Token Generation
 // ============================================================
 
-func (e *ScoringEngine) generateToken(ip, siteKey string, score float64) string {
+// generateToken mints a signed token bound to the source, the site, the score,
+// and — via binding — the page that minted it and the action it was minted for.
+//
+// The binding is what lets a backend reject a token that is valid but was not
+// issued for what it is being spent on: an `action=login` token replayed against
+// a password-reset endpoint, or a token minted on a site that lifted the key.
+//
+// Empty strings rather than omitted keys: the signing payload is a sorted-key
+// JSON serialisation, so a token whose key set varied with what the browser
+// happened to send would be a second payload shape to keep in sync across three
+// languages. Fixed shape, empty when unknown.
+func (e *ScoringEngine) generateToken(ip, siteKey string, score float64, binding TokenBinding) string {
 	ipHash := sha256.Sum256([]byte(ip))
 
 	data := map[string]interface{}{
@@ -2025,6 +2067,9 @@ func (e *ScoringEngine) generateToken(ip, siteKey string, score float64) string 
 		"timestamp": time.Now().Unix(),
 		"score":     math.Round(score*1000) / 1000,
 		"ip_hash":   hex.EncodeToString(ipHash[:4]),
+		"hostname":  binding.Hostname,
+		"action":    binding.Action,
+		"cdata":     binding.CData,
 	}
 
 	payload, _ := json.Marshal(data)
@@ -2033,7 +2078,24 @@ func (e *ScoringEngine) generateToken(ip, siteKey string, score float64) string 
 	data["sig"] = sig
 	tokenData, _ := json.Marshal(data)
 
-	return base64.URLEncoding.EncodeToString(tokenData)
+	// Unpadded base64url, matching server-node and server-python.
+	//
+	// This used to be padded URLEncoding, which meant a token minted by the Go
+	// server could not be decoded by the Node one and vice versa. Nobody noticed
+	// because each server only ever verified its own tokens — until a backend
+	// started calling siteverify against a fleet where the instance that minted
+	// the token is not the instance that validates it. See decodeTokenBase64.
+	return base64.RawURLEncoding.EncodeToString(tokenData)
+}
+
+// decodeTokenBase64 accepts a token in either padding convention.
+//
+// Go emitted padded base64url historically and emits unpadded now, so both are
+// in circulation during a rolling deploy and for one token lifetime after it.
+// Accepting both costs a TrimRight and removes the only reason a valid token
+// would be rejected across a version boundary.
+func decodeTokenBase64(token string) ([]byte, error) {
+	return base64.RawURLEncoding.DecodeString(strings.TrimRight(token, "="))
 }
 
 func (e *ScoringEngine) computeSignature(payload []byte) string {

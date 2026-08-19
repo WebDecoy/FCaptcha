@@ -15,7 +15,8 @@
     "test:clientip": "node clientip.test.js",
     "test:limits": "node limits.test.js",
     "test:detection": "node detection.test.js",
-    "test": "node clientip.test.js && node limits.test.js && node detection.test.js && node inputforensics.test.js && node webbotauth.test.js && node --test suspicion.test.js",
+    "test": "node clientip.test.js && node limits.test.js && node detection.test.js && node inputforensics.test.js && node webbotauth.test.js && node siteverify.test.js && node --test suspicion.test.js",
+    "test:siteverify": "node siteverify.test.js",
     "test:forensics": "node inputforensics.test.js",
     "test:suspicion": "node --test suspicion.test.js"
   },
