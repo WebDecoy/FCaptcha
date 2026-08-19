@@ -399,8 +399,14 @@ func TestCheckWebBotAuthEndToEnd(t *testing.T) {
 // detections (Web Bot Auth verdicts) participate in scoring rather than being
 // cosmetic — the property that makes this feature meaningful. Uses the
 // declared_ai category, which no other detector populates here, so the effect
-// is unambiguous (calculateCategoryScores is a confidence-weighted average, so
-// a detection added to an already-populated category can move it either way).
+// is unambiguous (calculateCategoryScores is a noisy-OR, so a detection added to
+// an already-populated category would be harder to attribute).
+//
+// Compares the weighted sums rather than the reported Score: neither call
+// supplies a PoW solution, so both are pinned to dispositiveFloor and the
+// reported scores are equal by construction. The floor is a separate mechanism
+// with its own tests; what is under test here is that the detection reaches the
+// sum at all.
 func TestVerifyWithHeadersScoresPreDetections(t *testing.T) {
 	e := NewScoringEngine("test-secret")
 	pre := []DetectionResult{webBotAuthVerified("https://agent.example", "thumb", "ed25519")}
@@ -414,8 +420,10 @@ func TestVerifyWithHeadersScoresPreDetections(t *testing.T) {
 	if withPre.CategoryScores["declared_ai"] <= 0 {
 		t.Errorf("expected preDetection to populate the declared_ai category score, got %v", withPre.CategoryScores["declared_ai"])
 	}
-	if withPre.Score <= base.Score {
-		t.Errorf("expected preDetection to raise the final score: base=%v withPre=%v", base.Score, withPre.Score)
+	baseSum := e.calculateFinalScore(base.CategoryScores)
+	withPreSum := e.calculateFinalScore(withPre.CategoryScores)
+	if withPreSum <= baseSum {
+		t.Errorf("expected preDetection to raise the weighted sum: base=%v withPre=%v", baseSum, withPreSum)
 	}
 	found := false
 	for _, d := range withPre.Detections {
@@ -644,5 +652,87 @@ func TestWebBotAuthLifetimeCeiling(t *testing.T) {
 	}, "https://agent.example")
 	if noTimes[0].Details["verified"] != true {
 		t.Errorf("absent timestamps should not suppress verification, got %+v", noTimes[0].Details)
+	}
+}
+
+// ---------------------------------------------------------------- PoW gating
+//
+// A proof of work is a precondition, not evidence. These guard the bypass found
+// on 2026-08-19: a bare `curl` sending `{"siteKey":"x","signals":{}}` — no
+// browser, no PoW, a curl User-Agent — was issued a valid token, ten times out
+// of ten, on every server. Every detector fired correctly; the aggregation threw
+// the verdict away, because the final score is a weighted sum and the bot
+// category contributes at most its 0.13 weight. All the PoW failures firing at
+// once reached 0.1298 against a 0.5 threshold.
+
+// noPoWVerify runs a verification the way the bypass did: no PoW solution at all.
+func noPoWVerify(e *ScoringEngine, signals map[string]interface{}) *VerificationResult {
+	return e.VerifyWithHeaders(signals, "203.0.113.4", "site", "curl/8.7.1", nil, "", "", false, nil, TokenBinding{})
+}
+
+func TestNoPoWSolutionWithholdsAToken(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	result := noPoWVerify(e, map[string]interface{}{})
+
+	if result.Success {
+		t.Error("a request with no PoW solution must not succeed")
+	}
+	if result.Token != "" {
+		t.Error("a request with no PoW solution must not be issued a token")
+	}
+}
+
+func TestNoPoWSolutionIsDispositive(t *testing.T) {
+	// The gate withholds the token; the floor makes the reported score honest,
+	// so an integrator risk-banding on the score sees the truth too.
+	e := NewScoringEngine("test-secret")
+	result := noPoWVerify(e, map[string]interface{}{})
+
+	if result.Score < dispositiveFloor {
+		t.Errorf("expected the dispositive floor, got %v", result.Score)
+	}
+	if result.Recommendation != "block" {
+		t.Errorf("expected a block recommendation, got %q", result.Recommendation)
+	}
+}
+
+func TestForgedPoWSolutionWithholdsAToken(t *testing.T) {
+	// A solution referencing a challenge this server never issued.
+	e := NewScoringEngine("test-secret")
+	forged := &PoWSolution{ChallengeID: "forged", Nonce: 1, Hash: "0000deadbeef", SignalsHash: "x"}
+	result := e.VerifyWithHeaders(map[string]interface{}{}, "203.0.113.4", "site", "curl/8.7.1", nil, "", "", false, nil, TokenBinding{}, forged)
+
+	if result.Success || result.Token != "" {
+		t.Error("a forged PoW solution must not be issued a token")
+	}
+	if result.Score < dispositiveFloor {
+		t.Errorf("expected the dispositive floor, got %v", result.Score)
+	}
+}
+
+func TestWithheldTokenReportsWhy(t *testing.T) {
+	// A caller whose score is under the threshold but who gets no token needs to
+	// be told which precondition failed, or the failure is unsupportable.
+	e := NewScoringEngine("test-secret")
+	result := noPoWVerify(e, map[string]interface{}{})
+	if result.Reason != "" && result.Reason != "pow_not_satisfied" {
+		t.Errorf("unexpected reason %q", result.Reason)
+	}
+}
+
+func TestBotCategoryAloneCannotReachTheThreshold(t *testing.T) {
+	// Pins the reason the gate has to exist rather than trusting the score.
+	// If this ever fails because the weighted sum was replaced, revisit whether
+	// the gate is still the right mechanism — but do not remove it on the
+	// strength of a reweighting alone.
+	e := NewScoringEngine("test-secret")
+	saturated := map[string]float64{}
+	for cat := range e.weights {
+		saturated[string(cat)] = 0.0
+	}
+	saturated[string(CategoryBot)] = 1.0
+
+	if got := e.calculateFinalScore(saturated); got >= 0.5 {
+		t.Errorf("bot category alone now reaches %v; the weighting changed", got)
 	}
 }

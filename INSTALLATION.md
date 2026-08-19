@@ -13,6 +13,7 @@ This guide covers installing and deploying FCaptcha for development and producti
 - [Docker Deployment](#docker-deployment)
 - [Production Setup](#production-setup)
 - [Configuration Reference](#configuration-reference)
+- [Upgrading to 1.23.0](#upgrading-to-1230)
 - [Upgrading to 1.22.0](#upgrading-to-1220)
 - [Verification](#verification)
 - [Troubleshooting](#troubleshooting)
@@ -568,6 +569,28 @@ startup log and the warning above rather than assuming.
 | 0.7 - 1.0 | Block | Reject request |
 
 ---
+
+## Upgrading to 1.23.0
+
+**A proof of work is now required for a token.** `/api/verify` and `/api/score`
+withhold the token when the request carries no valid PoW solution, instead of
+merely scoring it.
+
+If you use the bundled widget, nothing changes — it already solves a challenge on
+every path and aborts rather than submit without one. Verified against the
+measurement harness: human false-positive rate stays 0.00% and the human median
+score is unchanged at 0.097.
+
+If you call `/api/verify` directly from your own client, you must now complete
+the handshake: `GET /api/pow/challenge`, echo the returned nonce in
+`signals.meta.challengeNonce`, commit the signals into the PoW input, and send
+the solution as `powSolution`. A refusal reports `"reason": "pow_not_satisfied"`.
+
+Why: the final score is a weighted sum, so the `bot` category could contribute at
+most its 0.13 weight against a 0.5 threshold. Every PoW failure firing at once
+reached 0.1298 — so a bare `curl` with no solution and no signals was issued a
+valid token. There is no configuration to restore the old behaviour; it was a
+bypass, not a feature.
 
 ## Upgrading to 1.22.0
 

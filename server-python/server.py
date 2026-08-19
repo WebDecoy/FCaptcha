@@ -1462,22 +1462,47 @@ def run_verification(
             "difficulty": pow_timing.difficulty
         }
 
-    # Verify PoW if provided
+    # Verify PoW if provided.
+    #
+    # pow_satisfied records whether the caller actually completed the challenge
+    # this server issued. It gates token issuance below rather than only feeding
+    # the score, because a proof of work is a precondition, not evidence: the
+    # widget solves one on every path and aborts rather than submit without it,
+    # so a request that arrives without a valid solution did not come from the
+    # widget at all.
+    #
+    # Scoring it alone was not enough. The final score is a weighted sum, so the
+    # bot category contributes at most its 0.13 weight - every PoW failure firing
+    # at once reached 0.1298 against a 0.5 threshold, and a bare `curl` with no
+    # solution and no signals was issued a valid token. The detections were all
+    # correct; the aggregation discarded them.
+    pow_satisfied = False
     if pow_solution:
         pow_result = pow_store.verify(pow_solution, site_key, client_signals_hash)
         if not pow_result["valid"]:
             detections.append(Detection(
                 ThreatCategory.BOT, 0.7, 0.8,
-                f"PoW verification failed: {pow_result['reason']}"
+                f"PoW verification failed: {pow_result['reason']}",
+                # A solution that does not verify against a challenge this
+                # server issued is not weak evidence of automation, it is proof
+                # the challenge was not completed. See apply_dispositive_floor.
+                dispositive=True
             ))
+        else:
+            pow_satisfied = True
 
         # Verify challenge nonce binding
         if pow_result["valid"] and pow_result.get("nonce"):
             client_nonce = signals.get("meta", {}).get("challengeNonce")
             if not client_nonce or client_nonce != pow_result["nonce"]:
+                # The solution verifies but the signals it commits to are not
+                # the ones presented, so the work was done for a different
+                # payload. Revokes the pass granted above.
+                pow_satisfied = False
                 detections.append(Detection(
                     ThreatCategory.BOT, 0.9, 0.9,
-                    "Challenge nonce mismatch (signals not bound to challenge)"
+                    "Challenge nonce mismatch (signals not bound to challenge)",
+                    dispositive=True
                 ))
 
         # Server-side timing, the one cost an attacker cannot buy their way out
@@ -1506,7 +1531,8 @@ def run_verification(
         # No PoW solution provided - hard fail
         detections.append(Detection(
             ThreatCategory.BOT, 0.9, 0.95,
-            "No PoW solution provided"
+            "No PoW solution provided",
+            dispositive=True
         ))
 
     # Behavioral detectors
@@ -1604,7 +1630,26 @@ def run_verification(
     # detection layer has nothing to say about it and the refusal is reported as
     # its own reason rather than smuggled in as a bot verdict.
     hostname_allowed = ALLOWED_HOSTNAMES.permits(hostname)
-    success = final_score < 0.5 and hostname_allowed
+
+    # Three independent conditions, deliberately not folded into the score.
+    #
+    # pow_satisfied is the one that matters most: a score threshold answers "how
+    # suspicious is this visitor", which is the wrong question to ask of someone
+    # who never completed the challenge. Gating here means no future reweighting
+    # can reopen the bypass, and it holds even if the dispositive floor is
+    # lowered or removed.
+    success = final_score < 0.5 and hostname_allowed and pow_satisfied
+
+    # Name the failed precondition whenever one fails, not only when the score
+    # would otherwise have allowed. Gating it on the score made the PoW case
+    # unreachable - a PoW failure is dispositive, so it floors the score at 0.9
+    # and the branch never fired - which is exactly the case a caller most needs
+    # explained.
+    withheld_reason = ""
+    if not pow_satisfied:
+        withheld_reason = "pow_not_satisfied"
+    elif not hostname_allowed:
+        withheld_reason = "hostname_not_allowed"
 
     token = generate_token(ip, site_key, final_score, {
         "hostname": hostname,
@@ -1622,7 +1667,8 @@ def run_verification(
         "token": token,
         "timestamp": int(time.time()),
         "recommendation": recommendation,
-        **({} if hostname_allowed else {"reason": "hostname_not_allowed", "hostname": hostname}),
+        **({"reason": withheld_reason} if withheld_reason else {}),
+        **({} if hostname_allowed else {"hostname": hostname}),
         "categoryScores": category_scores,
         "detections": [
             {

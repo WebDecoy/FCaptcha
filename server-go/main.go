@@ -380,6 +380,7 @@ type VerifyResponse struct {
 	Recommendation string             `json:"recommendation"`
 	CategoryScores map[string]float64 `json:"categoryScores,omitempty"`
 	Detections     []DetectionInfo    `json:"detections,omitempty"`
+	Reason         string             `json:"reason,omitempty"`
 }
 
 type DetectionInfo struct {
@@ -520,6 +521,7 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 			Recommendation: result.Recommendation,
 			CategoryScores: result.CategoryScores,
 			Detections:     detections,
+			Reason:         result.Reason,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -620,6 +622,9 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 			"action":         SanitizeAction(req.Action),
 			"cdata":          SanitizeCData(req.CData),
 			"recommendation": result.Recommendation,
+		}
+		if result.Reason != "" {
+			resp["reason"] = result.Reason
 		}
 
 		w.Header().Set("Content-Type", "application/json")

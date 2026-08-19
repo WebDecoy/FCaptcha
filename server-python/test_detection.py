@@ -16,6 +16,8 @@ from server import (
     ThreatCategory,
     apply_dispositive_floor,
     calculate_category_scores,
+    calculate_final_score,
+    run_verification,
     DISPOSITIVE_FLOOR,
 )
 
@@ -108,6 +110,59 @@ def dispositive_floor():
 
     # The floor raises, never lowers.
     assert apply_dispositive_floor(0.97, declared) == 0.97
+
+
+# ------------------------------------------------------------- PoW gating
+#
+# A proof of work is a precondition, not evidence. These guard the bypass found
+# on 2026-08-19: a bare `curl` sending {"siteKey": "x", "signals": {}} - no
+# browser, no PoW, a curl User-Agent - was issued a valid token, ten times out of
+# ten, on every server. Every detector fired correctly; the aggregation threw the
+# verdict away, because the final score is a weighted sum and the bot category
+# contributes at most its 0.13 weight. All the PoW failures firing at once
+# reached 0.1298 against a 0.5 threshold.
+
+
+def _no_pow_verification(signals=None):
+    """A verification the way the bypass ran it: no PoW solution at all."""
+    return run_verification(
+        signals if signals is not None else {},
+        "203.0.113.4",
+        "site",
+        "curl/8.7.1",
+    )
+
+
+@test
+def no_pow_solution_withholds_a_token():
+    result = _no_pow_verification()
+    assert result["success"] is False, "a request with no PoW must not succeed"
+    assert not result["token"], "a request with no PoW must not be issued a token"
+
+
+@test
+def no_pow_solution_is_dispositive():
+    """The gate withholds the token; the floor makes the reported score honest,
+    so an integrator risk-banding on the score sees the truth too."""
+    result = _no_pow_verification()
+    assert result["score"] >= DISPOSITIVE_FLOOR, result["score"]
+    assert result["recommendation"] == "block", result["recommendation"]
+
+
+@test
+def withheld_token_names_the_failed_precondition():
+    result = _no_pow_verification()
+    assert result.get("reason") == "pow_not_satisfied", result.get("reason")
+
+
+@test
+def bot_category_alone_cannot_reach_the_threshold():
+    """Pins the reason the gate has to exist rather than trusting the score. If
+    this ever fails because the weighted sum was replaced, revisit whether the
+    gate is still the right mechanism - but do not remove it on the strength of a
+    reweighting alone."""
+    saturated = {ThreatCategory.BOT.value: 1.0}
+    assert calculate_final_score(saturated) < 0.5, calculate_final_score(saturated)
 
 
 DetectionTests = test.testcase("DetectionTests")
