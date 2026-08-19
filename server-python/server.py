@@ -18,11 +18,20 @@ from collections import defaultdict
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from clientip import ProxyTrust
 from sitekeys import SiteKeyGuard
+from siteverify import (
+    HostnameAllowlist,
+    IdempotencyStore,
+    request_hostname,
+    sanitize_action,
+    sanitize_cdata,
+    secret_matches,
+    siteverify,
+)
 from inputforensics import detect_input_forensics
 from suspicion import (
     SuspicionLedger,
@@ -53,6 +62,13 @@ app.add_middleware(
 
 SECRET_KEY = os.getenv("FCAPTCHA_SECRET", "dev-secret-change-in-production")
 
+# The credential a backend presents to validate a token. Defaults to the signing
+# key, which is what the README has always documented, but can be separated: the
+# signing key is a long-lived secret that must never leave the server, while this
+# one is handed to every backend that verifies. Splitting them means a leaked
+# verify credential does not let the holder mint tokens.
+VERIFY_SECRET = os.getenv("FCAPTCHA_VERIFY_SECRET") or SECRET_KEY
+
 # Verdict logging is off by default: a self-hosted FCaptcha emits no per-request
 # logs unless the operator opts in via FCAPTCHA_LOG_VERDICTS (1/true/yes/on).
 # When on, each /api/verify and /api/score logs one privacy-safe JSON line
@@ -70,6 +86,19 @@ def _env_flag(name: str) -> bool:
 
 VERDICT_LOGGING_ENABLED = _env_flag("FCAPTCHA_LOG_VERDICTS")
 VERDICT_LOG_INCLUDE_RAW = _env_flag("FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW")
+
+# Token verification used to accept anyone who could reach the endpoint: all
+# three servers read `secret` out of the body and dropped it. Enforcing it is a
+# breaking change for deployments that never sent one, so there is one release of
+# escape hatch before the parameter becomes mandatory outright.
+REQUIRE_VERIFY_SECRET = not _env_flag("FCAPTCHA_LEGACY_UNAUTH_VERIFY")
+
+# Optional: restrict which page origins may mint tokens. Off by default so
+# zero-config self-hosting keeps working. See siteverify.py.
+ALLOWED_HOSTNAMES = HostnameAllowlist.from_env()
+
+# Lets a caller retry a validation that timed out without burning the token.
+IDEMPOTENCY = IdempotencyStore()
 if VERDICT_LOGGING_ENABLED and VERDICT_LOG_INCLUDE_RAW:
     print(
         "WARNING: FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW enabled — verdict logs include "
@@ -141,6 +170,8 @@ class VerifyRequest(BaseModel):
     siteKey: str
     signals: Dict[str, Any]
     signalsJson: Optional[str] = None
+    action: str = ""
+    cdata: str = ""
     powSolution: Optional[PoWSolution] = None
     powTiming: Optional[PowTiming] = None
 
@@ -149,12 +180,14 @@ class ScoreRequest(BaseModel):
     signals: Dict[str, Any]
     signalsJson: Optional[str] = None
     action: str = ""
+    cdata: str = ""
     powSolution: Optional[PoWSolution] = None
     powTiming: Optional[PowTiming] = None
 
 class TokenVerifyRequest(BaseModel):
     token: str
-    secret: str
+    # Declared but never checked until now: see the token_verify handler.
+    secret: str = ""
 
 
 # =============================================================================
@@ -1260,23 +1293,71 @@ def calculate_final_score(category_scores: Dict[str, float]) -> float:
     return min(1.0, total)
 
 
-def generate_token(ip: str, site_key: str, score: float) -> str:
+def _canonical_payload(data: Dict) -> str:
+    """The exact bytes a token signature covers.
+
+    Sorted keys and no whitespace, byte-identical to Node's
+    ``JSON.stringify(data, Object.keys(data).sort())`` and Go's
+    ``json.Marshal`` of a map. The three servers sign the same claims, so they
+    must serialise them the same way or a token minted by one is rejected by the
+    others.
+    """
+    return json.dumps(data, sort_keys=True, separators=(",", ":"))
+
+
+def _decode_token_base64(token: str) -> bytes:
+    """Decode a token in either padding convention.
+
+    Python emitted padded base64url historically and emits unpadded now, so both
+    are in circulation during a rolling deploy and for one token lifetime after
+    it. Re-adding the padding costs nothing and removes the only reason a valid
+    token would be rejected across a version boundary.
+    """
+    stripped = token.rstrip("=")
+    padding = "=" * (-len(stripped) % 4)
+    return base64.urlsafe_b64decode(stripped + padding)
+
+
+def generate_token(
+    ip: str,
+    site_key: str,
+    score: float,
+    binding: Optional[Dict[str, str]] = None,
+) -> str:
+    """Mint a signed token bound to the source, the site, the score, and - via
+    ``binding`` - the page that minted it and the action it was minted for.
+
+    The binding is what lets a backend reject a token that is valid but was not
+    issued for what it is being spent on: an ``action=login`` token replayed
+    against a password-reset endpoint, or a token minted on a site that lifted
+    the key.
+
+    Empty strings rather than omitted keys: the signing payload is a sorted-key
+    JSON serialisation, so a token whose key set varied with what the browser
+    happened to send would be a second payload shape to keep in sync across three
+    languages. Fixed shape, empty when unknown.
+    """
+    binding = binding or {}
     ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:8]
     data = {
         "site_key": site_key,
         "timestamp": int(time.time()),
         "score": round(score, 3),
-        "ip_hash": ip_hash
+        "ip_hash": ip_hash,
+        "hostname": binding.get("hostname", ""),
+        "action": binding.get("action", ""),
+        "cdata": binding.get("cdata", "")
     }
-    payload = json.dumps(data, sort_keys=True)
+    payload = _canonical_payload(data)
     sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
     data["sig"] = sig
-    return base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
+    # Unpadded base64url, matching server-node and server-go.
+    return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
 
 
 def verify_token(token: str, ip: str = None) -> Dict:
     try:
-        decoded = json.loads(base64.urlsafe_b64decode(token).decode())
+        decoded = json.loads(_decode_token_base64(token).decode())
 
         # Check expiration
         if time.time() - decoded.get("timestamp", 0) > 300:
@@ -1284,10 +1365,22 @@ def verify_token(token: str, ip: str = None) -> Dict:
 
         sig = decoded.pop("sig", "")
         ip_hash = decoded.get("ip_hash", "")
-        payload = json.dumps(decoded, sort_keys=True)
-        expected_sig = hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
-        if not hmac.compare_digest(sig, expected_sig):
+        # Accept both the compact payload and the legacy spaced one. Python used
+        # json.dumps' default separators, which put a space after every ':' and
+        # ',' and made its signatures disagree with Node's and Go's over
+        # identical claims. Tokens minted before the fix are still in flight for
+        # one token lifetime after a deploy, so both are honoured here.
+        if not any(
+            hmac.compare_digest(
+                sig,
+                hmac.new(SECRET_KEY.encode(), candidate.encode(), hashlib.sha256).hexdigest(),
+            )
+            for candidate in (
+                _canonical_payload(decoded),
+                json.dumps(decoded, sort_keys=True),
+            )
+        ):
             return {"valid": False, "reason": "invalid_signature"}
 
         # Check for token replay (single-use tokens)
@@ -1303,12 +1396,19 @@ def verify_token(token: str, ip: str = None) -> Dict:
         # Mark token as used (prevents replay)
         token_store.mark_used(sig)
 
+        # hostname/action/cdata default to "" so a token minted before they
+        # existed still verifies and reports the same shape. The signature covers
+        # whatever keys the token actually carries, so old four-key tokens
+        # validate unchanged - this is additive, not a format break.
         return {
             "valid": True,
             "site_key": decoded.get("site_key"),
             "timestamp": decoded.get("timestamp"),
             "score": decoded.get("score"),
-            "ip_hash": ip_hash
+            "ip_hash": ip_hash,
+            "hostname": decoded.get("hostname", ""),
+            "action": decoded.get("action", ""),
+            "cdata": decoded.get("cdata", "")
         }
     except Exception as e:
         return {"valid": False, "reason": str(e)}
@@ -1324,7 +1424,9 @@ def run_verification(
     pow_solution: PoWSolution = None,
     signals_json: str = None,
     pow_timing: PowTiming = None,
-    peer_trusted: bool = False
+    peer_trusted: bool = False,
+    action: str = "",
+    cdata: str = ""
 ) -> Dict:
     from detection import (
         check_ip_reputation, analyze_headers,
@@ -1492,8 +1594,23 @@ def run_verification(
     else:
         recommendation = "block"
 
-    success = final_score < 0.5
-    token = generate_token(ip, site_key, final_score) if success else None
+    # The hostname comes from the request headers rather than the request body:
+    # it is what the browser reported about the page, not what the page claimed
+    # about itself.
+    hostname = request_hostname(headers)
+
+    # An unlisted hostname withholds the token but does not touch the score. The
+    # visitor is not the problem - a key registered to another site is - so the
+    # detection layer has nothing to say about it and the refusal is reported as
+    # its own reason rather than smuggled in as a bot verdict.
+    hostname_allowed = ALLOWED_HOSTNAMES.permits(hostname)
+    success = final_score < 0.5 and hostname_allowed
+
+    token = generate_token(ip, site_key, final_score, {
+        "hostname": hostname,
+        "action": sanitize_action(action),
+        "cdata": sanitize_cdata(cdata),
+    }) if success else None
 
     # Feed the ledger so the next challenge this source asks for is priced on
     # what it just did.
@@ -1505,6 +1622,7 @@ def run_verification(
         "token": token,
         "timestamp": int(time.time()),
         "recommendation": recommendation,
+        **({} if hostname_allowed else {"reason": "hostname_not_allowed", "hostname": hostname}),
         "categoryScores": category_scores,
         "detections": [
             {
@@ -1557,7 +1675,7 @@ async def verify(req: VerifyRequest, request: Request):
     # Collect headers for analysis
     headers = collect_headers(request)
 
-    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request))
+    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata)
     log_verdict("verify", req.siteKey, result)
     return result
 
@@ -1571,22 +1689,79 @@ async def score(req: ScoreRequest, request: Request):
     ja3_hash = PROXY_TRUST.trusted_header(request, "X-JA3-Hash")
     headers = collect_headers(request)
 
-    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request))
+    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata)
     log_verdict("score", req.siteKey, result)
     return {
         "success": result["success"],
         "score": result["score"],
         "token": result["token"],
-        "action": req.action,
+        # Echo the sanitized form, not the raw input: this is what got signed
+        # into the token, so a caller comparing the two sees the same value.
+        "action": sanitize_action(req.action),
+        "cdata": sanitize_cdata(req.cdata),
         "recommendation": result["recommendation"]
     }
 
 
 @app.post("/api/token/verify")
 async def token_verify(req: TokenVerifyRequest, request: Request):
+    # The secret gate. This endpoint is the boundary between "a browser finished
+    # a challenge" and "my backend believes it", so it is server-to-server and
+    # needs a credential - without one, anyone who can reach the host can spend a
+    # token they observed, and the single-use guard then denies the real user.
+    if REQUIRE_VERIFY_SECRET:
+        if not req.secret:
+            return JSONResponse(
+                status_code=401, content={"valid": False, "reason": "missing_secret"}
+            )
+        if not secret_matches(req.secret, VERIFY_SECRET):
+            return JSONResponse(
+                status_code=401, content={"valid": False, "reason": "invalid_secret"}
+            )
+
     # Extract client IP for verification
     ip = PROXY_TRUST.client_ip(request)
     return verify_token(req.token, ip)
+
+
+# Turnstile / reCAPTCHA / hCaptcha drop-in compatibility.
+#
+# Same contract, three paths, because the path is hardcoded in the SDKs and
+# plugins we want to be usable against FCaptcha: pointing an existing integration
+# at this server should be a base-URL change and nothing else. See siteverify.py
+# for the adapter itself.
+async def _read_siteverify_body(request: Request) -> Any:
+    """Decode either encoding the contract allows.
+
+    Callers in the wild are split: PHP and Python examples overwhelmingly post
+    form-encoded, Node and Go examples post JSON.
+    """
+    content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if content_type == "application/json":
+        try:
+            return await request.json()
+        except Exception:
+            return None
+    form = await request.form()
+    return dict(form)
+
+
+async def _siteverify_route(request: Request):
+    body = await _read_siteverify_body(request)
+    return siteverify(
+        body=body,
+        # Bind to this server's token store, so replay state is shared with the
+        # native endpoint rather than kept in a parallel universe.
+        verify_token=verify_token,
+        expected_secret=VERIFY_SECRET,
+        idempotency_store=IDEMPOTENCY,
+        require_secret=REQUIRE_VERIFY_SECRET,
+    )
+
+
+app.post("/turnstile/v0/siteverify")(_siteverify_route)
+app.post("/recaptcha/api/siteverify")(_siteverify_route)
+app.post("/siteverify")(_siteverify_route)
 
 
 @app.get("/api/pow/challenge")

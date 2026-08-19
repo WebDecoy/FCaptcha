@@ -3027,7 +3027,7 @@
       });
     }
 
-    async execute(action = '') {
+    async execute(action = '', cdata = '') {
       const elapsed = Date.now() - this.startTime;
       if (elapsed < this.options.minCollectionTime) {
         await new Promise(r => setTimeout(r, this.options.minCollectionTime - elapsed));
@@ -3084,12 +3084,12 @@
       };
 
       // Step 6: Submit
-      const result = await this._score(signals, action, powSolution, signalsJson, signalsHash, powTiming);
+      const result = await this._score(signals, action, powSolution, signalsJson, signalsHash, powTiming, cdata);
       this.lastScore = { ...result, timestamp: Date.now() };
       return result;
     }
 
-    async _score(signals, action, powSolution = null, signalsJson = null, signalsHash = null, powTiming = null) {
+    async _score(signals, action, powSolution = null, signalsJson = null, signalsHash = null, powTiming = null, cdata = '') {
       const url = this.options.serverUrl || FCaptcha.serverUrl;
 
       if (!url) return this._clientSideScore(signals);
@@ -3103,6 +3103,10 @@
             signals,
             signalsJson: signalsJson || null,
             action,
+            // Opaque customer data, signed into the token and echoed back by
+            // siteverify so the backend can tie a token to its own record
+            // (an order id, a session id) without a side channel.
+            cdata,
             powSolution: powSolution ? {
               challengeId: powSolution.challengeId,
               nonce: powSolution.nonce,
@@ -3196,7 +3200,7 @@
       powDifficulty: options.powDifficulty || 3
     });
 
-    const result = await session.execute(options.action || '');
+    const result = await session.execute(options.action || '', options.cdata || '');
     session.destroy();
     return result;
   };

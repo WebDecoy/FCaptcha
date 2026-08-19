@@ -17,6 +17,7 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 
 ## Features
 
+- **Drop-in for Turnstile / reCAPTCHA / hCaptcha** - Serves the same `siteverify` contract on the same paths, so migrating an existing backend is a base-URL change; tokens carry a signed `hostname` and `action` your app can check
 - **Single click or invisible** - Checkbox mode like Turnstile/reCAPTCHA v2, or invisible mode like reCAPTCHA v3
 - **AI agent detection** - Catches vision agents (screenshot→API→click), DOM/CDP-driven agents (Claude in Chrome, Operator-style computer use), and synthetic input that reports `isTrusted: true` — via input-event forensics and LLM think-time cadence
 - **Declared & verified agents** - Flags self-declaring agents (ClaudeBot, GPTBot, ChatGPT-User, PerplexityBot, Bytespider…) and *cryptographically verifies* Web Bot Auth (RFC 9421) signed requests against the agent's published key directory, surfaced as a distinct category so your app can *allow* polite/verified agents and block the rest
@@ -215,6 +216,27 @@ function FCaptchaCheckbox({ siteKey, serverUrl, onVerify }) {
 The same pattern works in Vue, Svelte, Solid, and Angular — the widget is framework-agnostic. If you'd rather not write the glue, opening an issue describing how you want to consume it helps us decide whether to ship an official wrapper.
 
 ### 3. Verify on Your Backend
+
+**Already using Turnstile, reCAPTCHA or hCaptcha?** Point the verification call
+you already have at your FCaptcha server — the contract is identical:
+
+```diff
+- https://challenges.cloudflare.com/turnstile/v0/siteverify
++ https://your-server.com/turnstile/v0/siteverify
+```
+
+```bash
+curl -X POST https://your-server.com/turnstile/v0/siteverify \
+  -d "secret=your-secret" -d "response=$TOKEN"
+# {"success":true,"challenge_ts":"...","hostname":"example.com","action":"login",
+#  "cdata":"","error-codes":[],"score":0.11}
+```
+
+See [POST /turnstile/v0/siteverify](#post-turnstilev0siteverify--drop-in-compatibility)
+for the full contract, including `hostname`/`action` checking and
+`idempotency_key`.
+
+**Or use the native endpoint**, which returns FCaptcha's own shape:
 
 ```go
 // Go
@@ -490,6 +512,12 @@ Get a score for invisible mode.
 ### POST /api/token/verify
 Verify a previously issued token (server-side).
 
+`secret` is **required** and checked against `FCAPTCHA_VERIFY_SECRET` (defaulting
+to `FCAPTCHA_SECRET`). Until v1.22.0 it was accepted and silently ignored, which
+meant anyone who could reach the endpoint could spend a token — set
+`FCAPTCHA_LEGACY_UNAUTH_VERIFY=true` for one release if you need the old
+behaviour while you update your backend.
+
 ```json
 // Request
 {
@@ -502,9 +530,82 @@ Verify a previously issued token (server-side).
   "valid": true,
   "site_key": "your-site-key",
   "score": 0.15,
-  "timestamp": 1703356800
+  "timestamp": 1703356800,
+  "hostname": "example.com",
+  "action": "login",
+  "cdata": "order-42"
 }
 ```
+
+A wrong or missing secret answers `401` with
+`{"valid": false, "reason": "invalid_secret"}`.
+
+### POST /turnstile/v0/siteverify — drop-in compatibility
+
+FCaptcha also answers the siteverify contract that Turnstile, reCAPTCHA and
+hCaptcha share, on all three paths:
+
+```
+POST /turnstile/v0/siteverify
+POST /recaptcha/api/siteverify
+POST /siteverify
+```
+
+Every backend SDK, CMS plugin and code snippet written against those services
+speaks this shape already, so **migrating is a base-URL change**: point your
+existing verification call at your FCaptcha server and keep the rest.
+
+```bash
+curl -X POST https://your-server.com/turnstile/v0/siteverify \
+  -d "secret=your-secret" \
+  -d "response=$TOKEN" \
+  -d "remoteip=203.0.113.5"
+```
+
+Form-encoded and JSON bodies are both accepted.
+
+| Parameter | Required | Meaning |
+|-----------|----------|---------|
+| `secret` | yes | Your `FCAPTCHA_VERIFY_SECRET` (defaults to `FCAPTCHA_SECRET`) |
+| `response` | yes | The token from the widget |
+| `remoteip` | no | Visitor IP; when supplied it must match the token's binding |
+| `idempotency_key` | no | Lets a retry return the first answer instead of tripping the single-use guard |
+
+```json
+// Success
+{
+  "success": true,
+  "challenge_ts": "2026-08-19T17:12:35.000Z",
+  "hostname": "example.com",
+  "action": "login",
+  "cdata": "order-42",
+  "error-codes": [],
+  "score": 0.11
+}
+
+// Failure
+{ "success": false, "error-codes": ["invalid-input-response"] }
+```
+
+`score` is the one addition to the contract — ignore it for pass/fail, or use it
+to risk-band without a second call. Error codes use the upstream vocabulary:
+`missing-input-secret`, `invalid-input-secret`, `missing-input-response`,
+`invalid-input-response`, `bad-request`, `timeout-or-duplicate`,
+`internal-error`.
+
+**Verify `hostname` and `action` in your backend.** They are signed into the
+token, so they are the mechanism that stops a token minted on someone else's
+page — or minted for a different action — from being spent on yours:
+
+```js
+const r = await verify(token);
+if (!r.success) return reject();
+if (r.hostname !== 'example.com') return reject();  // key lifted from your page
+if (r.action !== 'login') return reject();          // token minted elsewhere on your site
+```
+
+Set `action` (and optionally `cdata`) when you request the token —
+`FCaptcha.execute(siteKey, { action: 'login' })` — and they are bound into it.
 
 ## Configuration
 
@@ -513,6 +614,9 @@ Verify a previously issued token (server-side).
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `FCAPTCHA_SECRET` | Secret key for token signing | (required) |
+| `FCAPTCHA_VERIFY_SECRET` | Credential a backend presents to `/api/token/verify` and the siteverify endpoints. Split it from `FCAPTCHA_SECRET` so a leaked verify credential cannot also mint tokens | (`FCAPTCHA_SECRET`) |
+| `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | Restore the pre-1.22.0 behaviour where token verification accepted any caller. One release of migration cover; **do not leave it on** | off |
+| `FCAPTCHA_ALLOWED_HOSTNAMES` | Comma-separated hostnames permitted to mint tokens, matched against the request's `Origin` (then `Referer`). Unset accepts any origin. A request with no derivable origin (native app, server-side call) is always allowed — an attacker who can forge an `Origin` would just forge a listed one | (any) |
 | `PORT` | Server port | 3000 |
 | `REDIS_URL` | Redis URL for distributed state | (in-memory) |
 | `TRUSTED_PROXIES` | Comma-separated CIDRs/IPs of peers allowed to set `X-Forwarded-For`, `X-Real-IP` and the TLS-fingerprint headers. `*` trusts every peer, `none` trusts none. See [Trusted proxies](#trusted-proxies) | loopback + private ranges |
