@@ -13,6 +13,26 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.27.0] — 2026-08-20
+
+### Fixed
+- **A browser detectable only by how it moves could not be blocked.** A
+  source-patched browser scrubs every JS-observable automation flag, so it trips
+  no environmental category — and since the weighted sum keeps that unused
+  budget, such a browser had a ceiling of 0.41 against a 0.5 threshold. The
+  corpus sample tripped seven correct behavioural detections and scored 0.234,
+  allowed. The score is now floored at 0.6 when two or more behavioural
+  categories independently agree. Constants swept against the labelled corpus;
+  no human in the 126-sample panel reaches two agreeing behavioural categories at
+  any threshold tested.
+- The benchmark harness timed its challenge wait from before requesting the
+  challenge rather than from receiving it, so network latency ate the margin and
+  the gate failed intermittently.
+
+### Added
+- `COMPLIANCE.md` — what is collected, what is retained and for how long,
+  verified against the source. Written for a DPO or a procurement questionnaire.
+
 ## [1.26.0] — 2026-08-20
 
 ### Added
@@ -198,6 +218,7 @@ reading would call major. Read the **Breaking** entries rather than the number.
 Initial releases: proof of work, behavioural biometrics, headless and automation
 detection, Docker images and one-command deploys, keystroke cadence analysis.
 
+[1.27.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.27.0
 [1.26.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.26.0
 [1.25.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.25.0
 [1.24.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.24.0
