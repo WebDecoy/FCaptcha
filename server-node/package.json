@@ -1,6 +1,6 @@
 {
   "name": "@webdecoy/fcaptcha",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "description": "Open source CAPTCHA with PoW, bot detection, and Vision AI protection",
   "main": "index.js",
   "exports": {
