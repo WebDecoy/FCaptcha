@@ -249,7 +249,10 @@ func main() {
 			http.NotFound(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "application/javascript")
+		// charset is not optional here. A classic script served without one is
+		// decoded using the *document's* encoding, so the widget's translated
+		// strings render as mojibake on any page that is not already UTF-8.
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		http.ServeFile(w, r, clientPath)
 	})
 	r.Handle("/demo/*", http.StripPrefix("/demo/", http.FileServer(http.Dir("./static/demo"))))

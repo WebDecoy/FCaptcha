@@ -80,16 +80,28 @@ async function loadWidgetPage(page: Page, overrides: { hardwareConcurrency?: num
 }
 
 test.describe('parallel PoW solver', () => {
-  test('produces a valid token via FCaptcha.execute', async ({ page }) => {
+  test('produces a solution the server accepts', async ({ page }) => {
     await loadWidgetPage(page);
 
     const result = await page.evaluate(async () => {
       const r = await (window as any).FCaptcha.execute('test-site-key', { action: 'login' });
-      return { token: r?.token, score: r?.score, success: r?.success };
+      return { token: r?.token, score: r?.score, success: r?.success, reason: r?.reason };
     });
 
-    expect(result.token, 'execute() did not return a token').toBeTruthy();
-    expect(typeof result.score).toBe('number');
+    // What this test is for is the solver, so that is what it asserts.
+    //
+    // It used to assert a token came back, which quietly asked the captcha to
+    // fail at its job: this is a Playwright-driven Chromium, so
+    // navigator.webdriver is true, and that detection is Dispositive — the score
+    // floors at 0.9 and the token is correctly withheld. The assertion passed
+    // only until the floor shipped, and nothing noticed because these tests run
+    // nowhere in CI.
+    //
+    // A withheld token therefore proves nothing either way. What does is that
+    // the server never rejected the proof of work: the solution the parallel
+    // solver produced verified against the challenge it was issued.
+    expect(result.reason, 'server rejected the solver output').not.toBe('pow_not_satisfied');
+    expect(typeof result.score, 'no score returned — the request did not complete').toBe('number');
   });
 
   test('spawns multiple workers under default hardwareConcurrency', async ({ page }) => {

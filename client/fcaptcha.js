@@ -16,7 +16,170 @@
     version: '1.23.0',
     widgets: new Map(),
     serverUrl: null,
+    // Site-wide language default. Per-widget `lang` still wins; leaving both
+    // unset detects from the page and then the browser.
+    lang: null,
   };
+
+  // ============================================================
+  // Localization
+  // ============================================================
+
+  /**
+   * The widget's entire user-facing vocabulary: five strings.
+   *
+   * Bundled rather than fetched. The widget is a security control on someone
+   * else's login form — a runtime request for a language pack would be another
+   * origin to trust, another thing to fail closed on a flaky network, and a
+   * render delay on the critical path. Thirty-four languages of five short
+   * strings costs about 3 KB before compression, which is not a trade worth
+   * agonising over.
+   *
+   * Keys, and where each appears:
+   *   label     the resting state, next to the checkbox
+   *   verifying while signals are collected and the proof of work is solved
+   *   verified  the success state
+   *   failed    a rejected verification
+   *   retry     a verification that errored, where retrying is the advice
+   *
+   * Region tags appear only where the wording genuinely differs (pt-BR vs pt,
+   * zh-CN vs zh-TW). Everything else resolves by base language, so `de-AT` and
+   * `de-CH` both land on `de` rather than needing their own entry.
+   */
+  const I18N = {
+    en:      ["I'm not a robot", 'Verifying…', 'Verified', 'Verification failed', 'Verification failed. Please try again.'],
+    es:      ['No soy un robot', 'Verificando…', 'Verificado', 'Error de verificación', 'Error de verificación. Inténtalo de nuevo.'],
+    pt:      ['Não sou um robô', 'A verificar…', 'Verificado', 'Falha na verificação', 'Falha na verificação. Tente novamente.'],
+    'pt-br': ['Não sou um robô', 'Verificando…', 'Verificado', 'Falha na verificação', 'Falha na verificação. Tente novamente.'],
+    fr:      ['Je ne suis pas un robot', 'Vérification…', 'Vérifié', 'Échec de la vérification', 'Échec de la vérification. Veuillez réessayer.'],
+    de:      ['Ich bin kein Roboter', 'Überprüfung…', 'Bestätigt', 'Überprüfung fehlgeschlagen', 'Überprüfung fehlgeschlagen. Bitte erneut versuchen.'],
+    it:      ['Non sono un robot', 'Verifica in corso…', 'Verificato', 'Verifica non riuscita', 'Verifica non riuscita. Riprova.'],
+    nl:      ['Ik ben geen robot', 'Verifiëren…', 'Geverifieerd', 'Verificatie mislukt', 'Verificatie mislukt. Probeer het opnieuw.'],
+    pl:      ['Nie jestem robotem', 'Weryfikacja…', 'Zweryfikowano', 'Weryfikacja nie powiodła się', 'Weryfikacja nie powiodła się. Spróbuj ponownie.'],
+    ru:      ['Я не робот', 'Проверка…', 'Проверено', 'Ошибка проверки', 'Ошибка проверки. Попробуйте ещё раз.'],
+    uk:      ['Я не робот', 'Перевірка…', 'Перевірено', 'Помилка перевірки', 'Помилка перевірки. Спробуйте ще раз.'],
+    tr:      ['Ben robot değilim', 'Doğrulanıyor…', 'Doğrulandı', 'Doğrulama başarısız', 'Doğrulama başarısız. Lütfen tekrar deneyin.'],
+    ar:      ['لست روبوتًا', 'جارٍ التحقق…', 'تم التحقق', 'فشل التحقق', 'فشل التحقق. يرجى المحاولة مرة أخرى.'],
+    he:      ['אני לא רובוט', 'מאמת…', 'אומת', 'האימות נכשל', 'האימות נכשל. נסו שוב.'],
+    fa:      ['من ربات نیستم', 'در حال تأیید…', 'تأیید شد', 'تأیید ناموفق بود', 'تأیید ناموفق بود. لطفاً دوباره تلاش کنید.'],
+    hi:      ['मैं रोबोट नहीं हूँ', 'सत्यापित किया जा रहा है…', 'सत्यापित', 'सत्यापन विफल', 'सत्यापन विफल। कृपया पुनः प्रयास करें।'],
+    id:      ['Saya bukan robot', 'Memverifikasi…', 'Terverifikasi', 'Verifikasi gagal', 'Verifikasi gagal. Silakan coba lagi.'],
+    ms:      ['Saya bukan robot', 'Mengesahkan…', 'Disahkan', 'Pengesahan gagal', 'Pengesahan gagal. Sila cuba lagi.'],
+    th:      ['ฉันไม่ใช่โปรแกรมอัตโนมัติ', 'กำลังยืนยัน…', 'ยืนยันแล้ว', 'การยืนยันล้มเหลว', 'การยืนยันล้มเหลว โปรดลองอีกครั้ง'],
+    vi:      ['Tôi không phải là người máy', 'Đang xác minh…', 'Đã xác minh', 'Xác minh thất bại', 'Xác minh thất bại. Vui lòng thử lại.'],
+    ja:      ['私はロボットではありません', '確認中…', '確認済み', '確認に失敗しました', '確認に失敗しました。もう一度お試しください。'],
+    ko:      ['로봇이 아닙니다', '확인 중…', '확인됨', '확인 실패', '확인에 실패했습니다. 다시 시도해 주세요.'],
+    'zh-cn': ['我不是机器人', '正在验证…', '已验证', '验证失败', '验证失败，请重试。'],
+    'zh-tw': ['我不是機器人', '驗證中…', '已驗證', '驗證失敗', '驗證失敗，請重試。'],
+    sv:      ['Jag är ingen robot', 'Verifierar…', 'Verifierad', 'Verifieringen misslyckades', 'Verifieringen misslyckades. Försök igen.'],
+    da:      ['Jeg er ikke en robot', 'Bekræfter…', 'Bekræftet', 'Bekræftelsen mislykkedes', 'Bekræftelsen mislykkedes. Prøv igen.'],
+    nb:      ['Jeg er ikke en robot', 'Bekrefter…', 'Bekreftet', 'Bekreftelsen mislyktes', 'Bekreftelsen mislyktes. Prøv igjen.'],
+    fi:      ['En ole robotti', 'Vahvistetaan…', 'Vahvistettu', 'Vahvistus epäonnistui', 'Vahvistus epäonnistui. Yritä uudelleen.'],
+    cs:      ['Nejsem robot', 'Ověřování…', 'Ověřeno', 'Ověření selhalo', 'Ověření selhalo. Zkuste to znovu.'],
+    sk:      ['Nie som robot', 'Overovanie…', 'Overené', 'Overenie zlyhalo', 'Overenie zlyhalo. Skúste to znova.'],
+    hu:      ['Nem vagyok robot', 'Ellenőrzés…', 'Ellenőrizve', 'Az ellenőrzés sikertelen', 'Az ellenőrzés sikertelen. Próbálja újra.'],
+    ro:      ['Nu sunt robot', 'Se verifică…', 'Verificat', 'Verificare eșuată', 'Verificare eșuată. Încercați din nou.'],
+    el:      ['Δεν είμαι ρομπότ', 'Επαλήθευση…', 'Επαληθεύτηκε', 'Η επαλήθευση απέτυχε', 'Η επαλήθευση απέτυχε. Δοκιμάστε ξανά.'],
+    bg:      ['Не съм робот', 'Проверка…', 'Проверено', 'Проверката е неуспешна', 'Проверката е неуспешна. Опитайте отново.'],
+    ca:      ['No sóc un robot', "S'està verificant…", 'Verificat', 'La verificació ha fallat', 'La verificació ha fallat. Torneu-ho a provar.'],
+  };
+
+  /**
+   * Escapes text destined for innerHTML.
+   *
+   * The shipped strings are safe by construction, but the `strings` option lets
+   * an integrator supply their own, and those may well come from a CMS or a
+   * locale file. Interpolating that into innerHTML unescaped would make the
+   * widget an XSS vector on the very form it is protecting.
+   */
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Positional, to keep the table above readable at a glance.
+  const I18N_KEYS = ['label', 'verifying', 'verified', 'failed', 'retry'];
+
+  // Scripts written right-to-left. The widget is a horizontal row — checkbox,
+  // label, branding — so without this the layout reads backwards for roughly
+  // half a billion people.
+  const RTL_LANGUAGES = new Set(['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'yi']);
+
+  /**
+   * Picks the best available translation for a requested tag.
+   *
+   * Exact match first (`pt-BR`), then the base language (`pt`), then English.
+   * Case-insensitive and tolerant of the underscore form some systems emit,
+   * because this value arrives from whatever the page or browser happened to
+   * set and being strict about it would just mean silently falling back.
+   */
+  function resolveLanguage(requested) {
+    if (!requested || typeof requested !== 'string') return 'en';
+    const tag = requested.trim().toLowerCase().replace(/_/g, '-');
+    if (I18N[tag]) return tag;
+    const base = tag.split('-')[0];
+    if (I18N[base]) return base;
+    return 'en';
+  }
+
+  /**
+   * The language the widget should render in, in descending order of how
+   * deliberate the signal is:
+   *
+   *   1. an explicit `lang` option        — the integrator said so
+   *   2. `data-lang` on the container     — the markup said so
+   *   3. `<html lang>`                    — the page said so
+   *   4. `navigator.language`             — the browser said so
+   *   5. English
+   *
+   * The page outranks the browser on purpose: a German speaker reading an
+   * explicitly Japanese page is better served by a widget that matches the form
+   * around it than one that matches their locale.
+   */
+  function detectLanguage(explicit, container) {
+    const candidates = [
+      explicit,
+      container && container.dataset ? container.dataset.lang : null,
+      typeof document !== 'undefined' && document.documentElement
+        ? document.documentElement.getAttribute('lang')
+        : null,
+      typeof navigator !== 'undefined' ? navigator.language : null,
+    ];
+    // Take the first candidate that actually names a language we ship, rather
+    // than the first non-empty one: a page declaring lang="tlh" should not stop
+    // us consulting the browser.
+    for (const candidate of candidates) {
+      if (!candidate || typeof candidate !== 'string') continue;
+      const tag = candidate.trim().toLowerCase().replace(/_/g, '-');
+      if (I18N[tag]) return tag;
+      const base = tag.split('-')[0];
+      if (I18N[base]) return base;
+    }
+    return 'en';
+  }
+
+  /**
+   * Builds the string table for a language, applying any caller overrides.
+   *
+   * `strings` exists so that an integrator whose language we do not ship is not
+   * blocked on us adding it, and so anyone who dislikes a particular rendering
+   * can change it without forking the widget.
+   */
+  function buildStrings(lang, overrides) {
+    const source = I18N[lang] || I18N.en;
+    const strings = {};
+    I18N_KEYS.forEach((key, i) => { strings[key] = source[i]; });
+    if (overrides && typeof overrides === 'object') {
+      for (const key of I18N_KEYS) {
+        if (typeof overrides[key] === 'string') strings[key] = overrides[key];
+      }
+    }
+    return strings;
+  }
 
   // ============================================================
   // Behavioral Signal Collector
@@ -2576,11 +2739,20 @@
         siteKey: null,
         theme: 'light',
         size: 'normal',
+        // null means detect: data-lang, then <html lang>, then navigator.
+        lang: null,
+        // Per-key overrides, for a language we do not ship or a wording an
+        // integrator would rather phrase differently.
+        strings: null,
         callback: null,
         errorCallback: null,
         expiredCallback: null,
         powDifficulty: 4
       }, options);
+
+      this.lang = detectLanguage(this.options.lang || FCaptcha.lang, this.container);
+      this.strings = buildStrings(this.lang, this.options.strings);
+      this.rtl = RTL_LANGUAGES.has(this.lang.split('-')[0]);
 
       this.id = 'fcaptcha_' + Math.random().toString(36).substr(2, 9);
       this.behavioral = new BehavioralCollector();
@@ -2613,8 +2785,11 @@
       const isDark = this.options.theme === 'dark';
 
       this.container.innerHTML = `
-        <div class="fcaptcha-widget ${isDark ? 'fcaptcha-dark' : ''}" id="${this.id}">
+        <div class="fcaptcha-widget ${isDark ? 'fcaptcha-dark' : ''}" id="${this.id}"
+             lang="${this.lang}"${this.rtl ? ' dir="rtl"' : ''}>
           <style>
+            .fcaptcha-widget[dir="rtl"] { flex-direction: row-reverse; }
+            .fcaptcha-widget[dir="rtl"] .fcaptcha-branding { align-items: flex-start; }
             .fcaptcha-widget {
               font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
               background: ${isDark ? '#1e1e1e' : '#fafafa'};
@@ -2665,12 +2840,22 @@
             .fcaptcha-brand { font-size: 11px; font-weight: 600; color: #ff2a6d; letter-spacing: 0.5px; }
             .fcaptcha-logo { font-size: 9px; font-weight: 500; color: ${isDark ? '#808080' : '#999'}; }
           </style>
-          <div class="fcaptcha-checkbox" role="checkbox" aria-checked="false" tabindex="0">
+          <div class="fcaptcha-checkbox" role="checkbox" aria-checked="false" tabindex="0"
+               aria-labelledby="${this.id}-label">
             <div class="fcaptcha-spinner" style="display: none;"></div>
             <span class="fcaptcha-checkmark">✓</span>
             <span class="fcaptcha-x">✕</span>
           </div>
-          <span class="fcaptcha-label">I'm not a robot</span>
+          <!--
+            aria-labelledby, because the label is a sibling rather than a
+            wrapping <label>: without it the control announced as "checkbox, not
+            checked" with no name at all.
+
+            aria-live, because every state this widget has — verifying, verified,
+            failed — is communicated by swapping this text. A sighted user sees
+            the change; without a live region nobody else is told.
+          -->
+          <span class="fcaptcha-label" id="${this.id}-label" aria-live="polite">${escapeHtml(this.strings.label)}</span>
           <div class="fcaptcha-branding">
             <span class="fcaptcha-brand">WebDecoy</span>
             <span class="fcaptcha-logo">FCaptcha</span>
@@ -2726,7 +2911,7 @@
 
       this.checkbox.classList.add('loading');
       this.spinner.style.display = 'block';
-      this.label.textContent = 'Verifying...';
+      this.label.textContent = this.strings.verifying;
 
       try {
         // Step 1: Collect all signals (sync and async in parallel)
@@ -2787,7 +2972,7 @@
         }
       } catch (error) {
         console.error('FCaptcha error:', error);
-        this._showFailure('Verification failed. Please try again.');
+        this._showFailure(this.strings.retry);
       }
     }
 
@@ -2860,7 +3045,7 @@
         success: passed,
         score,
         token: passed ? btoa(JSON.stringify({ timestamp: Date.now(), score, id: this.id })) : null,
-        message: passed ? null : 'Verification failed'
+        message: passed ? null : this.strings.failed
       };
     }
 
@@ -2871,7 +3056,7 @@
       this.checkbox.classList.add('verified');
       this.checkbox.setAttribute('aria-checked', 'true');
       this.spinner.style.display = 'none';
-      this.label.textContent = 'Verified';
+      this.label.textContent = this.strings.verified;
 
       if (this.options.callback) this.options.callback(token);
       this.container.dispatchEvent(new CustomEvent('fcaptcha:verified', { detail: { token } }));
@@ -2881,13 +3066,13 @@
       this.checkbox.classList.remove('loading');
       this.checkbox.classList.add('failed');
       this.spinner.style.display = 'none';
-      this.label.textContent = message || 'Verification failed';
+      this.label.textContent = message || this.strings.failed;
 
       if (this.options.errorCallback) this.options.errorCallback(message);
 
       setTimeout(() => {
         this.checkbox.classList.remove('failed');
-        this.label.textContent = "I'm not a robot";
+        this.label.textContent = this.strings.label;
       }, 3000);
     }
 
@@ -2905,7 +3090,7 @@
       this.checkbox.classList.remove('verified', 'failed', 'loading');
       this.checkbox.setAttribute('aria-checked', 'false');
       this.spinner.style.display = 'none';
-      this.label.textContent = "I'm not a robot";
+      this.label.textContent = this.strings.label;
       // Fetch new challenge in background
       this._fetchChallenge();
     }
@@ -3223,6 +3408,12 @@
 
   FCaptcha.configure = function(options) {
     if (options.serverUrl) this.serverUrl = options.serverUrl;
+    if (options.lang) this.lang = options.lang;
+  };
+
+  /** The languages the widget ships strings for. */
+  FCaptcha.languages = function() {
+    return Object.keys(I18N);
   };
 
   FCaptcha.getSignals = function() {
@@ -3244,10 +3435,12 @@
       const theme = container.dataset.theme || 'light';
       const endpoint = container.dataset.endpoint;
       const callback = container.dataset.callback ? window[container.dataset.callback] : null;
+      // null rather than a default, so detection still runs when unset.
+      const lang = container.dataset.lang || null;
 
       if (endpoint) FCaptcha.serverUrl = endpoint;
 
-      FCaptcha.render(container, { siteKey, theme, callback });
+      FCaptcha.render(container, { siteKey, theme, lang, callback });
     });
   };
 

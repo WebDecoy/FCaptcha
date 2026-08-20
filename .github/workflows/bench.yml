@@ -45,6 +45,26 @@ jobs:
       - name: End-to-end detection suite
         run: node test/test-detection.js
 
+      # The widget in a real browser: the proof-of-work solver, and everything
+      # about localization that is DOM-shaped rather than string-shaped (whether
+      # <html lang> is consulted, whether dir="rtl" lands, whether the checkbox
+      # resolves an accessible name).
+      #
+      # These existed but ran nowhere, so an assertion that a Playwright-driven
+      # Chromium receives a token survived the shipping of the dispositive floor
+      # that correctly stops exactly that. Untested tests rot quietly.
+      - name: Install browser test dependencies
+        working-directory: test/browser
+        run: npm install --no-audit --no-fund
+
+      - name: Install Chromium
+        working-directory: test/browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser suite
+        working-directory: test/browser
+        run: npm test
+
       # The harness itself, before it is trusted to measure anything. Sample
       # addresses have to stay unique or every per-source measurement is taken
       # against manufactured IP sharing.

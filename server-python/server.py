@@ -148,7 +148,12 @@ CLIENT_PATH = os.getenv(
 if os.getenv("FCAPTCHA_SERVE_CLIENT", "true").lower() != "false":
     @app.get("/fcaptcha.js")
     async def fcaptcha_js():
-        return FileResponse(CLIENT_PATH, media_type="application/javascript")
+        # charset is not optional here. A classic script served without one is
+        # decoded using the *document's* encoding, so the widget's translated
+        # strings render as mojibake on any page that is not already UTF-8.
+        return FileResponse(
+            CLIENT_PATH, media_type="application/javascript; charset=utf-8"
+        )
 
 
 # =============================================================================
@@ -1745,7 +1750,10 @@ async def score(req: ScoreRequest, request: Request):
         # into the token, so a caller comparing the two sees the same value.
         "action": sanitize_action(req.action),
         "cdata": sanitize_cdata(req.cdata),
-        "recommendation": result["recommendation"]
+        "recommendation": result["recommendation"],
+        # Parity with /api/verify and with the Go server: a caller denied a
+        # token needs to know which precondition failed.
+        **({"reason": result["reason"]} if result.get("reason") else {}),
     }
 
 

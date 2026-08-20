@@ -1640,7 +1640,10 @@ app.post('/api/score', async (req, res) => {
     // the token, so a caller comparing the two sees the same value.
     action: sanitizeAction(action),
     cdata: sanitizeCdata(cdata),
-    recommendation: result.recommendation
+    recommendation: result.recommendation,
+    // Parity with /api/verify and with the Go server: a caller denied a token
+    // needs to know which precondition failed.
+    ...(result.reason ? { reason: result.reason } : {})
   });
 });
 

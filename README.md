@@ -24,6 +24,7 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 - **Proof of Work** - Server-verified SHA-256 hashcash with 256-bit HMAC signing, per-challenge nonces, and signal commitment that binds the challenge to the collected signals. A liveness and timing gate rather than a cost function — see [what it does and does not buy you](#what-the-proof-of-work-does-and-does-not-buy-you)
 - **Comprehensive bot detection** - Headless browsers, WebDriver, Puppeteer, Playwright, Selenium, plus CDP console-attach detection
 - **Behavioral biometrics** - 40+ signals including micro-tremor, velocity/acceleration curves, trajectory analysis, coalesced pointer events, and teleport-click detection
+- **Localized** - The widget ships 34 languages with automatic detection from `<html lang>` or the browser, right-to-left layout for Arabic/Hebrew/Persian, and a `strings` override for anything not bundled
 - **Mobile-native** - Touch kinematics and passive device-sensor entropy, with accessibility exemptions for keyboard-only and touch users
 - **TLS fingerprinting** - JA3 (client-supplied) and JA4 (un-spoofable, from a trusted reverse proxy) matched against known automation tools
 - **Credential stuffing protection** - Form interaction analysis, timing, and programmatic submit/fill detection
@@ -112,6 +113,55 @@ FCAPTCHA_SECRET=your-secret node server.js
   });
 </script>
 ```
+
+**Language**
+
+The widget picks a language automatically: an explicit `lang` option, else
+`data-lang` on the container, else the page's `<html lang>`, else the browser's
+`navigator.language`, else English. The page outranks the browser deliberately —
+a widget should match the form around it rather than the reader's locale.
+
+```html
+<!-- nothing to configure: inherits from the page -->
+<html lang="de"> … <div id="captcha"></div>
+
+<!-- or state it -->
+<script>FCaptcha.render('captcha', { siteKey, lang: 'ja' });</script>
+
+<!-- or per element, for the auto-rendered form -->
+<div data-fcaptcha="your-site-key" data-lang="pt-BR"></div>
+
+<!-- or site-wide -->
+<script>FCaptcha.configure({ serverUrl: '…', lang: 'fr' });</script>
+```
+
+Region tags fall back to their base language, so `de-AT` resolves to `de`;
+`pt-BR` and `zh-TW` have their own entries where the wording differs. Arabic,
+Hebrew and Persian render right-to-left.
+
+Shipped: `ar bg ca cs da de el en es fa fi fr he hi hu id it ja ko ms nb nl pl
+pt pt-BR ro ru sk sv th tr uk vi zh-CN zh-TW` — `FCaptcha.languages()` returns
+the live list.
+
+Not on the list, or want different wording? Override any of the five strings —
+no fork required:
+
+```js
+FCaptcha.render('captcha', {
+  siteKey,
+  lang: 'is',
+  strings: {
+    label: 'Ég er ekki vélmenni',
+    verifying: 'Staðfesti…',
+    verified: 'Staðfest',
+    failed: 'Staðfesting mistókst',
+    retry: 'Staðfesting mistókst. Reyndu aftur.',
+  },
+});
+```
+
+Overrides are HTML-escaped, so a string coming from a CMS or locale file cannot
+turn the widget into an injection point.
 
 **Invisible Mode (Zero-Click)**
 
