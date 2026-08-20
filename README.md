@@ -28,7 +28,7 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 - **Mobile-native** - Touch kinematics and passive device-sensor entropy, with accessibility exemptions for keyboard-only and touch users
 - **TLS fingerprinting** - JA3 (client-supplied) and JA4 (un-spoofable, from a trusted reverse proxy) matched against known automation tools
 - **Credential stuffing protection** - Form interaction analysis, timing, and programmatic submit/fill detection
-- **Self-hosted & privacy-first** - No external dependencies, no persistent fingerprinting, no cross-site tracking
+- **Self-hosted & privacy-first** - No external dependencies, no persistent fingerprinting, no cross-site tracking. Available on npm/CDN with Subresource Integrity when you'd rather not host the widget yourself
 - **Input forensics** - Typing cadence and modality (keystrokes vs. paste vs. a value assigned into the DOM), scroll morphology, and platform contradictions like a Ctrl+V paste from a browser claiming macOS
 - **Open algorithm** - Transparent, evidence-accumulating scoring across ~12 categories, fully auditable
 - **Measured, not asserted** - A [benchmark harness](bench/) captures real browser traces for 14 human personas (keyboard-only, screen-reader, touch, tremor, elderly, DevTools-open, privacy-extension…) and reports a per-signal false-positive budget in CI. Every threshold in the behavioural layer was derived from it
@@ -95,6 +95,34 @@ FCAPTCHA_SECRET=your-secret node server.js
 ```
 
 ### 2. Add to Your Site
+
+**Where the widget comes from**
+
+Two options, and the tradeoff is real:
+
+```html
+<!-- Self-hosted: served by your FCaptcha server, same-origin. -->
+<script src="https://your-server.com/fcaptcha.js"></script>
+
+<!-- CDN: no server needed to try it, pinned and integrity-checked. -->
+<script
+  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.24.0/dist/fcaptcha.min.js"
+  integrity="sha384-…"
+  crossorigin="anonymous"></script>
+```
+
+Self-hosting stays the default and is what every server does out of the box: no
+third party sees your visitors, and there is no external dependency to fail. The
+CDN build exists because "add one script tag" is the first thing anyone tries,
+and requiring a running server before that is a poor first five minutes.
+
+If you use the CDN, **pin the version and use the integrity hash**. The digest
+for each release is published in that release's notes and in
+`dist/integrity.json` inside the package; `npm run integrity` in `client/` prints
+it for any local build. Without `integrity`, a compromised CDN can replace your
+captcha with anything it likes.
+
+The minified bundle is 67 KB, 18 KB over the wire with Brotli.
 
 **Checkbox Mode (Interactive)**
 
