@@ -13,6 +13,17 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.28.1] — 2026-08-20
+
+### Fixed
+- **A failed proof of work no longer floors the score.** v1.23.0 marked the PoW
+  failures dispositive, which turned every benign cause — an expired challenge, a
+  server restart wiping the in-memory challenge store, a double-clicked solution
+  — into a 0.9 and a hard block on a real visitor. A verdict with a weighted sum
+  of 0.2324, an ordinary human, was reported as 0.9. The token is still withheld
+  by the gate, which is where the security requirement lives; only the score
+  inflation is removed.
+
 ## [1.28.0] — 2026-08-20
 
 ### Fixed
@@ -237,6 +248,7 @@ reading would call major. Read the **Breaking** entries rather than the number.
 Initial releases: proof of work, behavioural biometrics, headless and automation
 detection, Docker images and one-command deploys, keystroke cadence analysis.
 
+[1.28.1]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.28.1
 [1.28.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.28.0
 [1.27.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.27.0
 [1.26.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.26.0

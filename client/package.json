@@ -1,6 +1,6 @@
 {
   "name": "@webdecoy/fcaptcha-client",
-  "version": "1.28.0",
+  "version": "1.28.1",
   "description": "Browser widget for FCaptcha \u2014 proof of work, behavioural signals, and AI-agent detection",
   "main": "fcaptcha.js",
   "browser": "fcaptcha.js",

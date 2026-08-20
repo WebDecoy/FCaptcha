@@ -4,8 +4,8 @@ description: Open source CAPTCHA with proof of work, behavioural biometrics, and
 type: application
 # Chart version moves independently of the app: a fix to a template is a chart
 # release, not an FCaptcha release.
-version: 0.1.3
-appVersion: "1.28.0"
+version: 0.1.4
+appVersion: "1.28.1"
 home: https://github.com/WebDecoy/FCaptcha
 sources:
   - https://github.com/WebDecoy/FCaptcha
