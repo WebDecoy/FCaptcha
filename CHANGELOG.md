@@ -13,6 +13,22 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.26.0] — 2026-08-20
+
+### Added
+- A Helm chart (`charts/fcaptcha`), which the ArtifactHub registration had been
+  pointing at for months without one existing. Refuses to install without a
+  signing key, warns when replicas or trusted proxies are misconfigured, and
+  ships a `helm test` that checks more than liveness.
+- SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, this changelog, and issue/PR
+  templates — including a dedicated false-positive report.
+
+### Fixed
+- **`HEAD` returned 405 on the Go and Python servers** for `/health` and
+  `/fcaptcha.js`. Express routes HEAD to its GET handler, so Node was correct and
+  nothing compared them. Caching proxies revalidate with HEAD and uptime monitors
+  probe with it, so a 405 reads as an outage on a working server.
+
 ## [1.25.0] — 2026-08-20
 
 ### Added
@@ -182,6 +198,7 @@ reading would call major. Read the **Breaking** entries rather than the number.
 Initial releases: proof of work, behavioural biometrics, headless and automation
 detection, Docker images and one-command deploys, keystroke cadence analysis.
 
+[1.26.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.26.0
 [1.25.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.25.0
 [1.24.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.24.0
 [1.23.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.23.0
