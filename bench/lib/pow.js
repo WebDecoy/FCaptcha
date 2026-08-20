@@ -48,7 +48,10 @@ const MAX_DIFFICULTY = 5;
  * instead would measure the fabrication.
  */
 const TARGET_HASH_RATE = 200_000; // per second; mid-range of the server's 50k-500k window
-const MIN_CHALLENGE_AGE_MS = 1_600; // clears the server's 1.5s floor with margin
+// Cleared against the server's 1.5s floor, measured from when the challenge
+// arrives rather than when it is requested — see buildVerifyBody. 100ms of
+// margin is enough once the round trip is outside the measurement.
+const MIN_CHALLENGE_AGE_MS = 1_600;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -136,8 +139,21 @@ async function solve(challenge, signalsHash, opts = {}) {
  * signals into the PoW input, and solves.
  */
 async function buildVerifyBody(serverUrl, siteKey, signals, headers = {}, opts = {}) {
-  const issuedAt = Date.now();
   const challenge = await fetchChallenge(serverUrl, siteKey, headers);
+
+  // Start the clock when the challenge *arrives*, not when we ask for it.
+  //
+  // The server measures from the moment it created the challenge, which is after
+  // our request reached it. Timing the wait from before the fetch therefore
+  // spends part of the budget on the round trip: with a 1600ms target against a
+  // 1500ms server floor, a challenge fetch slower than 100ms leaves the server
+  // measuring under its floor and every sample trips "Challenge solved too
+  // fast". That is comfortably reachable on a loaded CI runner, and it failed
+  // the gate on main.
+  //
+  // Measuring from arrival makes the wait strictly longer than what the server
+  // sees as elapsed, so the margin no longer depends on network latency.
+  const receivedAt = Date.now();
 
   const committed = {
     ...signals,
@@ -152,7 +168,7 @@ async function buildVerifyBody(serverUrl, siteKey, signals, headers = {}, opts =
   // solution, which no client can forge. A real page spends this time rendering
   // and waiting for someone to interact; the harness has to spend it too.
   const minAge = opts.minChallengeAgeMs ?? MIN_CHALLENGE_AGE_MS;
-  const remaining = minAge - (Date.now() - issuedAt);
+  const remaining = minAge - (Date.now() - receivedAt);
   if (remaining > 0) await sleep(remaining);
 
   return {
