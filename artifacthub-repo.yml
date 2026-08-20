@@ -1,3 +1,9 @@
+# Identifies this repository to Artifact Hub, which indexes charts/ and renders
+# each chart's README on its listing page.
+#
+# This file existed for months pointing at nothing: the repositoryID was
+# registered while charts/ did not exist, so the listing had no chart to publish.
+# charts/fcaptcha is that chart.
 repositoryID: fcaptcha
 owners:
   - name: WebDecoy

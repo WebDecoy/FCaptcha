@@ -146,7 +146,11 @@ CLIENT_PATH = os.getenv(
 )
 
 if os.getenv("FCAPTCHA_SERVE_CLIENT", "true").lower() != "false":
-    @app.get("/fcaptcha.js")
+    # GET and HEAD both: Starlette registers only the listed methods, so a bare
+    # HEAD answers 405. Caching proxies revalidate with HEAD and uptime monitors
+    # commonly probe with it, so a 405 here reads as an outage on a working
+    # server.
+    @app.api_route("/fcaptcha.js", methods=["GET", "HEAD"])
     async def fcaptcha_js():
         # charset is not optional here. A classic script served without one is
         # decoded using the *document's* encoding, so the widget's translated
@@ -1691,7 +1695,7 @@ def run_verification(
 # Routes
 # =============================================================================
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     return {"status": "ok"}
 
