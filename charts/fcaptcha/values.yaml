@@ -1,0 +1,162 @@
+# Default values for the fcaptcha chart.
+
+image:
+  repository: ghcr.io/webdecoy/fcaptcha
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+## The token signing key.
+##
+## There is no default, and the chart refuses to render without one. The server's
+## own fallback is `dev-secret-change-in-production`, which is in the public
+## source — a deployment using it can have tokens minted by anyone. Failing to
+## render is the only way to make that impossible to do by accident.
+##
+## Either set `secret` and let the chart create a Secret, or point
+## `existingSecret` at one you manage (sealed-secrets, External Secrets, SOPS).
+secret: ""
+existingSecret: ""
+existingSecretKey: FCAPTCHA_SECRET
+
+## Credential a backend presents when verifying a token. Empty means "same as
+## the signing key", which is the documented default. Splitting them means a
+## leaked verify credential cannot also mint tokens.
+verifySecret: ""
+
+config:
+  ## Peers allowed to set X-Forwarded-For / X-Real-IP / TLS-fingerprint headers.
+  ##
+  ## This matters more in Kubernetes than anywhere else: traffic arrives via an
+  ## Ingress controller, which is a proxy, and if it is not trusted then every
+  ## visitor is attributed to it and rate limiting collapses onto one address.
+  ## The default covers the usual in-cluster pod CIDRs; narrow it to your
+  ## ingress controller's range in production.
+  trustedProxies: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+  ## Comma-separated hostnames permitted to mint tokens. Empty accepts any
+  ## origin, which is the right default for a shared or multi-tenant deployment.
+  allowedHostnames: ""
+
+  ## Comma-separated allowlist of accepted site keys. Empty accepts any; the
+  ## per-IP cap on distinct keys applies regardless.
+  siteKeys: ""
+
+  ## One privacy-safe JSON line per verification. Omits IP, user agent and raw
+  ## signals.
+  logVerdicts: false
+
+  ## Additionally logs free-text detection reasons, which can contain
+  ## visitor-derived data (reverse-DNS hostnames, UA fragments, form field ids).
+  ## Do not enable where you have privacy obligations.
+  logVerdictsIncludeRaw: false
+
+## Extra environment variables, for anything the chart does not model.
+extraEnv: []
+# - name: FCAPTCHA_CLIENT_PATH
+#   value: /app/static/fcaptcha.js
+
+## Bundled Redis is deliberately not offered.
+##
+## Shipping a subchart would mean maintaining a database deployment inside a
+## captcha chart, and the honest answer for anything you care about keeping is a
+## managed instance or a purpose-built operator. Point this at one.
+##
+## Note that as of 1.25.0 the servers' Redis support is not implemented — state
+## is in-memory regardless, which is why replicaCount defaults to 1. Setting this
+## is forward-looking.
+redis:
+  url: ""
+  existingSecret: ""
+  existingSecretKey: REDIS_URL
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: fcaptcha.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+## Verification is CPU-bound and in-memory, so a pod that is alive is generally
+## ready. The startup probe exists for slow first scheduling on small nodes.
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 20
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 10
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  failureThreshold: 30
+  periodSeconds: 2
+
+## The image runs a single static Go binary and writes nothing to disk.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+## Off by default because the in-memory stores mean replicas do not share state:
+## a token minted by one pod is unknown to another, so the single-use guard and
+## the rate limiter are per-pod. Enable once Redis-backed state lands, or if you
+## have session affinity and accept the tradeoff.
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1

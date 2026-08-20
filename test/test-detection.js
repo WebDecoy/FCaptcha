@@ -992,6 +992,47 @@ async function testKeystrokeCadence() {
   }
 }
 
+async function testHeadRequests() {
+  log('\n[HEAD requests]', colors.cyan);
+
+  // Caching proxies revalidate with HEAD and uptime monitors commonly probe with
+  // it, so a 405 on a working server reads as an outage. Go and Python both
+  // answered 405 until v1.26.0 — chi's r.Get and Starlette's @app.get each
+  // register the named method only, while Express routes HEAD to its GET
+  // handler, so Node alone was correct and nothing compared them.
+  for (const path of ['/health', '/fcaptcha.js']) {
+    let status = 0;
+    let contentType = '';
+    try {
+      const res = await fetch(`${SERVER_URL}${path}`, { method: 'HEAD' });
+      status = res.status;
+      contentType = res.headers.get('content-type') || '';
+    } catch (e) {
+      status = -1;
+    }
+
+    if (status === 200) {
+      passed++;
+      log(`  ✓ HEAD ${path} is answered`, colors.green);
+    } else {
+      failed++;
+      log(`  ✗ HEAD ${path} returned ${status}`, colors.red);
+    }
+
+    // The widget carries non-ASCII translations, which are decoded using the
+    // document's encoding unless the response says otherwise.
+    if (path === '/fcaptcha.js') {
+      if (/charset=utf-8/i.test(contentType)) {
+        passed++;
+        log(`  ✓ ${path} declares UTF-8`, colors.green);
+      } else {
+        failed++;
+        log(`  ✗ ${path} content-type lacks charset=utf-8: "${contentType}"`, colors.red);
+      }
+    }
+  }
+}
+
 async function testTokenVerification() {
   log('\n[Token Verification]', colors.cyan);
 
@@ -2603,6 +2644,7 @@ async function runTests() {
   await testSignalCommitment();
   await testChallengeNonce();
   await testKeystrokeCadence();
+  await testHeadRequests();
   await testTokenVerification();
   await testInvisibleMode();
 

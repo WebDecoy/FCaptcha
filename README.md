@@ -55,6 +55,21 @@ With Redis (for distributed state):
 FCAPTCHA_SECRET=my-secret docker compose -f docker/docker-compose.yml up -d
 ```
 
+Kubernetes:
+
+```bash
+helm install fcaptcha ./charts/fcaptcha \
+  --namespace fcaptcha --create-namespace \
+  --set secret=$(openssl rand -hex 32)
+
+helm test fcaptcha -n fcaptcha
+```
+
+The chart refuses to install without a signing key — see
+[charts/fcaptcha](charts/fcaptcha/README.md), which also covers the
+`trustedProxies` setting that matters more behind an ingress controller than
+anywhere else.
+
 Deploy to Fly.io:
 
 ```bash
@@ -945,22 +960,19 @@ reverse proxy.
 
 ## Contributing
 
-Contributions welcome! Please read [ARCHITECTURE.md](ARCHITECTURE.md) first. AI-agent detection is built out in phases — declared agents, input-event forensics, Web Bot Auth signature verification, the measurement harness, and typing/scroll/platform-coherence forensics have shipped; hosted-agent environment composites, accessibility-tree honeypots, and cross-session correlation are still open.
+Contributions welcome — please read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI-agent detection is built out in phases — declared agents, input-event forensics, Web Bot Auth signature verification, the measurement harness, and typing/scroll/platform-coherence forensics have shipped; hosted-agent environment composites, accessibility-tree honeypots, and cross-session correlation are still open.
 
 The most useful contribution right now is **captured traces from real browsers
 driven by real people**. The benchmark corpus is currently scripted personas from
 a single machine, which bounds what any false-positive number from it can mean.
 `bench/corpus/captured/` takes new samples directly — see [bench/README.md](bench/README.md).
 
-Areas that could use help:
-- Web Bot Auth verification for the Python server (Go and Node verify cryptographically against the agent's published key directory; Python still identifies by header presence — no maintained Python library yet)
-- Cross-session / per-fingerprint behavioral correlation (the durable defense against source-patched browsers)
-- Machine learning-based scoring
-- Admin dashboard and analytics
-- WebAssembly-based PoW for better mobile performance
-- Redis-backed distributed state (currently in-memory)
+Other open areas are listed in [CONTRIBUTING.md](CONTRIBUTING.md#what-is-most-useful-right-now),
+along with how to run the test suites and what to measure before adding a detector.
 
 When adding or changing a detector, apply it to **all three** server implementations (Go, Python, Node) so they stay in sync.
+
+Security problems go to [SECURITY.md](SECURITY.md), not the issue tracker.
 
 ## License
 

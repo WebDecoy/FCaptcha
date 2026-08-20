@@ -1,0 +1,48 @@
+name: False positive — a real person was flagged
+description: A legitimate visitor scored as a bot.
+labels: ["false-positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        These are the most valuable reports this project gets. Every threshold in
+        the behavioural layer is measured against a panel of human personas
+        (keyboard-only, screen-reader, touch, tremor, elderly, high-latency), and
+        a false positive usually means the panel is missing someone.
+
+        If you can, please also consider contributing the trace itself — see
+        [bench/README.md](https://github.com/WebDecoy/FCaptcha/blob/main/bench/README.md).
+  - type: textarea
+    id: score
+    attributes:
+      label: The verdict
+      description: >
+        The score and the detections. Set `FCAPTCHA_LOG_VERDICTS=1` on the server
+        and paste the JSON line. Do not include `FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW`
+        output if it might contain visitor data.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: visitor
+    attributes:
+      label: Who was flagged
+      description: >
+        Browser and version, OS, device. Anything about how they interact that
+        might be relevant — assistive technology, an input device other than a
+        mouse, a slow or high-latency connection, privacy extensions.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: FCaptcha version
+    validations:
+      required: true
+  - type: dropdown
+    id: server
+    attributes:
+      label: Which server
+      options: [Go, Node, Python, "Docker image", "Managed (fcaptcha.webdecoy.com)"]
+    validations:
+      required: true
