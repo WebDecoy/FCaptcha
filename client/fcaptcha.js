@@ -13,7 +13,7 @@
   const FCaptcha = {
     // Keep in sync with server-node/package.json and server-python/server.py
     // when cutting a release; this string ships to integrators.
-    version: '1.24.0',
+    version: '1.25.0',
     widgets: new Map(),
     serverUrl: null,
     // Site-wide language default. Per-widget `lang` still wins; leaving both
