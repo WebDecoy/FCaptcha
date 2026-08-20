@@ -1,0 +1,45 @@
+name: Bug report
+description: Something does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a security problem, do not open an issue — see
+        [SECURITY.md](https://github.com/WebDecoy/FCaptcha/blob/main/SECURITY.md).
+
+        For a legitimate visitor being flagged, use the false-positive template
+        instead; it asks for the things that make those diagnosable.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: A `curl` command or a short script beats prose.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: FCaptcha version
+    validations:
+      required: true
+  - type: checkboxes
+    id: servers
+    attributes:
+      label: Which servers did you check?
+      description: >
+        Go, Python and Node are separate codebases kept in sync by hand, so a bug
+        in one is often — but not always — in the other two. Checking more than
+        one is genuinely useful.
+      options:
+        - label: Go
+        - label: Node
+        - label: Python

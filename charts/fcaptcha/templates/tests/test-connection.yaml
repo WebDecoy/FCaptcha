@@ -1,0 +1,71 @@
+{{- /*
+`helm test` support, so an operator can verify a release rather than trust it.
+
+Checks more than liveness: /health says the process is up, but the widget URL is
+the one that has actually broken in the wild — the published image returned 404
+for /fcaptcha.js for three months because a path candidate was missing, while
+/health stayed green the whole time.
+*/ -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "fcaptcha.fullname" . }}-test"
+  labels:
+    {{- include "fcaptcha.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    # before-hook-creation, and deliberately *not* hook-succeeded.
+    #
+    # hook-succeeded alone leaves a failed pod behind, so the next `helm test`
+    # collides with the existing name and re-reports the original failure —
+    # indistinguishable from the new run failing.
+    #
+    # But adding hook-succeeded on top races `helm test --logs`: the pod is
+    # deleted the moment it passes, and fetching its logs then fails with "pods
+    # not found" on an otherwise green run.
+    #
+    # before-hook-creation alone gives both properties. The pod persists after a
+    # run — succeeded or failed — so its logs are retrievable and an operator can
+    # inspect it, and it is cleared out before the next run rather than blocking
+    # it.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      image: curlimages/curl:8.11.1
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      args:
+        - /bin/sh
+        - -ec
+        - |
+          BASE="http://{{ include "fcaptcha.fullname" . }}:{{ .Values.service.port }}"
+
+          echo "health"
+          curl -sf "$BASE/health" | grep -q '"ok"'
+
+          echo "widget is served"
+          curl -sf -o /dev/null "$BASE/fcaptcha.js"
+
+          echo "widget declares utf-8 (translations depend on it)"
+          curl -sfI "$BASE/fcaptcha.js" | tr 'A-Z' 'a-z' | grep -q 'charset=utf-8'
+
+          echo "siteverify answers the compat contract"
+          curl -sf -X POST "$BASE/turnstile/v0/siteverify" -d 'response=x' \
+            | grep -q 'missing-input-secret'
+
+          echo "a request with no proof of work is refused a token"
+          curl -sf -X POST "$BASE/api/verify" -H 'Content-Type: application/json' \
+            -d '{"siteKey":"helm-test","signals":{}}' | grep -q '"success":false'
+
+          echo "all checks passed"

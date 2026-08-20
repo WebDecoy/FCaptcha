@@ -244,7 +244,11 @@ func main() {
 	} else {
 		log.Printf("serving /fcaptcha.js from %s", clientPath)
 	}
-	r.Get("/fcaptcha.js", func(w http.ResponseWriter, r *http.Request) {
+	// GET and HEAD both, because chi's r.Get registers GET alone and a bare HEAD
+	// then answers 405. Caching proxies revalidate with HEAD and uptime monitors
+	// commonly probe with it, so a 405 here reads as an outage on a working
+	// server. http.ServeFile already omits the body for HEAD.
+	serveClient := func(w http.ResponseWriter, r *http.Request) {
 		if clientPath == "" {
 			http.NotFound(w, r)
 			return
@@ -254,11 +258,14 @@ func main() {
 		// strings render as mojibake on any page that is not already UTF-8.
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		http.ServeFile(w, r, clientPath)
-	})
+	}
+	r.Get("/fcaptcha.js", serveClient)
+	r.Head("/fcaptcha.js", serveClient)
 	r.Handle("/demo/*", http.StripPrefix("/demo/", http.FileServer(http.Dir("./static/demo"))))
 
 	// Routes
 	r.Get("/health", healthHandler)
+	r.Head("/health", healthHandler)
 	r.Post("/api/verify", verifyHandler(engine, proxyTrust, siteKeys, ja4s))
 	r.Post("/api/score", invisibleScoreHandler(engine, proxyTrust, siteKeys, ja4s))
 	r.Post("/api/token/verify", tokenVerifyHandler(engine, proxyTrust, verifySecret, requireVerifySecret))

@@ -1,0 +1,118 @@
+name: Helm chart
+
+# The chart is a deployment path like any other, so it gets the same treatment:
+# it is linted, rendered across the combinations people actually use, validated
+# against real Kubernetes schemas, and then installed into a throwaway cluster
+# and asked to prove it serves traffic.
+#
+# Rendering is not enough on its own. Writing this chart turned up two things
+# that only a real install surfaces: HEAD returned 405 on two of the three
+# servers, and a failed `helm test` pod was never cleaned up, so every
+# subsequent run re-reported the first failure.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm.yml'
+  pull_request:
+    paths:
+      - 'charts/**'
+      - 'docker/**'
+      - 'server-go/**'
+      - 'client/**'
+      - '.github/workflows/helm.yml'
+
+jobs:
+  lint-and-render:
+    name: Lint, render, validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Lint
+        run: helm lint charts/fcaptcha --set secret=ci
+
+      # The guard is the chart's only defence against a deployment signing tokens
+      # with a key published in the source, so it is worth a test of its own.
+      - name: Refuses to render without a signing key
+        run: |
+          if helm template t charts/fcaptcha >/dev/null 2>&1; then
+            echo "chart rendered without a secret — the guard is broken"
+            exit 1
+          fi
+          echo "guard holds"
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar xz -C /usr/local/bin kubeconform
+
+      - name: Render and validate every combination
+        run: |
+          set -e
+          render() {
+            name="$1"; shift
+            helm template t charts/fcaptcha "$@" > "/tmp/$name.yaml"
+            kubeconform -strict -summary -kubernetes-version 1.30.0 "/tmp/$name.yaml"
+          }
+          render minimal        --set secret=ci
+          render existing       --set existingSecret=mine
+          render ingress        --set secret=ci --set ingress.enabled=true
+          render scaling        --set secret=ci --set autoscaling.enabled=true --set podDisruptionBudget.enabled=true
+          render redis          --set secret=ci --set redis.url=redis://r:6379
+          render full           --set secret=ci --set ingress.enabled=true --set autoscaling.enabled=true \
+                                --set podDisruptionBudget.enabled=true --set config.logVerdicts=true \
+                                --set config.allowedHostnames=a.example --set verifySecret=v
+
+  install:
+    name: Install into a cluster
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: fcaptcha-chart
+
+      # Built from this commit rather than pulled from GHCR: the point is to test
+      # the chart against the code in the PR, not against the last release.
+      - name: Build the image
+        run: docker build -f docker/Dockerfile -t fcaptcha:ci .
+
+      - name: Load it into the cluster
+        run: kind load docker-image fcaptcha:ci --name fcaptcha-chart
+
+      - name: Install
+        run: |
+          helm install fc charts/fcaptcha \
+            --namespace fcaptcha --create-namespace \
+            --set secret=$(openssl rand -hex 32) \
+            --set image.repository=fcaptcha \
+            --set image.tag=ci \
+            --set image.pullPolicy=Never \
+            --wait --timeout 5m
+
+      - name: Test
+        run: helm test fc -n fcaptcha --logs
+
+      # A failed hook pod used to block every later run by colliding with its own
+      # name; running twice is what catches that regressing.
+      - name: Test again, to prove it is re-runnable
+        run: helm test fc -n fcaptcha
+
+      - name: Diagnostics on failure
+        if: failure()
+        run: |
+          kubectl -n fcaptcha get pods -o wide || true
+          kubectl -n fcaptcha describe pods || true
+          kubectl -n fcaptcha logs -l app.kubernetes.io/name=fcaptcha --tail=100 || true

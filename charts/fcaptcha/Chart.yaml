@@ -1,0 +1,27 @@
+apiVersion: v2
+name: fcaptcha
+description: Open source CAPTCHA with proof of work, behavioural biometrics, and AI-agent detection
+type: application
+# Chart version moves independently of the app: a fix to a template is a chart
+# release, not an FCaptcha release.
+version: 0.1.0
+appVersion: "1.25.0"
+home: https://github.com/WebDecoy/FCaptcha
+sources:
+  - https://github.com/WebDecoy/FCaptcha
+maintainers:
+  - name: WebDecoy
+    email: hello@webdecoy.com
+keywords:
+  - captcha
+  - bot-detection
+  - proof-of-work
+  - security
+  - anti-bot
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/WebDecoy/FCaptcha#readme
+    - name: Security policy
+      url: https://github.com/WebDecoy/FCaptcha/blob/main/SECURITY.md

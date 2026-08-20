@@ -1,0 +1,35 @@
+{{ .Chart.Name }} {{ .Chart.AppVersion }} is installed as {{ include "fcaptcha.fullname" . }}.
+
+Reach it:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "fcaptcha.fullname" . }} 8080:{{ .Values.service.port }}
+  curl http://localhost:8080/health
+{{- end }}
+
+Point the widget at it:
+
+  <script src="http://<your-host>/fcaptcha.js"></script>
+  <script>FCaptcha.configure({ serverUrl: 'http://<your-host>' });</script>
+
+{{ if not .Values.config.trustedProxies -}}
+WARNING: trustedProxies is empty. Traffic reaching this service through an
+ingress controller arrives from the controller's address, and with no proxy
+trusted every visitor is attributed to it — rate limiting and IP reputation
+collapse onto a single address, silently. Set config.trustedProxies to your
+ingress controller's pod CIDR.
+
+{{ end -}}
+{{- if gt (int .Values.replicaCount) 1 -}}
+WARNING: replicaCount is {{ .Values.replicaCount }}, but server state (issued
+tokens, PoW challenges, rate limits) is in-memory and not shared. A token minted
+by one pod is unknown to the others, so single-use enforcement and rate limiting
+are per-pod. Run one replica until Redis-backed state lands, or accept it
+knowingly.
+
+{{ end -}}
+Before production, read:
+  https://github.com/WebDecoy/FCaptcha/blob/main/SECURITY.md#deployment-notes-that-are-security-relevant

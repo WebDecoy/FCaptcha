@@ -1,0 +1,140 @@
+{{- include "fcaptcha.validateSecret" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fcaptcha.fullname" . }}
+  labels:
+    {{- include "fcaptcha.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "fcaptcha.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Rolls pods when the signing key changes. Without this a rotated secret
+        # is only picked up by whatever happens to restart next, leaving pods
+        # signing with different keys and tokens failing verification depending
+        # on which one answered.
+        {{- if not .Values.existingSecret }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "fcaptcha.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "fcaptcha.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: fcaptcha
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.service.targetPort | quote }}
+            - name: FCAPTCHA_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fcaptcha.secretName" . }}
+                  key: {{ .Values.existingSecretKey }}
+            {{- if .Values.verifySecret }}
+            - name: FCAPTCHA_VERIFY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fcaptcha.secretName" . }}
+                  key: FCAPTCHA_VERIFY_SECRET
+            {{- end }}
+            {{- if .Values.redis.existingSecret }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.existingSecret }}
+                  key: {{ .Values.redis.existingSecretKey }}
+            {{- else if .Values.redis.url }}
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "fcaptcha.secretName" . }}
+                  key: REDIS_URL
+            {{- end }}
+            {{- with .Values.config.trustedProxies }}
+            - name: TRUSTED_PROXIES
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.allowedHostnames }}
+            - name: FCAPTCHA_ALLOWED_HOSTNAMES
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.siteKeys }}
+            - name: FCAPTCHA_SITE_KEYS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.config.logVerdicts }}
+            - name: FCAPTCHA_LOG_VERDICTS
+              value: "1"
+            {{- end }}
+            {{- if .Values.config.logVerdictsIncludeRaw }}
+            - name: FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW
+              value: "1"
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # readOnlyRootFilesystem is on, and Go's TLS and DNS paths want a
+            # writable temp dir even when nothing else does.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
