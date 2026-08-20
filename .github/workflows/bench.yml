@@ -53,6 +53,15 @@ jobs:
       # These existed but ran nowhere, so an assertion that a Playwright-driven
       # Chromium receives a token survived the shipping of the dispositive floor
       # that correctly stops exactly that. Untested tests rot quietly.
+      # Builds client/dist so the minified-vs-source comparison has something to
+      # compare against; it skips itself when dist/ is absent, and a test that
+      # silently skips in CI is a test that is not running.
+      - name: Build the distributable widget
+        working-directory: client
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
       - name: Install browser test dependencies
         working-directory: test/browser
         run: npm install --no-audit --no-fund

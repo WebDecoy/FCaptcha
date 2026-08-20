@@ -1,12 +1,23 @@
 name: Publish to npm
 
+# Two packages ship from this repo:
+#
+#   @webdecoy/fcaptcha         the Node server / scoring engine  (server-node/)
+#   @webdecoy/fcaptcha-client  the browser widget                (client/)
+#
+# The client package exists so the widget has a CDN URL. Self-hosting it stays
+# the privacy-preserving default and is what every server serves same-origin,
+# but "add one script tag" is the first thing anyone tries, and until this
+# existed that required standing up a server first.
+
 on:
   release:
     types: [created]
   workflow_dispatch:
 
 jobs:
-  publish:
+  server:
+    name: "@webdecoy/fcaptcha"
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -29,3 +40,43 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  client:
+    name: "@webdecoy/fcaptcha-client"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # Also runs via prepublishOnly, but running it here means a version
+      # mismatch or a minifier that mangled the fingerprint literals fails the
+      # job with a readable error rather than mid-publish.
+      - name: Build and verify
+        run: npm run build
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # The digest changes every release, so it belongs with the release rather
+      # than pinned in a README that would rot.
+      - name: Report Subresource Integrity digests
+        run: |
+          echo "### Subresource Integrity — $(node -p "require('./package.json').version")" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat dist/integrity.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
