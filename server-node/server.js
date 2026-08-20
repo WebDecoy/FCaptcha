@@ -1425,11 +1425,13 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
         category: 'bot',
         score: 0.7,
         confidence: 0.8,
-        reason: `PoW verification failed: ${powVerification.reason}`,
-        // A solution that does not verify against a challenge this server
-        // issued is not weak evidence of automation, it is proof the challenge
-        // was not completed. See DISPOSITIVE_FLOOR.
-        dispositive: true
+        reason: `PoW verification failed: ${powVerification.reason}`
+        // Deliberately NOT dispositive. The gate already withholds the token,
+        // which is the security requirement. Flooring the score as well says
+        // "blatant bot", and a failed proof of work does not mean that: the
+        // challenge expires after five minutes, challenges live only in memory
+        // so every deploy invalidates the outstanding ones, and a double-click
+        // replays a solution. All ordinary things that happen to real people.
       });
     } else {
       powSatisfied = true;
@@ -1447,8 +1449,8 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
           category: 'bot',
           score: 0.9,
           confidence: 0.9,
-          reason: 'Challenge nonce mismatch (signals not bound to challenge)',
-          dispositive: true
+          reason: 'Challenge nonce mismatch (signals not bound to challenge)'
+          // Not dispositive — see above; a stale challenge produces this too.
         });
       }
     }
@@ -1480,8 +1482,9 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
       category: 'bot',
       score: 0.9,
       confidence: 0.95,
-      reason: 'No PoW solution provided',
-      dispositive: true
+      reason: 'No PoW solution provided'
+      // Not dispositive — the gate refuses the token; inflating the score on
+      // top only mislabels whoever hit a stale page.
     });
   }
 

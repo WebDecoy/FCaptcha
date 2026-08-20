@@ -682,17 +682,49 @@ func TestNoPoWSolutionWithholdsAToken(t *testing.T) {
 	}
 }
 
-func TestNoPoWSolutionIsDispositive(t *testing.T) {
-	// The gate withholds the token; the floor makes the reported score honest,
-	// so an integrator risk-banding on the score sees the truth too.
+// A failed proof of work must NOT floor the score.
+//
+// The regression from v1.23.0, found when the project's own demo site refused
+// its author in an ordinary browser. Marking the PoW failures Dispositive turned
+// every benign cause into a 0.9 and a hard block: a challenge expires after five
+// minutes, challenges live only in memory so every deploy invalidates the
+// outstanding ones, and a double-click replays a solution. The observed verdict
+// had a weighted sum of 0.2324 — an entirely ordinary human — reported as 0.9.
+//
+// The gate carries the security requirement: no valid proof of work, no token,
+// whatever the score. Flooring on top of that adds nothing and asserts something
+// false about the visitor.
+func TestFailedPoWDoesNotFloorTheScore(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+
+	// Behaviour a real person produces, submitted with no valid PoW — the shape
+	// of someone returning to a tab whose challenge expired.
+	human := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"totalPoints": 180.0, "trajectoryLength": 2400.0, "approachPoints": 42.0,
+			"mouseEvents": 180.0, "directionChanges": 22.0, "microTremorScore": 0.7,
+		},
+	}
+	result := noPoWVerify(e, human)
+
+	if result.Score >= dispositiveFloor {
+		t.Errorf("a benign PoW failure floored the score to %v; an expired "+
+			"challenge must not score a visitor as a self-declared bot", result.Score)
+	}
+	if result.Success || result.Token != "" {
+		t.Error("the gate must still withhold the token")
+	}
+}
+
+func TestNoPoWWithholdsTheTokenWithoutCondemning(t *testing.T) {
 	e := NewScoringEngine("test-secret")
 	result := noPoWVerify(e, map[string]interface{}{})
 
-	if result.Score < dispositiveFloor {
-		t.Errorf("expected the dispositive floor, got %v", result.Score)
+	if result.Success || result.Token != "" {
+		t.Error("no PoW must withhold the token")
 	}
-	if result.Recommendation != "block" {
-		t.Errorf("expected a block recommendation, got %q", result.Recommendation)
+	if result.Score >= dispositiveFloor {
+		t.Errorf("no PoW must not reach the dispositive floor, got %v", result.Score)
 	}
 }
 
@@ -705,8 +737,10 @@ func TestForgedPoWSolutionWithholdsAToken(t *testing.T) {
 	if result.Success || result.Token != "" {
 		t.Error("a forged PoW solution must not be issued a token")
 	}
-	if result.Score < dispositiveFloor {
-		t.Errorf("expected the dispositive floor, got %v", result.Score)
+	// Refused, but not condemned: a solution referencing an unknown challenge is
+	// also exactly what a stale page produces after the server restarts.
+	if result.Score >= dispositiveFloor {
+		t.Errorf("a failed PoW must not reach the dispositive floor, got %v", result.Score)
 	}
 }
 

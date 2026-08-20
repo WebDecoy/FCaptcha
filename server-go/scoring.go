@@ -382,10 +382,20 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 				Score:      0.7,
 				Confidence: 0.8,
 				Reason:     "PoW verification failed: " + powResult.Reason,
-				// A solution that does not verify against a challenge this
-				// server issued is not weak evidence of automation, it is proof
-				// the challenge was not completed. See applyDispositiveFloor.
-				Dispositive: true,
+				// Deliberately NOT Dispositive.
+				//
+				// The gate above already withholds the token, which is the whole
+				// security requirement. Flooring the score as well says "this
+				// visitor is a blatant bot", and a failed proof of work does not
+				// mean that: a challenge expires after five minutes, challenges
+				// live only in memory so every deploy invalidates the
+				// outstanding ones, and a double-click replays a solution. All
+				// three are ordinary things that happen to real people with a
+				// tab left open.
+				//
+				// Marking this dispositive turned each of them into a hard block
+				// at 0.9. It did so on the project's own demo site, to its
+				// author, in an ordinary browser.
 			})
 		} else {
 			powSatisfied = true
@@ -406,8 +416,10 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 					Category:    CategoryBot,
 					Score:       0.9,
 					Confidence:  0.9,
-					Reason:      "Challenge nonce mismatch (signals not bound to challenge)",
-					Dispositive: true,
+					Reason: "Challenge nonce mismatch (signals not bound to challenge)",
+					// Not dispositive, for the same reason as above: the gate
+					// already refuses the token, and a stale challenge produces
+					// this too.
 				})
 			}
 		}
@@ -444,8 +456,9 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 			Category:    CategoryBot,
 			Score:       0.9,
 			Confidence:  0.95,
-			Reason:      "No PoW solution provided",
-			Dispositive: true,
+			Reason: "No PoW solution provided",
+			// Not dispositive. The gate refuses the token; inflating the score
+			// on top of that only mislabels whoever hit a stale page.
 		})
 	}
 

@@ -1540,11 +1540,13 @@ def run_verification(
         if not pow_result["valid"]:
             detections.append(Detection(
                 ThreatCategory.BOT, 0.7, 0.8,
-                f"PoW verification failed: {pow_result['reason']}",
-                # A solution that does not verify against a challenge this
-                # server issued is not weak evidence of automation, it is proof
-                # the challenge was not completed. See apply_dispositive_floor.
-                dispositive=True
+                f"PoW verification failed: {pow_result['reason']}"
+                # Deliberately NOT dispositive. The gate already withholds the
+                # token, which is the security requirement. Flooring the score
+                # as well says "blatant bot", and a failed proof of work does
+                # not mean that: the challenge expires after five minutes,
+                # challenges live only in memory so every deploy invalidates
+                # the outstanding ones, and a double-click replays a solution.
             ))
         else:
             pow_satisfied = True
@@ -1559,8 +1561,8 @@ def run_verification(
                 pow_satisfied = False
                 detections.append(Detection(
                     ThreatCategory.BOT, 0.9, 0.9,
-                    "Challenge nonce mismatch (signals not bound to challenge)",
-                    dispositive=True
+                    "Challenge nonce mismatch (signals not bound to challenge)"
+                    # Not dispositive — a stale challenge produces this too.
                 ))
 
         # Server-side timing, the one cost an attacker cannot buy their way out
@@ -1589,8 +1591,8 @@ def run_verification(
         # No PoW solution provided - hard fail
         detections.append(Detection(
             ThreatCategory.BOT, 0.9, 0.95,
-            "No PoW solution provided",
-            dispositive=True
+            "No PoW solution provided"
+            # Not dispositive — the gate refuses the token already.
         ))
 
     # Behavioral detectors

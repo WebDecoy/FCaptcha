@@ -141,12 +141,25 @@ def no_pow_solution_withholds_a_token():
 
 
 @test
-def no_pow_solution_is_dispositive():
-    """The gate withholds the token; the floor makes the reported score honest,
-    so an integrator risk-banding on the score sees the truth too."""
-    result = _no_pow_verification()
-    assert result["score"] >= DISPOSITIVE_FLOOR, result["score"]
-    assert result["recommendation"] == "block", result["recommendation"]
+def failed_pow_does_not_floor_the_score():
+    """The v1.23.0 regression, found when the demo site refused its own author.
+
+    Marking the PoW failures dispositive turned every benign cause into a hard
+    block: a challenge expires after five minutes, challenges live only in memory
+    so every deploy invalidates the outstanding ones, and a double-click replays
+    a solution. The gate carries the security requirement; flooring on top of it
+    asserts something false about the visitor."""
+    human = {
+        "behavioral": {
+            "totalPoints": 180, "trajectoryLength": 2400, "approachPoints": 42,
+            "mouseEvents": 180, "directionChanges": 22, "microTremorScore": 0.7,
+        }
+    }
+    result = run_verification(human, "203.0.113.4", "site", "Mozilla/5.0")
+    assert result["score"] < DISPOSITIVE_FLOOR, (
+        f"a benign PoW failure floored the score to {result['score']}")
+    assert result["success"] is False, "the gate must still withhold the token"
+    assert not result["token"]
 
 
 @test
