@@ -13,6 +13,25 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.28.0] — 2026-08-20
+
+### Fixed
+- **The widget did not meet WCAG 2.2 AA.** An audit found seven contrast
+  failures, the worst being the checkbox border at 1.72:1 — the visual boundary
+  of the control. Replacement colours computed from measured ratios and annotated
+  with them.
+- **No focus indicator of its own.** The control relied on the user agent's,
+  which a host page resetting outlines removes. It now draws both an outline and
+  a box-shadow, since an outline reset removes one and forced-colors modes remove
+  the other.
+- Decorative glyphs and the spinner are hidden from assistive technology; the
+  spinner stops under `prefers-reduced-motion`.
+
+### Added
+- Nine WCAG 2.2 AA criteria verified in CI against the rendered widget, including
+  focus visibility under a host stylesheet that suppresses outlines. The
+  conformance position, and its boundary, is documented in `COMPLIANCE.md`.
+
 ## [1.27.0] — 2026-08-20
 
 ### Fixed
@@ -218,6 +237,7 @@ reading would call major. Read the **Breaking** entries rather than the number.
 Initial releases: proof of work, behavioural biometrics, headless and automation
 detection, Docker images and one-command deploys, keystroke cadence analysis.
 
+[1.28.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.28.0
 [1.27.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.27.0
 [1.26.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.26.0
 [1.25.0]: https://github.com/WebDecoy/FCaptcha/releases/tag/v1.25.0
