@@ -132,11 +132,58 @@ exposes a proper `checkbox` role with an accessible name, announces state change
 through a live region, and carries its resolved language so screen readers
 pronounce it correctly.
 
-More usefully, the accessibility claims are **measured**. The benchmark harness
-carries keyboard-only, screen-reader, touch, motor-tremor, elderly and
+More usefully, the accessibility claims are **measured**, in two independent
+ways.
+
+### WCAG 2.2 AA — criteria verified in CI
+
+`test/browser/tests/a11y.spec.ts` renders the widget in a real browser and
+computes each value from what is actually painted, rather than from the source,
+because the widget is injected into someone else's page and the value that
+matters is the one after cascade.
+
+| Criterion | Level | How it is checked |
+|---|---|---|
+| 1.4.3 Contrast (Minimum) | AA | Every text element against its painted surface, both themes, ≥ 4.5:1 |
+| 1.4.11 Non-text Contrast | AA | The checkbox border — the edge a person must find — against its surface, ≥ 3:1 |
+| 1.4.1 Use of Color | A | State carried in the label text, not by fill colour alone |
+| 1.4.10 Reflow | AA | No horizontal scrolling at a 320px viewport |
+| 2.1.1 Keyboard | A | The control takes focus by Tab and activates by Enter or Space |
+| 2.4.7 Focus Visible | AA | Focused **under a host stylesheet that suppresses outlines globally** |
+| 2.5.8 Target Size (Minimum) | AA | The control measures at least 24×24 CSS px |
+| 4.1.2 Name, Role, Value | A | `checkbox` role with an accessible name from the visible label |
+| 4.1.3 Status Messages | AA | Verifying, verified and failed announced via a live region |
+
+Two of those were failing before the suite existed, and are worth naming because
+a claim is only useful if it survives someone checking it. The palette missed on
+seven counts, the worst being the **checkbox border at 1.72:1** — the visual
+boundary of the control itself. And the first focus fix was defeated by a host
+stylesheet using `!important`, which the test caught; the indicator now draws
+both an outline and a box-shadow, because an outline reset removes one and
+forced-colors modes remove the other.
+
+Also handled, beyond the table: decorative glyphs and the spinner are hidden from
+assistive technology so they are not announced as stray characters, and the
+spinner stops under `prefers-reduced-motion`.
+
+**What this is and is not.** These are the AA criteria that apply to a control of
+this size, verified automatically on every CI run. They are not a full WCAG 2.2
+AA audit of a page — criteria about page structure, navigation and language of
+parts belong to the page embedding the widget, and remain the integrator's
+responsibility. No automated suite substitutes for testing with actual assistive
+technology.
+
+### False positives on assistive-technology users
+
+The second measurement, and the one with no equivalent elsewhere: the benchmark
+harness carries keyboard-only, screen-reader, touch, motor-tremor, elderly and
 high-latency personas, and CI fails when any signal fires on the human panel more
-often than its budget allows. Detectors have been removed for firing on those
-personas. See [bench/README.md](bench/README.md).
+often than its budget allows. Detectors have been removed from the product for
+firing on those personas.
+
+This is the question a conformance badge does not answer — not "can a screen
+reader operate the control", but "does the bot detector decide the screen-reader
+user is a bot". See [bench/README.md](bench/README.md).
 
 ## Compared with ALTCHA
 

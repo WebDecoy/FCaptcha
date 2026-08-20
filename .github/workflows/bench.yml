@@ -70,6 +70,9 @@ jobs:
         working-directory: test/browser
         run: npx playwright install --with-deps chromium
 
+      # Includes the WCAG 2.2 AA checks. The repository claims that conformance
+      # publicly, so it is verified on every change rather than audited once and
+      # assumed: the palette failed on seven counts before these existed.
       - name: Browser suite
         working-directory: test/browser
         run: npm test

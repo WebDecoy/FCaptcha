@@ -28,7 +28,8 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 - **Mobile-native** - Touch kinematics and passive device-sensor entropy, with accessibility exemptions for keyboard-only and touch users
 - **TLS fingerprinting** - JA3 (client-supplied) and JA4 (un-spoofable, from a trusted reverse proxy) matched against known automation tools
 - **Credential stuffing protection** - Form interaction analysis, timing, and programmatic submit/fill detection
-- **Self-hosted & privacy-first** - No external dependencies, no persistent fingerprinting, no cross-site tracking. Available on npm/CDN with Subresource Integrity when you'd rather not host the widget yourself
+- **Self-hosted & privacy-first** - No cookies, no third-party data sharing, no cross-site tracking. Nothing is written to disk and every retention window is enumerated in [COMPLIANCE.md](COMPLIANCE.md). Available on npm/CDN with Subresource Integrity when you'd rather not host the widget yourself
+- **Accessible, and tested for it** - No visual or audio puzzle to fail. The widget's WCAG 2.2 AA position is verified in CI — contrast, focus visibility that survives a host stylesheet, target size, reflow, reduced motion — alongside a benchmark panel of screen-reader, keyboard-only, motor-tremor and elderly personas whose false-positive budget fails the build when exceeded
 - **Input forensics** - Typing cadence and modality (keystrokes vs. paste vs. a value assigned into the DOM), scroll morphology, and platform contradictions like a Ctrl+V paste from a browser claiming macOS
 - **Open algorithm** - Transparent, evidence-accumulating scoring across ~12 categories, fully auditable
 - **Measured, not asserted** - A [benchmark harness](bench/) captures real browser traces for 14 human personas (keyboard-only, screen-reader, touch, tremor, elderly, DevTools-open, privacy-extension…) and reports a per-signal false-positive budget in CI. Every threshold in the behavioural layer was derived from it
@@ -369,6 +370,28 @@ if (result.valid && result.score < 0.5) {
   // Valid request from human
 }
 ```
+
+## Privacy, accessibility and compliance
+
+The properties a procurement review asks about, with the evidence behind them in
+[COMPLIANCE.md](COMPLIANCE.md):
+
+| | |
+|---|---|
+| **Cookies** | None. No consent banner needed for FCaptcha |
+| **Third parties** | None. No SaaS, no telemetry, no phone-home, no CDN requirement |
+| **Persistence** | Nothing written to disk. All state in memory, 5 minutes to 1 hour, enumerated |
+| **Data location** | Your server, wherever you run it |
+| **Automated decisions** | Every score itemised with a human-readable reason, so an Article 22 decision can be explained rather than quoted |
+| **Accessibility** | No visual or audio puzzle. WCAG 2.2 AA criteria verified in CI; relevant to the European Accessibility Act |
+| **False positives** | Measured against a labelled human panel on every run, with a per-signal budget that fails the build |
+
+The accessibility work is tested rather than asserted, which is the part worth
+checking: `test/browser/tests/a11y.spec.ts` computes contrast from what the
+browser actually paints, focuses the control under a host stylesheet that
+suppresses outlines globally, and measures the target box. Those checks were
+written after an audit found the previous palette failing on seven counts,
+including the checkbox border at 1.72:1.
 
 ## How It Works
 

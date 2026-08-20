@@ -2803,10 +2803,19 @@
               box-sizing: border-box;
               user-select: none;
             }
+            /*
+              Colours below are chosen from measured contrast ratios, not by eye.
+              WCAG 2.2 AA wants 4.5:1 for text and 3:1 for the visual boundary of
+              a control (SC 1.4.3, 1.4.11), and the previous palette missed on
+              seven counts — the checkbox border itself was 1.72:1, so the edge of
+              the control a person has to find and click was the worst offender.
+              Ratios are in the comments so the next person changing a colour can
+              check rather than guess.
+            */
             .fcaptcha-checkbox {
-              width: 24px;
+              width: 24px;                                    /* SC 2.5.8 minimum */
               height: 24px;
-              border: 2px solid ${isDark ? '#555' : '#c1c1c1'};
+              border: 2px solid ${isDark ? '#8a8a8a' : '#767676'};  /* 4.83:1 / 4.35:1 */
               border-radius: 4px;
               cursor: pointer;
               display: flex;
@@ -2816,35 +2825,81 @@
               transition: all 0.15s ease;
               flex-shrink: 0;
             }
-            .fcaptcha-checkbox:hover { border-color: #00bcd4; }
-            .fcaptcha-checkbox.loading { border-color: #00bcd4; }
-            .fcaptcha-checkbox.verified { background: #4caf50; border-color: #4caf50; }
-            .fcaptcha-checkbox.failed { background: #f44336; border-color: #f44336; }
+            .fcaptcha-checkbox:hover { border-color: ${isDark ? '#00bcd4' : '#00838f'}; }
+            .fcaptcha-checkbox.loading { border-color: ${isDark ? '#00bcd4' : '#00838f'}; }
+            /*
+              Focus indication, drawn two ways on purpose (SC 2.4.7).
+              
+              This widget is injected into someone else's page, and a host
+              stylesheet doing a global outline reset — commonly with !important —
+              wins the cascade and leaves a keyboard user with nothing to see. A
+              test asserts exactly that scenario, and an outline alone failed it.
+              
+              box-shadow is the robust half: an outline reset cannot remove it.
+              outline is the accessible half: Windows High Contrast and other
+              forced-colors modes drop box-shadow but honour outline. Neither
+              covers both cases, so both are set.
+            */
+            .fcaptcha-checkbox:focus-visible {
+              outline: 3px solid ${isDark ? '#8ab4f8' : '#1a56db'};
+              outline-offset: 2px;
+              box-shadow: 0 0 0 3px ${isDark ? '#8ab4f8' : '#1a56db'};
+            }
+            /* Fallback for browsers without :focus-visible. */
+            .fcaptcha-checkbox:focus {
+              outline: 3px solid ${isDark ? '#8ab4f8' : '#1a56db'};
+              outline-offset: 2px;
+              box-shadow: 0 0 0 3px ${isDark ? '#8ab4f8' : '#1a56db'};
+            }
+            .fcaptcha-checkbox:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+            .fcaptcha-checkbox.verified {
+              background: #2e7d32;                            /* 4.91:1 vs surface */
+              border-color: #2e7d32;
+            }
+            .fcaptcha-checkbox.failed {
+              background: #c62828;                            /* 5.39:1 vs surface */
+              border-color: #c62828;
+            }
             .fcaptcha-spinner {
               width: 16px;
               height: 16px;
               border: 2px solid ${isDark ? '#555' : '#e0e0e0'};
-              border-top-color: #00bcd4;
+              border-top-color: ${isDark ? '#00bcd4' : '#00838f'};
               border-radius: 50%;
               animation: fcaptcha-spin 0.8s linear infinite;
             }
             @keyframes fcaptcha-spin { to { transform: rotate(360deg); } }
-            .fcaptcha-checkmark { display: none; color: white; font-size: 14px; font-weight: bold; }
+            /*
+              A continuously spinning element is exactly what someone with a
+              vestibular disorder turns this setting on to avoid. The spinner
+              still marks the busy state, it just stops moving.
+            */
+            @media (prefers-reduced-motion: reduce) {
+              .fcaptcha-spinner { animation: none; }
+              .fcaptcha-checkbox { transition: none; }
+            }
+            /* white on #2e7d32 = 5.13:1, on #c62828 = 5.62:1 */
+            .fcaptcha-checkmark { display: none; color: #fff; font-size: 14px; font-weight: bold; }
             .fcaptcha-checkbox.verified .fcaptcha-checkmark { display: block; }
-            .fcaptcha-x { display: none; color: white; font-size: 14px; font-weight: bold; }
+            .fcaptcha-x { display: none; color: #fff; font-size: 14px; font-weight: bold; }
             .fcaptcha-checkbox.failed .fcaptcha-x { display: block; }
             .fcaptcha-label { color: ${isDark ? '#e0e0e0' : '#555'}; font-size: 14px; flex-grow: 1; }
             .fcaptcha-branding {
               display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0;
             }
-            .fcaptcha-brand { font-size: 11px; font-weight: 600; color: #ff2a6d; letter-spacing: 0.5px; }
-            .fcaptcha-logo { font-size: 9px; font-weight: 500; color: ${isDark ? '#808080' : '#999'}; }
+            /* 5.63:1 light / 4.61:1 dark */
+            .fcaptcha-brand {
+              font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+              color: ${isDark ? '#ff2a6d' : '#c2185b'};
+            }
+            /* 5.11:1 light / 6.45:1 dark */
+            .fcaptcha-logo { font-size: 9px; font-weight: 500; color: ${isDark ? '#a1a1a1' : '#6b6b6b'}; }
           </style>
           <div class="fcaptcha-checkbox" role="checkbox" aria-checked="false" tabindex="0"
                aria-labelledby="${this.id}-label">
-            <div class="fcaptcha-spinner" style="display: none;"></div>
-            <span class="fcaptcha-checkmark">✓</span>
-            <span class="fcaptcha-x">✕</span>
+            <div class="fcaptcha-spinner" style="display: none;" aria-hidden="true"></div>
+            <span class="fcaptcha-checkmark" aria-hidden="true">✓</span>
+            <span class="fcaptcha-x" aria-hidden="true">✕</span>
           </div>
           <!--
             aria-labelledby, because the label is a sibling rather than a
