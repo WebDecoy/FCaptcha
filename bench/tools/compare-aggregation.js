@@ -106,6 +106,117 @@ const SCHEMES = {
     const base = finalScore(cats);
     return dets.some(isSelfDeclared) ? Math.max(base, 0.9) : base;
   },
+
+  // --- candidates for the behaviour-only adversary -------------------------
+  //
+  // A source-patched browser scrubs every JS-observable automation flag, so it
+  // trips no headless, cdp, fingerprint, datacenter or bot category. Those
+  // weights sum to 0.59, and under the shipped scheme a clean environment
+  // silently keeps all of it. The three categories such a browser CAN trip
+  // total 0.41, so it cannot reach the 0.5 threshold even with every
+  // behavioural detector saturated.
+  //
+  // The flaw is treating absence of environmental evidence as evidence of
+  // absence. On this adversary a clean environment is not exculpatory — it is
+  // the attack succeeding.
+
+  /**
+   * Pool the behavioural categories before weighting them.
+   *
+   * They are not independent budgets; they are four views of one question — is
+   * a person moving this pointer. Combining them with noisy-OR and applying
+   * their pooled weight lets corroboration across them count, where summing
+   * their separate contributions caps each at its own slice.
+   */
+  behaviouralPooled: (dets) => {
+    const cats = {};
+    for (const [c, ds] of Object.entries(byCategory(dets))) cats[c] = categoryNoisyOr(ds);
+    const BEHAV = ['vision_ai', 'behavioral', 'automation', 'cdp'];
+    const pooledWeight = BEHAV.reduce((t, c) => t + WEIGHTS[c], 0);
+    let survive = 1;
+    for (const c of BEHAV) survive *= 1 - (cats[c] || 0);
+    const pooled = (1 - survive) * pooledWeight;
+    const rest = Object.entries(WEIGHTS)
+      .filter(([c]) => !BEHAV.includes(c))
+      .reduce((t, [c, w]) => t + (cats[c] || 0) * w, 0);
+    const base = Math.min(1, pooled + rest);
+    return dets.some(isSelfDeclared) ? Math.max(base, 0.9) : base;
+  },
+
+  /**
+   * Corroboration floor: several behavioural categories independently agreeing
+   * is itself evidence, distinct from any one of them being strong.
+   *
+   * Same shape as the dispositive floor, but earned by agreement rather than by
+   * a self-declaration. The floor is deliberately 0.6 — a block, not the 0.9
+   * reserved for a browser that admits what it is.
+   */
+  corroborationFloor: (dets) => {
+    const cats = {};
+    for (const [c, ds] of Object.entries(byCategory(dets))) cats[c] = categoryNoisyOr(ds);
+    const base = finalScore(cats);
+    if (dets.some(isSelfDeclared)) return Math.max(base, 0.9);
+    const BEHAV = ['vision_ai', 'behavioral', 'automation', 'cdp'];
+    const agreeing = BEHAV.filter((c) => (cats[c] || 0) >= 0.5).length;
+    return agreeing >= 3 ? Math.max(base, 0.6) : base;
+  },
+
+  /**
+   * Two agreeing, not three. The 3-of-4 rule above never fires: the
+   * source-patched sample reaches 0.5 in only two behavioural categories, so a
+   * threshold set by intuition missed the population it was aimed at.
+   */
+  corroborationFloor2: (dets) => {
+    const cats = {};
+    for (const [c, ds] of Object.entries(byCategory(dets))) cats[c] = categoryNoisyOr(ds);
+    const base = finalScore(cats);
+    if (dets.some(isSelfDeclared)) return Math.max(base, 0.9);
+    const BEHAV = ['vision_ai', 'behavioral', 'automation', 'cdp'];
+    const agreeing = BEHAV.filter((c) => (cats[c] || 0) >= 0.5).length;
+    return agreeing >= 2 ? Math.max(base, 0.6) : base;
+  },
+
+  /** Rebalanced weights plus the 2-of-4 corroboration floor. */
+  rebalancedPlusCorroboration2: (dets) => {
+    const W = { ...WEIGHTS,
+      vision_ai: 0.20, behavioral: 0.24, automation: 0.11, cdp: 0.12,
+      headless: 0.12, fingerprint: 0.05, datacenter: 0.05, bot: 0.09,
+      rate_limit: 0.01, tor_vpn: 0.01, declared_ai: 0.00 };
+    const cats = {};
+    for (const [c, ds] of Object.entries(byCategory(dets))) cats[c] = categoryNoisyOr(ds);
+    const base = Math.min(1, Object.entries(W).reduce((t, [c, w]) => t + (cats[c] || 0) * w, 0));
+    if (dets.some(isSelfDeclared)) return Math.max(base, 0.9);
+    const BEHAV = ['vision_ai', 'behavioral', 'automation', 'cdp'];
+    const agreeing = BEHAV.filter((c) => (cats[c] || 0) >= 0.5).length;
+    return agreeing >= 2 ? Math.max(base, 0.6) : base;
+  },
+
+  /** Same, but requiring all four to agree. Stricter, so lower FP risk. */
+  corroborationFloor4: (dets) => {
+    const cats = {};
+    for (const [c, ds] of Object.entries(byCategory(dets))) cats[c] = categoryNoisyOr(ds);
+    const base = finalScore(cats);
+    if (dets.some(isSelfDeclared)) return Math.max(base, 0.9);
+    const BEHAV = ['vision_ai', 'behavioral', 'automation', 'cdp'];
+    const agreeing = BEHAV.filter((c) => (cats[c] || 0) >= 0.5).length;
+    return agreeing >= 4 ? Math.max(base, 0.6) : base;
+  },
+
+  /**
+   * Rebalanced weights, shifting budget from the environmental categories a
+   * source-patched browser trivially defeats onto the behavioural ones it
+   * cannot. Still sums to 1.0.
+   */
+  rebalanced: (dets) => {
+    const W = { ...WEIGHTS,
+      vision_ai: 0.20, behavioral: 0.24, automation: 0.11, cdp: 0.12,
+      headless: 0.12, fingerprint: 0.05, datacenter: 0.05, bot: 0.09,
+      rate_limit: 0.01, tor_vpn: 0.01, declared_ai: 0.00 };
+    const cats = {};
+    for (const [c, ds] of Object.entries(byCategory(dets))) cats[c] = categoryNoisyOr(ds);
+    const base = Math.min(1, Object.entries(W).reduce((t, [c, w]) => t + (cats[c] || 0) * w, 0));
+    return dets.some(isSelfDeclared) ? Math.max(base, 0.9) : base;
+  },
 };
 
 // --- reporting -------------------------------------------------------------

@@ -1221,6 +1221,52 @@ function applyDispositiveFloor(score, detections) {
   return selfDeclared ? Math.max(score, DISPOSITIVE_FLOOR) : score;
 }
 
+/**
+ * Behavioural corroboration floor.
+ *
+ * A source-patched browser scrubs every JS-observable automation flag at the binary
+ * level, so it trips no headless, cdp, fingerprint, datacenter or bot category.
+ * Those weights total 0.59, and the weighted sum silently keeps all of it — leaving
+ * such a browser a ceiling of 0.41 against a 0.5 threshold. It cannot be blocked
+ * however obviously robotic its movement is.
+ *
+ * Measured, not argued: the corpus sample of that adversary trips seven correct
+ * behavioural detections and scores 0.234. Every one fires; the aggregation
+ * discards the verdict. Same structural flaw that let a bare curl through before
+ * v1.23.0, landing this time on the behavioural detection that is the point of the
+ * product. It treats absence of environmental evidence as evidence of absence — but
+ * on this adversary a clean environment is the attack working, not innocence.
+ *
+ * The rule: when two or more behavioural categories independently reach 0.5, floor
+ * the score at 0.6.
+ *
+ * Constants swept over a 40-point grid against the labelled corpus
+ * (bench/tools/sweep-corroboration.js), not reasoned about. No human in the
+ * 126-sample panel reaches two agreeing behavioural categories at any threshold
+ * tested, while 66 of 75 agents do at 0.5. Requiring three fails outright — all
+ * sixteen such combinations leave the adversary allowed. The floor value does not
+ * affect separation, so 0.6 is a policy choice: the block boundary, kept distinct
+ * from the 0.9 reserved for a browser that declares its own automation.
+ *
+ * Caveat: the adversary is one synthetic, hand-authored sample. This shows the
+ * arithmetic works on the shape the corpus describes, not that it works on a real
+ * source-patched browser.
+ */
+const CORROBORATION_AGREE_AT = 0.5;
+const CORROBORATION_MIN_AGREE = 2;
+const CORROBORATION_FLOOR = 0.6;
+
+// Categories a browser trips by how it moves rather than by what it is. A
+// patched binary can hide what it is; it cannot hide that nothing is moving the
+// pointer like a hand.
+const BEHAVIOURAL_CATEGORIES = ['vision_ai', 'behavioral', 'automation', 'cdp'];
+
+function applyCorroborationFloor(score, categoryScores) {
+  const agreeing = BEHAVIOURAL_CATEGORIES
+    .filter((c) => (categoryScores[c] || 0) >= CORROBORATION_AGREE_AT).length;
+  return agreeing >= CORROBORATION_MIN_AGREE ? Math.max(score, CORROBORATION_FLOOR) : score;
+}
+
 // Bind the token to the page that minted it and to the action it was minted
 // for. All three ride inside the signed payload, so a token issued for
 // `action=login` on example.com cannot be replayed against a password-reset
@@ -1508,7 +1554,10 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
   detections.push(...advancedDetections);
 
   const categoryScores = calculateCategoryScores(detections);
-  const finalScore = applyDispositiveFloor(calculateFinalScore(categoryScores), detections);
+  const finalScore = applyCorroborationFloor(
+    applyDispositiveFloor(calculateFinalScore(categoryScores), detections),
+    categoryScores
+  );
 
   let recommendation;
   if (finalScore < 0.3) recommendation = 'allow';

@@ -507,6 +507,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	// Calculate scores
 	categoryScores := e.calculateCategoryScores(detections)
 	finalScore := applyDispositiveFloor(e.calculateFinalScore(categoryScores), detections)
+	finalScore = applyCorroborationFloor(finalScore, categoryScores)
 
 	// Determine recommendation
 	var recommendation string
@@ -2055,6 +2056,99 @@ func applyDispositiveFloor(score float64, detections []DetectionResult) float64 
 		if d.Dispositive {
 			return math.Max(score, dispositiveFloor)
 		}
+	}
+	return score
+}
+
+// Behavioural corroboration floor.
+//
+// # The problem
+//
+// A source-patched browser scrubs every JS-observable automation flag at the
+// binary level, so it trips no headless, cdp, fingerprint, datacenter or bot
+// category. Those weights total 0.59, and the weighted sum silently keeps all of
+// it — leaving such a browser a ceiling of 0.41 against a 0.5 threshold. It
+// cannot be blocked however obviously robotic its movement is.
+//
+// Measured, not argued: the corpus sample of that adversary trips seven correct
+// behavioural detections and scores 0.234. Every one of them fires; the
+// aggregation discards the verdict. This is the same structural flaw that let a
+// bare curl through before v1.23.0, landing this time on the behavioural
+// detection that is the point of the product.
+//
+// The flaw is treating absence of environmental evidence as evidence of absence.
+// On this adversary a clean environment is not exculpatory — it is the attack
+// working.
+//
+// # The rule
+//
+// When two or more behavioural categories independently reach 0.5, floor the
+// score at 0.6. Corroboration across independent views is itself evidence,
+// distinct from any one of them being strong.
+//
+// # Why these numbers
+//
+// Swept over a 40-point grid against the labelled corpus
+// (bench/tools/sweep-corroboration.js), not chosen by reasoning. The measurement
+// that decides it:
+//
+//	threshold   humans reaching 2+     agents reaching 2+
+//	0.30         0 of 126               75 of 75
+//	0.40         0 of 126               66 of 75
+//	0.50         0 of 126               66 of 75
+//	0.60         0 of 126               62 of 75
+//	0.70         0 of 126               47 of 75
+//
+// No human in the panel reaches two agreeing behavioural categories at any
+// threshold tested. 0.5 sits mid-region — 0.3, 0.4 and 0.5 behave identically
+// and it falls off at 0.6 — so a real captured trace scoring somewhat lower than
+// the synthetic one still fires the rule.
+//
+// Requiring three categories fails outright: all sixteen such combinations leave
+// the adversary at 0.234 or 0.423, still allowed. An earlier 3-of-4 rule chosen
+// because it "felt conservative" produced results byte-identical to no rule at
+// all, because this adversary reaches 0.5 in exactly two categories.
+//
+// The floor value does not affect separation — every value from 0.5 to 0.8
+// separates identically, since it only sets where a caught agent lands. 0.6 is
+// therefore a policy choice: the block boundary, kept distinct from the 0.9
+// reserved for a browser that declares its own automation.
+//
+// # What this does not claim
+//
+// The adversary is one synthetic, hand-authored sample. This shows the
+// arithmetic works on the shape the corpus describes, not that it works on a
+// real source-patched browser. A captured trace is what would make it evidence.
+const (
+	// corroborationAgreeAt is the category score counting as one behavioural
+	// category agreeing.
+	corroborationAgreeAt = 0.5
+	// corroborationMinAgree is how many must agree. Two; three never fires.
+	corroborationMinAgree = 2
+	// corroborationFloor is where an agreeing verdict lands: a block, not the
+	// 0.9 reserved for self-declared automation.
+	corroborationFloor = 0.6
+)
+
+// behaviouralCategories are the categories a browser trips by how it moves
+// rather than by what it is. A patched binary can hide what it is; it cannot
+// hide that nothing is moving the pointer like a hand.
+var behaviouralCategories = []ThreatCategory{
+	CategoryVisionAI,
+	CategoryBehavioral,
+	CategoryAutomation,
+	CategoryCDP,
+}
+
+func applyCorroborationFloor(score float64, categoryScores map[string]float64) float64 {
+	agreeing := 0
+	for _, cat := range behaviouralCategories {
+		if categoryScores[string(cat)] >= corroborationAgreeAt {
+			agreeing++
+		}
+	}
+	if agreeing >= corroborationMinAgree {
+		return math.Max(score, corroborationFloor)
 	}
 	return score
 }

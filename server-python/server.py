@@ -1295,6 +1295,55 @@ def apply_dispositive_floor(score: float, detections: List[Detection]) -> float:
     return score
 
 
+# Behavioural corroboration floor.
+#
+# A source-patched browser scrubs every JS-observable automation flag at the binary
+# level, so it trips no headless, cdp, fingerprint, datacenter or bot category.
+# Those weights total 0.59, and the weighted sum silently keeps all of it — leaving
+# such a browser a ceiling of 0.41 against a 0.5 threshold. It cannot be blocked
+# however obviously robotic its movement is.
+#
+# Measured, not argued: the corpus sample of that adversary trips seven correct
+# behavioural detections and scores 0.234. Every one fires; the aggregation
+# discards the verdict. Same structural flaw that let a bare curl through before
+# v1.23.0, landing this time on the behavioural detection that is the point of the
+# product. It treats absence of environmental evidence as evidence of absence — but
+# on this adversary a clean environment is the attack working, not innocence.
+#
+# The rule: when two or more behavioural categories independently reach 0.5, floor
+# the score at 0.6.
+#
+# Constants swept over a 40-point grid against the labelled corpus
+# (bench/tools/sweep-corroboration.js), not reasoned about. No human in the
+# 126-sample panel reaches two agreeing behavioural categories at any threshold
+# tested, while 66 of 75 agents do at 0.5. Requiring three fails outright — all
+# sixteen such combinations leave the adversary allowed. The floor value does not
+# affect separation, so 0.6 is a policy choice: the block boundary, kept distinct
+# from the 0.9 reserved for a browser that declares its own automation.
+#
+# Caveat: the adversary is one synthetic, hand-authored sample. This shows the
+# arithmetic works on the shape the corpus describes, not that it works on a real
+# source-patched browser.
+CORROBORATION_AGREE_AT = 0.5
+CORROBORATION_MIN_AGREE = 2
+CORROBORATION_FLOOR = 0.6
+
+# Categories a browser trips by how it moves rather than by what it is. A patched
+# binary can hide what it is; it cannot hide that nothing is moving the pointer
+# like a hand.
+BEHAVIOURAL_CATEGORIES = ["vision_ai", "behavioral", "automation", "cdp"]
+
+
+def apply_corroboration_floor(score: float, category_scores: Dict[str, float]) -> float:
+    agreeing = sum(
+        1 for c in BEHAVIOURAL_CATEGORIES
+        if category_scores.get(c, 0) >= CORROBORATION_AGREE_AT
+    )
+    if agreeing >= CORROBORATION_MIN_AGREE:
+        return max(score, CORROBORATION_FLOOR)
+    return score
+
+
 def calculate_final_score(category_scores: Dict[str, float]) -> float:
     total = 0.0
     for cat, weight in WEIGHTS.items():
@@ -1620,7 +1669,10 @@ def run_verification(
             ))
 
     category_scores = calculate_category_scores(detections)
-    final_score = apply_dispositive_floor(calculate_final_score(category_scores), detections)
+    final_score = apply_corroboration_floor(
+        apply_dispositive_floor(calculate_final_score(category_scores), detections),
+        category_scores,
+    )
 
     if final_score < 0.3:
         recommendation = "allow"
