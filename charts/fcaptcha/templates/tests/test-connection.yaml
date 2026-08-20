@@ -14,12 +14,21 @@ metadata:
     {{- include "fcaptcha.labels" . | nindent 4 }}
   annotations:
     helm.sh/hook: test
-    # before-hook-creation matters as much as hook-succeeded: on its own,
-    # hook-succeeded leaves a *failed* pod behind, and the next `helm test` then
-    # collides with the existing name and re-reports the old failure. That is
-    # indistinguishable from the new run failing, which cost an hour of
-    # debugging a script that was already correct.
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    # before-hook-creation, and deliberately *not* hook-succeeded.
+    #
+    # hook-succeeded alone leaves a failed pod behind, so the next `helm test`
+    # collides with the existing name and re-reports the original failure —
+    # indistinguishable from the new run failing.
+    #
+    # But adding hook-succeeded on top races `helm test --logs`: the pod is
+    # deleted the moment it passes, and fetching its logs then fails with "pods
+    # not found" on an otherwise green run.
+    #
+    # before-hook-creation alone gives both properties. The pod persists after a
+    # run — succeeded or failed — so its logs are retrievable and an operator can
+    # inspect it, and it is cleared out before the next run rather than blocking
+    # it.
+    helm.sh/hook-delete-policy: before-hook-creation
 spec:
   restartPolicy: Never
   automountServiceAccountToken: false
