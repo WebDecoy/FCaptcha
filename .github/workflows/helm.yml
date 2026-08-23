@@ -48,6 +48,21 @@ jobs:
           fi
           echo "guard holds"
 
+      # Multiple replicas without shared state give each pod its own challenge
+      # and replay tables, so a challenge issued by one is unknown to the next.
+      # Same treatment as the signing-key guard: prove it actually fires.
+      - name: Refuses to render multiple replicas without shared state
+        run: |
+          if helm template t charts/fcaptcha --set secret=ci --set replicaCount=3 >/dev/null 2>&1; then
+            echo "chart rendered 3 replicas with no Redis — the guard is broken"
+            exit 1
+          fi
+          if helm template t charts/fcaptcha --set secret=ci --set autoscaling.enabled=true >/dev/null 2>&1; then
+            echo "chart rendered with autoscaling and no Redis — the guard is broken"
+            exit 1
+          fi
+          echo "guard holds"
+
       - name: Install kubeconform
         run: |
           curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
@@ -64,11 +79,13 @@ jobs:
           render minimal        --set secret=ci
           render existing       --set existingSecret=mine
           render ingress        --set secret=ci --set ingress.enabled=true
-          render scaling        --set secret=ci --set autoscaling.enabled=true --set podDisruptionBudget.enabled=true
+          render scaling        --set secret=ci --set autoscaling.enabled=true --set podDisruptionBudget.enabled=true \
+                                --set redis.url=redis://r:6379
           render redis          --set secret=ci --set redis.url=redis://r:6379
           render full           --set secret=ci --set ingress.enabled=true --set autoscaling.enabled=true \
                                 --set podDisruptionBudget.enabled=true --set config.logVerdicts=true \
-                                --set config.allowedHostnames=a.example --set verifySecret=v
+                                --set config.allowedHostnames=a.example --set verifySecret=v \
+                                --set redis.url=redis://r:6379
 
   install:
     name: Install into a cluster
