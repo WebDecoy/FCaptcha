@@ -13,6 +13,30 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.29.0] — 2026-08-22
+
+### Breaking
+- **A signing secret is now required to start.** Go, Node and Python fail closed
+  when `FCAPTCHA_SECRET` is absent or still set to the public development key
+  `dev-secret-change-in-production`. Zero-configuration startup previously
+  succeeded with that key, which means the tokens it signed could be forged by
+  anyone who had read the repository. The exported Node scoring library applies
+  the same requirement. Deployments that already set `FCAPTCHA_SECRET` are
+  unaffected. For local-only work, set any other value or opt in explicitly with
+  `FCAPTCHA_INSECURE_DEV_MODE=1`, which starts with the public key and warns on
+  every boot. Docker Compose now requires the secret to be interpolated rather
+  than falling back to a predictable default.
+
+### Security
+- **Public request bodies are bounded.** All three servers cap requests at
+  64 KiB and reject anything larger with HTTP 413 and
+  `{"error":"request_too_large"}`, before JSON or form parsing rather than
+  after. Both declared-length and chunked bodies are covered. Committed browser
+  traces run 10–15 KiB, so the ceiling leaves over four times the observed
+  maximum while bounding the memory and parsing work an unauthenticated caller
+  can cause. Enforcement is covered by an end-to-end invariant shared by all
+  three implementations.
+
 ## [1.28.2] — 2026-08-22
 
 ### Security

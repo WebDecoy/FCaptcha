@@ -41,7 +41,7 @@ from suspicion import (
 from config import signing_secret_from_env
 
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
-app = FastAPI(title="FCaptcha", version="1.28.2")
+app = FastAPI(title="FCaptcha", version="1.29.0")
 
 MAX_REQUEST_BODY_BYTES = 64 * 1024
 
