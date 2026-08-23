@@ -7,6 +7,7 @@ set -e
 cd "$(dirname "$0")"
 
 SERVER=${1:-node}  # Default to node, can pass 'go' or 'python'
+export FCAPTCHA_SECRET=${FCAPTCHA_SECRET:-fcaptcha-test-suite-secret}
 
 echo "Starting $SERVER server..."
 

@@ -34,6 +34,8 @@ jobs:
 
       - name: Start server
         working-directory: server-node
+        env:
+          FCAPTCHA_SECRET: benchmark-test-secret
         run: |
           node server.js &
           for _ in $(seq 1 40); do
@@ -43,6 +45,8 @@ jobs:
           echo "server did not come up"; exit 1
 
       - name: End-to-end detection suite
+        env:
+          FCAPTCHA_SECRET: benchmark-test-secret
         run: node test/test-detection.js
 
       # The widget in a real browser: the proof-of-work solver, and everything

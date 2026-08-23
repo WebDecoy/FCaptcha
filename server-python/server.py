@@ -38,6 +38,7 @@ from suspicion import (
     compute_challenge_cost,
     BASE_MIN_AGE_MS,
 )
+from config import signing_secret_from_env
 
 # Keep in sync with server-node/package.json and client/fcaptcha.js on release.
 app = FastAPI(title="FCaptcha", version="1.28.2")
@@ -126,7 +127,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SECRET_KEY = os.getenv("FCAPTCHA_SECRET", "dev-secret-change-in-production")
+SECRET_KEY = signing_secret_from_env()
 
 # The credential a backend presents to validate a token. Defaults to the signing
 # key, which is what the README has always documented, but can be separated: the

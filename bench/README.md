@@ -9,7 +9,7 @@ that makes those claims checkable, including when they turn out to be wrong.
 
 ```bash
 # 1. start any server
-cd ../server-node && npm start        # or server-go: go run .   /   server-python: python server.py
+cd ../server-node && FCAPTCHA_SECRET=benchmark-test-secret npm start
 
 # 2. record the corpus from a real browser (one-time; commit the result)
 cd ../bench && npm install && npm run install-browsers

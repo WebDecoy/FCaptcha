@@ -9,7 +9,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - FCAPTCHA_SECRET=${FCAPTCHA_SECRET:-change-me-in-production}
+      - FCAPTCHA_SECRET=${FCAPTCHA_SECRET:?Set FCAPTCHA_SECRET before starting FCaptcha}
       - PORT=3000
     restart: unless-stopped
     healthcheck:

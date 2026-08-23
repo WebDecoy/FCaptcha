@@ -12,6 +12,7 @@ const detection = require('./detection');
 const webbotauth = require('./webbotauth');
 const { ProxyTrust } = require('./clientip');
 const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
+const { signingSecretFromEnv } = require('./config');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 const { detectInputForensics } = require('./inputforensics');
 const {
@@ -36,7 +37,7 @@ app.use(express.json({ limit: MAX_REQUEST_BODY_BYTES }));
 // costs nothing on the JSON path.
 app.use(express.urlencoded({ extended: false, limit: MAX_REQUEST_BODY_BYTES }));
 
-const SECRET_KEY = process.env.FCAPTCHA_SECRET || 'dev-secret-change-in-production';
+const SECRET_KEY = signingSecretFromEnv();
 
 // The credential a backend presents to validate a token. Defaults to the signing
 // key, which is what the README has always documented, but can be separated:
