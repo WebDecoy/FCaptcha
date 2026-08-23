@@ -13,6 +13,33 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.28.2] — 2026-08-22
+
+### Security
+- **The Node library could issue a token without a valid proof of work.** The
+  HTTP servers treat the proof as a precondition, but the exported
+  `ScoringEngine` reached through `require('@webdecoy/fcaptcha')` only counted a
+  missing or invalid proof as weighted evidence. That evidence alone stays below
+  the allow threshold, so a request carrying no proof at all could still be
+  issued a token. The library now withholds the token and reports
+  `pow_not_satisfied`, matching the servers. **Every version through 1.28.1 is
+  affected for integrations that import the package as a library.** Deployments
+  running `server.js`, the Docker image or the Helm chart were never affected —
+  those paths always enforced the precondition. Upgrade if you call the
+  `ScoringEngine` API directly.
+- Node dependencies moved to patched versions, clearing the `path-to-regexp`,
+  `body-parser` and `qs` denial-of-service advisories. `npm audit --omit=dev`
+  reports zero vulnerabilities.
+
+### Fixed
+- Docker Compose no longer starts a Redis service that nothing used.
+
+### Changed
+- The deployment documentation now states that challenges, replay guards, rate
+  limits, suspicion history and idempotency are process-local, so a single
+  instance is the supported topology. `REDIS_URL` is marked reserved rather than
+  functional, and the documented Go requirement matches `go.mod`.
+
 ## [1.28.1] — 2026-08-20
 
 ### Fixed
