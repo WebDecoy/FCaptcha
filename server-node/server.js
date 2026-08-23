@@ -15,6 +15,7 @@ const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
 const { signingSecretFromEnv } = require('./config');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 const { detectInputForensics } = require('./inputforensics');
+const { RedisState } = require('./redis-state');
 const {
   HostnameAllowlist,
   IdempotencyStore,
@@ -37,6 +38,8 @@ app.use(express.json({ limit: MAX_REQUEST_BODY_BYTES }));
 app.use(express.urlencoded({ extended: false, limit: MAX_REQUEST_BODY_BYTES }));
 
 const SECRET_KEY = signingSecretFromEnv();
+const REDIS_URL = process.env.REDIS_URL || '';
+const SHARED_STATE = REDIS_URL ? new RedisState(REDIS_URL) : null;
 
 // The credential a backend presents to validate a token. Defaults to the signing
 // key, which is what the README has always documented, but can be separated:
@@ -142,7 +145,7 @@ const powChallengeStore = {
   usedSolutions: new BoundedSet(),
 
   // Generate a new challenge
-  generate(siteKey, ip, difficulty = 4, minAgeMs = BASE_MIN_AGE_MS) {
+  async generate(siteKey, ip, difficulty = 4, minAgeMs = BASE_MIN_AGE_MS) {
     const challengeId = crypto.randomBytes(16).toString('hex');
     const nonce = crypto.randomBytes(16).toString('hex');
     const timestamp = Date.now();
@@ -167,12 +170,16 @@ const powChallengeStore = {
       .update(JSON.stringify(challengeData))
       .digest('hex');
 
-    // Store challenge
-    this.challenges.set(challengeId, {
+    const storedChallenge = {
       ...challengeData,
       ip,
       createdAt: timestamp
-    });
+    };
+    if (SHARED_STATE) {
+      await SHARED_STATE.putChallenge(storedChallenge);
+    } else {
+      this.challenges.set(challengeId, storedChallenge);
+    }
 
     // Cleanup old challenges periodically
     if (Math.random() < 0.1) this._cleanup();
@@ -181,15 +188,22 @@ const powChallengeStore = {
   },
 
   // Verify a PoW solution (signalsHash is optional for backward compat)
-  verify(challengeId, nonce, hash, siteKey, ip, signalsHash = null) {
-    const challenge = this.challenges.get(challengeId);
+  async verify(challengeId, nonce, hash, siteKey, ip, signalsHash = null) {
+    let challenge;
+    try {
+      challenge = SHARED_STATE
+        ? await SHARED_STATE.getChallenge(challengeId)
+        : this.challenges.get(challengeId);
+    } catch (_) {
+      return { valid: false, reason: 'state_unavailable' };
+    }
 
     if (!challenge) {
       return { valid: false, reason: 'challenge_not_found' };
     }
 
     if (Date.now() > challenge.expiresAt) {
-      this.challenges.delete(challengeId);
+      if (!SHARED_STATE) this.challenges.delete(challengeId);
       return { valid: false, reason: 'challenge_expired' };
     }
 
@@ -223,11 +237,22 @@ const powChallengeStore = {
       return { valid: false, reason: 'insufficient_difficulty' };
     }
 
-    // Mark solution as used
-    this.usedSolutions.add(solutionKey);
-
-    // Delete challenge (one-time use)
-    this.challenges.delete(challengeId);
+    if (SHARED_STATE) {
+      try {
+        const claim = await SHARED_STATE.claimChallenge(challengeId, solutionKey);
+        if (!claim.claimed) return { valid: false, reason: claim.reason };
+      } catch (_) {
+        return { valid: false, reason: 'state_unavailable' };
+      }
+    } else {
+      // The local store is synchronous, so this test-and-set is atomic within
+      // one event-loop turn.
+      if (this.usedSolutions.has(solutionKey)) {
+        return { valid: false, reason: 'solution_already_used' };
+      }
+      this.usedSolutions.add(solutionKey);
+      this.challenges.delete(challengeId);
+    }
 
     // Calculate server-side elapsed time (un-spoofable)
     const serverElapsed = Date.now() - challenge.createdAt;
@@ -516,7 +541,7 @@ async function verifyWebBotAuth(req) {
 // require the raw request — currently Web Bot Auth signature verification, which
 // needs the accurately-reconstructed signed request. They are seeded into the
 // detection set so they participate in scoring like any other detection.
-function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash = null, powSolution = null, signalsJson = null, powTiming = null, preDetections = [], opts = {}) {
+async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash = null, powSolution = null, signalsJson = null, powTiming = null, preDetections = [], opts = {}) {
   const detections = Array.isArray(preDetections) ? [...preDetections] : [];
 
   // Verify signal commitment (signalsJson hash must match powSolution.signalsHash)
@@ -567,7 +592,7 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
   let powSatisfied = false;
   let powVerification = null;
   if (powSolution && powSolution.challengeId) {
-    powVerification = powChallengeStore.verify(
+    powVerification = await powChallengeStore.verify(
       powSolution.challengeId,
       powSolution.nonce,
       powSolution.hash,
@@ -818,7 +843,7 @@ app.post('/api/verify', async (req, res) => {
   // Web Bot Auth verification needs the raw request; its verdict is scored.
   const webBotAuth = await verifyWebBotAuth(req);
 
-  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted, action, cdata, widgetInteraction: true });
+  const result = await runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted, action, cdata, widgetInteraction: true });
   logVerdict('verify', siteKey, result);
   res.json(result);
 });
@@ -840,7 +865,7 @@ app.post('/api/score', async (req, res) => {
   const webBotAuth = await verifyWebBotAuth(req);
 
   // Invisible scoring: no widget, so no click analysis in the signals.
-  const result = runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted, action, cdata, widgetInteraction: false });
+  const result = await runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted, action, cdata, widgetInteraction: false });
   logVerdict('score', siteKey, result);
   res.json({
     success: result.success,
@@ -904,7 +929,7 @@ app.post('/recaptcha/api/siteverify', siteverifyHandler);
 app.post('/siteverify', siteverifyHandler);
 
 // PoW Challenge endpoint - client fetches this on page load
-app.get('/api/pow/challenge', (req, res) => {
+app.get('/api/pow/challenge', async (req, res) => {
   const ip = PROXY_TRUST.clientIP(req);
   const siteKey = SITE_KEYS.normalize(req.query.siteKey, ip);
 
@@ -919,7 +944,12 @@ app.get('/api/pow/challenge', (req, res) => {
     exceeded
   );
 
-  const challenge = powChallengeStore.generate(siteKey, ip, cost.difficulty, cost.minAgeMs);
+  let challenge;
+  try {
+    challenge = await powChallengeStore.generate(siteKey, ip, cost.difficulty, cost.minAgeMs);
+  } catch (_) {
+    return res.status(503).json({ error: 'state_unavailable' });
+  }
 
   res.json({
     challengeId: challenge.id,
@@ -959,8 +989,17 @@ app.use((err, req, res, next) => {
 // Start
 // =============================================================================
 
-app.listen(PORT, () => {
-  console.log(`FCaptcha server running on port ${PORT}`);
-  console.log(`Trusted proxies: ${PROXY_TRUST.describe()}`);
-  console.log(`Site keys: ${SITE_KEYS.describe()}`);
+async function start() {
+  if (SHARED_STATE) await SHARED_STATE.connect();
+  app.listen(PORT, () => {
+    console.log(`FCaptcha server running on port ${PORT}`);
+    console.log(`Trusted proxies: ${PROXY_TRUST.describe()}`);
+    console.log(`Site keys: ${SITE_KEYS.describe()}`);
+    console.log(`Shared state: ${SHARED_STATE ? 'Redis (PoW)' : 'in-memory'}`);
+  });
+}
+
+start().catch((err) => {
+  console.error(`FCaptcha failed to start: ${err.message}`);
+  process.exit(1);
 });
