@@ -23,7 +23,7 @@ const {
   sanitizeAction,
   sanitizeCdata,
   secretMatches,
-  siteverify
+  siteverifyAsync
 } = require('./siteverify');
 
 const app = express();
@@ -61,7 +61,12 @@ const LEGACY_UNAUTH_VERIFY = /^(1|true|yes|on)$/i.test(
 const ALLOWED_HOSTNAMES = HostnameAllowlist.fromEnv();
 
 // Lets a caller retry a validation that timed out without burning the token.
-const IDEMPOTENCY = new IdempotencyStore();
+const IDEMPOTENCY = SHARED_STATE
+  ? {
+      get: (key, token) => SHARED_STATE.getIdempotency(key, token),
+      set: (key, token, response) => SHARED_STATE.setIdempotency(key, token, response)
+    }
+  : new IdempotencyStore();
 
 const PORT = process.env.PORT || 3000;
 const TRUSTED_JA4_HEADERS = detection.getTrustedJA4HeaderNames();
@@ -471,7 +476,7 @@ function generateToken(ip, siteKey, score, binding = {}) {
   return Buffer.from(JSON.stringify(data)).toString('base64url');
 }
 
-function verifyToken(token, ip = null) {
+async function verifyToken(token, ip = null) {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64url').toString());
 
@@ -490,11 +495,6 @@ function verifyToken(token, ip = null) {
       return { valid: false, reason: 'invalid_signature' };
     }
 
-    // Check for token replay (single-use tokens)
-    if (tokenStore.isUsed(sig)) {
-      return { valid: false, reason: 'token_already_used' };
-    }
-
     // Verify IP matches (if provided)
     if (ip) {
       const expectedIpHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8);
@@ -503,8 +503,15 @@ function verifyToken(token, ip = null) {
       }
     }
 
-    // Mark token as used (prevents replay)
-    tokenStore.markUsed(sig);
+    let claimed;
+    try {
+      claimed = SHARED_STATE
+        ? await SHARED_STATE.claimToken(sig)
+        : tokenStore.markUsed(sig);
+    } catch (_) {
+      return { valid: false, reason: 'state_unavailable' };
+    }
+    if (!claimed) return { valid: false, reason: 'token_already_used' };
 
     // hostname/action/cdata default to '' so a token minted before they existed
     // still verifies and reports the same shape. The signature covers whatever
@@ -520,8 +527,8 @@ function verifyToken(token, ip = null) {
       action: decoded.action || '',
       cdata: decoded.cdata || ''
     };
-  } catch (e) {
-    return { valid: false, reason: e.message };
+  } catch (_) {
+    return { valid: false, reason: 'invalid_token' };
   }
 }
 
@@ -882,7 +889,7 @@ app.post('/api/score', async (req, res) => {
   });
 });
 
-app.post('/api/token/verify', (req, res) => {
+app.post('/api/token/verify', async (req, res) => {
   const { token, secret, remoteip } = req.body;
 
   // The secret gate. This endpoint is the boundary between "a browser finished a
@@ -901,7 +908,7 @@ app.post('/api/token/verify', (req, res) => {
   // This request comes from the integrating backend, not from the visitor who
   // received the token. Bind only when that trusted backend explicitly supplies
   // the visitor address; using the caller socket here compares unrelated hosts.
-  res.json(verifyToken(token, typeof remoteip === 'string' && remoteip ? remoteip : null));
+  res.json(await verifyToken(token, typeof remoteip === 'string' && remoteip ? remoteip : null));
 });
 
 // Turnstile / reCAPTCHA / hCaptcha drop-in compatibility.
@@ -910,9 +917,9 @@ app.post('/api/token/verify', (req, res) => {
 // plugins we want to be usable against FCaptcha: pointing an existing
 // integration at this server should be a base-URL change and nothing else.
 // See siteverify.js for the adapter itself.
-function siteverifyHandler(req, res) {
+async function siteverifyHandler(req, res) {
   res.json(
-    siteverify({
+    await siteverifyAsync({
       body: req.body,
       // Bind to this server's token store, so replay state is shared with the
       // native endpoint rather than kept in a parallel universe.

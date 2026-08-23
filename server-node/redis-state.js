@@ -1,10 +1,12 @@
 'use strict';
 
+const crypto = require('crypto');
 const { createClient } = require('redis');
 
 const PREFIX = 'fcaptcha:v1:';
 const POW_TTL_MS = 5 * 60 * 1000;
 const SPENT_TTL_MS = 10 * 60 * 1000;
+const IDEMPOTENCY_TTL_MS = 5 * 60 * 1000;
 
 const CLAIM_CHALLENGE = `
 if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
@@ -55,6 +57,36 @@ class RedisState {
       reason: result === -1 ? 'solution_already_used' : 'challenge_not_found'
     };
   }
+
+  async claimToken(signature) {
+    return Boolean(await this.client.set(
+      `${PREFIX}token:spent:${signature}`,
+      '1',
+      { NX: true, PX: SPENT_TTL_MS }
+    ));
+  }
+
+  idempotencyKey(idempotencyKey, token) {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex').slice(0, 32);
+    const composite = `${idempotencyKey}:${tokenHash}`;
+    const opaque = crypto.createHash('sha256').update(composite).digest('hex');
+    return `${PREFIX}siteverify:idempotency:${opaque}`;
+  }
+
+  async getIdempotency(idempotencyKey, token) {
+    if (!idempotencyKey) return null;
+    const payload = await this.client.get(this.idempotencyKey(idempotencyKey, token));
+    return payload ? JSON.parse(payload) : null;
+  }
+
+  async setIdempotency(idempotencyKey, token, response) {
+    if (!idempotencyKey) return;
+    await this.client.set(
+      this.idempotencyKey(idempotencyKey, token),
+      JSON.stringify(response),
+      { PX: IDEMPOTENCY_TTL_MS }
+    );
+  }
 }
 
-module.exports = { RedisState, PREFIX, POW_TTL_MS, SPENT_TTL_MS };
+module.exports = { RedisState, PREFIX, POW_TTL_MS, SPENT_TTL_MS, IDEMPOTENCY_TTL_MS };

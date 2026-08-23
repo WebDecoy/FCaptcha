@@ -314,6 +314,44 @@ function siteverify({
   return out;
 }
 
+// Async form used by Redis-backed servers. Kept separate so the public
+// synchronous adapter remains backward compatible for library callers.
+async function siteverifyAsync({
+  body,
+  verifyToken,
+  expectedSecret,
+  idempotencyStore,
+  requireSecret = true,
+}) {
+  const { secret, response, remoteip, idempotencyKey } = readParams(body);
+  if (requireSecret) {
+    if (!secret) return failure(ERROR_CODES.MISSING_SECRET);
+    if (!secretMatches(secret, expectedSecret)) return failure(ERROR_CODES.INVALID_SECRET);
+  }
+  if (!response) return failure(ERROR_CODES.MISSING_RESPONSE);
+
+  try {
+    const cached = idempotencyStore && await idempotencyStore.get(idempotencyKey, response);
+    if (cached) return cached;
+    const result = await verifyToken(response, remoteip || null);
+    const out = result && result.valid
+      ? {
+          success: true,
+          challenge_ts: new Date((result.timestamp || 0) * 1000).toISOString(),
+          hostname: result.hostname || '',
+          action: result.action || '',
+          cdata: result.cdata || '',
+          'error-codes': [],
+          score: typeof result.score === 'number' ? result.score : null,
+        }
+      : failure(reasonToErrorCode(result && result.reason));
+    if (idempotencyStore) await idempotencyStore.set(idempotencyKey, response, out);
+    return out;
+  } catch {
+    return failure(ERROR_CODES.INTERNAL_ERROR);
+  }
+}
+
 module.exports = {
   ERROR_CODES,
   HostnameAllowlist,
@@ -325,6 +363,7 @@ module.exports = {
   sanitizeCdata,
   secretMatches,
   siteverify,
+  siteverifyAsync,
   MAX_ACTION_LENGTH,
   MAX_CDATA_LENGTH,
   IDEMPOTENCY_TTL_SECONDS,
