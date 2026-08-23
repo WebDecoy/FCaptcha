@@ -63,8 +63,7 @@ rotation guards across replicas. Challenge and token consumption are atomic.
 It refuses to start if configured Redis is unavailable and fails closed if it
 becomes unavailable later.
 
-With `REDIS_URL`, the Go and Node servers can run multiple replicas. Python does
-not yet use Redis and must remain single-instance.
+With `REDIS_URL`, the Go, Node, and Python servers can run multiple replicas.
 
 Kubernetes:
 
@@ -781,7 +780,7 @@ Set `action` (and optionally `cdata`) when you request the token —
 | `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | Restore the pre-1.22.0 behaviour where token verification accepted any caller. One release of migration cover; **do not leave it on** | off |
 | `FCAPTCHA_ALLOWED_HOSTNAMES` | Comma-separated hostnames permitted to mint tokens, matched against the request's `Origin` (then `Referer`). Unset accepts any origin. A request with no derivable origin (native app, server-side call) is always allowed — an attacker who can forge an `Origin` would just forge a listed one | (any) |
 | `PORT` | Server port | 3000 |
-| `REDIS_URL` | Share security state across replicas. Go and Node share all security stores and support multiple replicas. Python does not yet use Redis. Configured Redis failures are fail-closed | (unset, process-local state) |
+| `REDIS_URL` | Share security state across replicas. Go, Node, and Python share all security stores and support multiple replicas. Configured Redis failures are fail-closed | (unset, process-local state) |
 | `TRUSTED_PROXIES` | Comma-separated CIDRs/IPs of peers allowed to set `X-Forwarded-For`, `X-Real-IP` and the TLS-fingerprint headers. `*` trusts every peer, `none` trusts none. See [Trusted proxies](#trusted-proxies) | loopback + private ranges |
 | `FCAPTCHA_SITE_KEYS` | Comma-separated allowlist of accepted site keys. Unset accepts any key (zero-config self-hosting); unlisted keys are folded into a shared overflow bucket rather than allocating their own rate-limit/fingerprint state | (any) |
 | `FCAPTCHA_MAX_SITE_KEYS_PER_IP` | Distinct site keys one IP may allocate state for before the excess is folded into the overflow bucket. The cap itself is unconditional | 8 |

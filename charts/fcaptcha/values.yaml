@@ -69,7 +69,7 @@ extraEnv: []
 ## managed instance or a purpose-built operator. Point this at one.
 ##
 ## The Go server uses this for shared security state and may run multiple
-## replicas when it is configured. Node/Python do not use it yet.
+## replicas when it is configured. Go, Node, and Python use the same contract.
 redis:
   url: ""
   existingSecret: ""
@@ -147,8 +147,7 @@ affinity: {}
 topologySpreadConstraints: []
 
 ## Off by default because Redis is optional. Safe for the default Go image when
-## redis.url or redis.existingSecret is configured; Node/Python remain
-## single-instance.
+## redis.url or redis.existingSecret is configured.
 autoscaling:
   enabled: false
   minReplicas: 2

@@ -41,8 +41,8 @@ range.
 The default Go image may run multiple replicas when `redis.url` is configured.
 PoW, token replay, Siteverify idempotency, rate limits, suspicion, fingerprint
 cardinality, and site-key rotation guards are shared; one-time claims are
-atomic. Without Redis, run one replica. Node and Python images do not yet use
-Redis and must remain single-instance.
+atomic. Without Redis, run one replica. Go, Node, and Python images support the
+same shared-state contract.
 
 The full list of deployment settings with security consequences is in
 [SECURITY.md](https://github.com/WebDecoy/FCaptcha/blob/main/SECURITY.md#deployment-notes-that-are-security-relevant).

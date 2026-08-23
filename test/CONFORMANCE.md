@@ -20,3 +20,9 @@ FCAPTCHA_SECRET=conformance-test-secret node test/conformance.js http://localhos
 ```
 
 CI builds each production container and runs this exact file against it.
+
+`redis-conformance.js` is the multi-replica companion. CI starts two production
+containers against one Redis service and proves that a challenge issued by one
+replica verifies on the other, token replay is rejected across replicas, and a
+Siteverify idempotency response created on one replica is returned by the other.
+The same test runs unchanged against Go, Node, and Python.
