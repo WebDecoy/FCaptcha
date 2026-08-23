@@ -38,12 +38,10 @@ to the controller and rate limiting collapses onto one address — silently. The
 default covers the usual in-cluster pod CIDRs; narrow it to your controller's
 range.
 
-**Run one replica for now.** Server state — issued tokens, PoW challenges, rate
-limits — is in-memory and not shared, so a token minted by one pod is unknown to
-another. Single-use enforcement and rate limiting are therefore per-pod.
-`autoscaling` is off by default for the same reason, and the chart warns if you
-raise `replicaCount`. Redis-backed state is on the roadmap; `redis.url` is
-plumbed through in anticipation but the servers do not use it yet.
+**Run one replica for now.** With the Go image, `redis.url` shares PoW challenges
+and their atomic one-time claim. Token replay protection, rate limits,
+suspicion, fingerprints, and idempotency are still per-pod; Node and Python do
+not yet use Redis. `autoscaling` remains off until those remaining stores land.
 
 The full list of deployment settings with security consequences is in
 [SECURITY.md](https://github.com/WebDecoy/FCaptcha/blob/main/SECURITY.md#deployment-notes-that-are-security-relevant).
@@ -63,7 +61,7 @@ The full list of deployment settings with security consequences is in
 | `config.logVerdictsIncludeRaw` | Also log free-text detection reasons. **Can contain visitor-derived data** | `false` |
 | `image.repository` / `image.tag` | Container image; tag defaults to the chart's `appVersion` | `ghcr.io/webdecoy/fcaptcha` |
 | `replicaCount` | See the note above before raising this | `1` |
-| `redis.url` / `redis.existingSecret` | Plumbed through; not yet used by the servers | `""` |
+| `redis.url` / `redis.existingSecret` | Go only: shared PoW challenge and atomic claim state; remaining stores are still local | `""` |
 | `service.type` / `service.port` | | `ClusterIP` / `80` |
 | `ingress.enabled` | | `false` |
 | `resources` | | 100m CPU / 128Mi requested |
