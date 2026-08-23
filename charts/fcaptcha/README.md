@@ -62,7 +62,7 @@ The full list of deployment settings with security consequences is in
 | `config.logVerdictsIncludeRaw` | Also log free-text detection reasons. **Can contain visitor-derived data** | `false` |
 | `image.repository` / `image.tag` | Container image; tag defaults to the chart's `appVersion` | `ghcr.io/webdecoy/fcaptcha` |
 | `replicaCount` | See the note above before raising this | `1` |
-| `redis.url` / `redis.existingSecret` | Go only: shared security state; required for multiple replicas | `""` |
+| `redis.url` / `redis.existingSecret` | Shared security state; required for multiple replicas | `""` |
 | `service.type` / `service.port` | | `ClusterIP` / `80` |
 | `ingress.enabled` | | `false` |
 | `resources` | | 100m CPU / 128Mi requested |

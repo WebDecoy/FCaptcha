@@ -56,14 +56,15 @@ Docker Compose (single instance):
 FCAPTCHA_SECRET=my-secret docker compose -f docker/docker-compose.yml up -d
 ```
 
-FCaptcha state is currently process-local by default. The Go server can use
-`REDIS_URL` to share PoW challenges, token replay protection, Siteverify
-idempotency, rate limits, suspicion, fingerprint cardinality, and site-key
-rotation guards across replicas. Challenge and token consumption are atomic.
-It refuses to start if configured Redis is unavailable and fails closed if it
-becomes unavailable later.
+FCaptcha state is process-local by default. Setting `REDIS_URL` shares PoW
+challenges, token replay protection, Siteverify idempotency, rate limits,
+suspicion, fingerprint cardinality, and site-key rotation guards across
+replicas, so the Go, Node and Python servers can each run more than one.
+Challenge and token consumption are atomic.
 
-With `REDIS_URL`, the Go, Node, and Python servers can run multiple replicas.
+Both failure modes are closed: a server refuses to start if configured Redis is
+unavailable, and fails closed rather than reverting to process-local state if it
+becomes unavailable later.
 
 Kubernetes:
 
@@ -131,7 +132,7 @@ Two options, and the tradeoff is real:
 
 <!-- CDN: no server needed to try it, pinned and integrity-checked. -->
 <script
-  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.32.0/dist/fcaptcha.min.js"
+  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.33.0/dist/fcaptcha.min.js"
   integrity="sha384-…"
   crossorigin="anonymous"></script>
 ```

@@ -13,6 +13,30 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.33.0] — 2026-08-22
+
+### Added
+- **Node and Python can run multiple replicas too.** 1.32.0 shipped
+  Redis-backed shared state for Go only; `REDIS_URL` now does the same for the
+  other two. All three share PoW challenges, token replay protection,
+  Siteverify idempotency, rate limits, suspicion history, fingerprint
+  cardinality and site-key rotation guards, with challenge and token
+  consumption atomic. Both failure modes stay closed in every implementation:
+  refuse to start if configured Redis is unreachable, fail closed rather than
+  revert to process-local state if it drops out later.
+- **A multi-replica conformance suite.** CI starts *two* containers of each
+  server against one Redis and proves a challenge issued by one replica
+  verifies on the other, that token replay is rejected across replicas, and
+  that a Siteverify idempotency response created on one is returned by the
+  other. The same test runs unchanged against Go, Node and Python — single
+  instance was never the hard case, and cross-replica behaviour is not
+  something a single-process test can observe.
+
+### Changed
+- The deployment documentation no longer says distributed state is Go-only, or
+  that Node and Python must stay single-instance. The README's Redis paragraph
+  had also contradicted its own environment table.
+
 ## [1.32.0] — 2026-08-22
 
 ### Added
