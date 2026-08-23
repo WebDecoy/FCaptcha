@@ -63,8 +63,10 @@ rotation guards across replicas. Challenge and token consumption are atomic.
 It refuses to start if configured Redis is unavailable and fails closed if it
 becomes unavailable later.
 
-With `REDIS_URL`, the Go server can run multiple replicas. Node and Python do
-not yet use Redis and must remain single-instance.
+With `REDIS_URL`, the Go server can run multiple replicas. Node currently shares
+PoW challenge/claim state only; its other stores remain local, so it must remain
+single-instance. Python does not yet use Redis and must also remain
+single-instance.
 
 Kubernetes:
 

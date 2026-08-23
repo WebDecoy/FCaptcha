@@ -274,7 +274,8 @@ FCaptcha state is process-local by default. In the Go server, `REDIS_URL` now
 shares PoW challenges, token replay protection, Siteverify idempotency, rate
 limits, suspicion, fingerprint cardinality, and site-key rotation guards.
 Challenge and token claims are atomic. Go may run multiple replicas when Redis
-is configured; Node and Python must remain single-instance.
+is configured. Node currently shares only PoW challenge/claim state, and Python
+does not yet use Redis; both must remain single-instance.
 
 Run:
 
@@ -424,8 +425,9 @@ server {
 ```
 
 **Important:** Multiple Go instances require `REDIS_URL`; without it, all state
-is process-local. Node and Python remain entirely process-local and must run as
-one instance.
+is process-local. Node shares only PoW state when Redis is configured; its other
+stores remain local. Python remains entirely process-local. Both must run as one
+instance.
 
 ---
 
