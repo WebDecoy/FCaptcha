@@ -437,12 +437,11 @@ one instance.
 |----------|----------|---------|-------------|
 | `FCAPTCHA_SECRET` | Yes | - | Secret key for signing tokens (min 16 chars) |
 | `FCAPTCHA_INSECURE_DEV_MODE` | No | off | Explicitly use the public development signing key for local-only development. Never expose a server with this enabled |
-| `REDIS_URL` | No | - | Go only: Redis URL for shared security state. Required for multiple replicas; configuration and runtime failures are fail-closed |
+| `REDIS_URL` | No | - | Go only: Redis URL for shared security state. Required for multiple replicas; Node and Python ignore it and must stay single-instance. Configuration and runtime failures are fail-closed |
 | `FCAPTCHA_VERIFY_SECRET` | No | `FCAPTCHA_SECRET` | Credential your backend sends as `secret` when verifying a token. Split it from the signing key so a leaked verify credential cannot also mint tokens |
 | `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | No | off | Restore the pre-1.22.0 behaviour where token verification accepted any caller. Migration cover for one release — see [Upgrading to 1.22.0](#upgrading-to-1220) |
 | `FCAPTCHA_ALLOWED_HOSTNAMES` | No | (any) | Comma-separated hostnames permitted to mint tokens, matched against the request `Origin` (then `Referer`) |
 | `PORT` | No | 3000 | Server port |
-| `REDIS_URL` | No | - | Reserved; distributed state is not implemented yet |
 | `NODE_ENV` | No | development | Set to `production` for Node.js |
 | `TRUSTED_PROXIES` | No | loopback + private ranges | Peers allowed to set `X-Forwarded-For` / `X-Real-IP` / TLS-fingerprint headers. See [Trusted proxies](#trusted-proxies) |
 

@@ -13,6 +13,31 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.32.0] — 2026-08-22
+
+### Added
+- **The Go server can run more than one replica.** `REDIS_URL` moves the state
+  that has to be shared for the security properties to hold out of process
+  memory and into Redis: proof-of-work challenges, token replay protection,
+  Siteverify idempotency, site-key state and suspicion history. Without it,
+  every replica keeps its own tables — a challenge issued by one pod is unknown
+  to the next, and single-use is only single-use per pod.
+  - Both failure modes are closed, not open: the server **refuses to start** if
+    a configured Redis is unreachable, and **fails closed** if it drops out
+    while running, rather than silently reverting to process-local state.
+  - **Go only.** Node and Python ignore `REDIS_URL` and must stay
+    single-instance. `REDIS_URL` was documented as reserved through 1.31.0;
+    that is now accurate only for those two.
+- The Helm chart refuses to render more than one replica, or autoscaling,
+  without Redis configured — the same treatment the signing-key guard gets, and
+  both guards are now exercised in CI.
+
+### Fixed
+- The chart's `_helpers.tpl` stopped parsing when the shared-state guard was
+  added inside the `validateSecret` define rather than after it, which took
+  every template with it. Caught before release; no published chart was
+  affected.
+
 ## [1.31.0] — 2026-08-22
 
 ### Security
