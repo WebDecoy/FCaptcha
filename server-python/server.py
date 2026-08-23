@@ -22,7 +22,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from clientip import ProxyTrust, network_identity
-from sitekeys import SiteKeyGuard
+from sitekeys import SiteKeyGuard, OVERFLOW_SITE_KEY
+from redis_state import RedisState
 from siteverify import (
     HostnameAllowlist,
     IdempotencyStore,
@@ -166,7 +167,31 @@ REQUIRE_VERIFY_SECRET = not _env_flag("FCAPTCHA_LEGACY_UNAUTH_VERIFY")
 ALLOWED_HOSTNAMES = HostnameAllowlist.from_env()
 
 # Lets a caller retry a validation that timed out without burning the token.
-IDEMPOTENCY = IdempotencyStore()
+REDIS_URL = os.getenv("REDIS_URL", "")
+SHARED_STATE = RedisState(REDIS_URL) if REDIS_URL else None
+
+
+class RedisIdempotencyStore:
+    def get(self, key, token):
+        return SHARED_STATE.get_idempotency(key, token)
+
+    def set(self, key, token, response):
+        SHARED_STATE.set_idempotency(key, token, response)
+
+
+IDEMPOTENCY = RedisIdempotencyStore() if SHARED_STATE else IdempotencyStore()
+
+
+def normalize_site_key(site_key, ip):
+    key = site_key if isinstance(site_key, str) and site_key else "default"
+    if SITE_KEYS.allowlist is not None and key not in SITE_KEYS.allowlist:
+        return OVERFLOW_SITE_KEY
+    if not SHARED_STATE or not ip:
+        return SITE_KEYS.normalize(key, ip)
+    try:
+        return key if SHARED_STATE.claim_site_key(key, ip, SITE_KEYS.max_per_ip) else OVERFLOW_SITE_KEY
+    except Exception:
+        return OVERFLOW_SITE_KEY
 if VERDICT_LOGGING_ENABLED and VERDICT_LOG_INCLUDE_RAW:
     print(
         "WARNING: FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW enabled — verdict logs include "
@@ -308,6 +333,11 @@ class RateLimiter:
         self.requests: Dict[str, List[float]] = defaultdict(list)
 
     def check(self, key: str, window: int = 60, max_requests: int = 10) -> tuple[bool, int]:
+        if SHARED_STATE:
+            try:
+                return SHARED_STATE.rate_check(key, window, max_requests)
+            except Exception:
+                return True, max_requests
         now = time.time()
         cutoff = now - window
 
@@ -327,6 +357,12 @@ class FingerprintStore:
         self.ip_fingerprints: Dict[str, set] = defaultdict(set)
 
     def record(self, fp: str, ip: str, site_key: str):
+        if SHARED_STATE:
+            try:
+                SHARED_STATE.record_fingerprint(fp, ip, site_key)
+            except Exception:
+                pass
+            return
         key = f"{site_key}:{fp}"
         if key not in self.fingerprints:
             self.fingerprints[key] = {"count": 0, "ips": set()}
@@ -335,9 +371,19 @@ class FingerprintStore:
         self.ip_fingerprints[ip].add(fp)
 
     def get_ip_fp_count(self, ip: str) -> int:
+        if SHARED_STATE:
+            try:
+                return SHARED_STATE.ip_fingerprint_count(ip)
+            except Exception:
+                return 100
         return len(self.ip_fingerprints.get(ip, set()))
 
     def get_fp_ip_count(self, fp: str, site_key: str) -> int:
+        if SHARED_STATE:
+            try:
+                return SHARED_STATE.fingerprint_ip_count(fp, site_key)
+            except Exception:
+                return 100
         key = f"{site_key}:{fp}"
         return len(self.fingerprints.get(key, {}).get("ips", set()))
 
@@ -392,8 +438,10 @@ class PoWChallengeStore:
         sig = hmac.new(SECRET_KEY.encode(), sig_data.encode(), hashlib.sha256).hexdigest()
         challenge["sig"] = sig
 
-        # Store challenge
-        self.challenges[challenge_id] = challenge
+        if SHARED_STATE:
+            SHARED_STATE.put_challenge(challenge)
+        else:
+            self.challenges[challenge_id] = challenge
 
         # Cleanup old challenges periodically
         if len(self.challenges) % 10 == 0:
@@ -416,13 +464,17 @@ class PoWChallengeStore:
         if not solution or not solution.challengeId:
             return {"valid": False, "reason": "no_solution"}
 
-        challenge = self.challenges.get(solution.challengeId)
+        try:
+            challenge = SHARED_STATE.get_challenge(solution.challengeId) if SHARED_STATE else self.challenges.get(solution.challengeId)
+        except Exception:
+            return {"valid": False, "reason": "state_unavailable"}
         if not challenge:
             return {"valid": False, "reason": "challenge_not_found"}
 
         now = int(time.time() * 1000)
         if now > challenge["expiresAt"]:
-            del self.challenges[solution.challengeId]
+            if not SHARED_STATE:
+                del self.challenges[solution.challengeId]
             return {"valid": False, "reason": "challenge_expired"}
 
         if challenge["siteKey"] != site_key:
@@ -451,14 +503,24 @@ class PoWChallengeStore:
         if not solution.hash.startswith(target):
             return {"valid": False, "reason": "insufficient_difficulty"}
 
-        # Mark solution as used
-        self.used_solutions.add(solution_key)
+        if SHARED_STATE:
+            try:
+                claimed, reason = SHARED_STATE.claim_challenge(solution.challengeId, solution_key)
+            except Exception:
+                return {"valid": False, "reason": "state_unavailable"}
+            if not claimed:
+                return {"valid": False, "reason": reason}
+        else:
+            if solution_key in self.used_solutions:
+                return {"valid": False, "reason": "solution_already_used"}
+            self.used_solutions.add(solution_key)
 
         # Calculate server-side elapsed time (un-spoofable)
         server_elapsed = now - challenge["timestamp"]
 
         # Delete challenge (one-time use)
-        del self.challenges[solution.challengeId]
+        if not SHARED_STATE:
+            del self.challenges[solution.challengeId]
 
         return {
             "valid": True,
@@ -489,6 +551,8 @@ class TokenStore:
         return sig in self.used_tokens
 
     def mark_used(self, sig: str) -> bool:
+        if SHARED_STATE:
+            return SHARED_STATE.claim_token(sig)
         if sig in self.used_tokens:
             return False  # Already used
         self.used_tokens[sig] = time.time()
@@ -503,9 +567,33 @@ class TokenStore:
 
 rate_limiter = RateLimiter()
 
-# Recent strong verdicts per source, used to price the next challenge that
-# source asks for. Bounded and short-lived; see suspicion.py.
-suspicion_ledger = SuspicionLedger()
+
+class SharedSuspicionLedger:
+    def __init__(self):
+        self.local = SuspicionLedger()
+
+    def record(self, site_key, ip, score):
+        if not SHARED_STATE:
+            return self.local.record(site_key, ip, score)
+        if score < 0.8 or not ip:
+            return
+        try:
+            SHARED_STATE.record_suspicion(site_key, ip)
+        except Exception:
+            pass
+
+    def count(self, site_key, ip):
+        if not SHARED_STATE:
+            return self.local.count(site_key, ip)
+        if not ip:
+            return 0
+        try:
+            return SHARED_STATE.suspicion_count(site_key, ip)
+        except Exception:
+            return 16
+
+
+suspicion_ledger = SharedSuspicionLedger()
 fingerprint_store = FingerprintStore()
 pow_store = PoWChallengeStore()
 token_store = TokenStore()
@@ -1563,18 +1651,17 @@ def verify_token(token: str, ip: str = None) -> Dict:
         ):
             return {"valid": False, "reason": "invalid_signature"}
 
-        # Check for token replay (single-use tokens)
-        if token_store.is_used(sig):
-            return {"valid": False, "reason": "token_already_used"}
-
         # Verify IP matches (if provided)
         if ip:
             expected_ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:8]
             if ip_hash != expected_ip_hash:
                 return {"valid": False, "reason": "ip_mismatch"}
 
-        # Mark token as used (prevents replay)
-        token_store.mark_used(sig)
+        try:
+            if not token_store.mark_used(sig):
+                return {"valid": False, "reason": "token_already_used"}
+        except Exception:
+            return {"valid": False, "reason": "state_unavailable"}
 
         # hostname/action/cdata default to "" so a token minted before they
         # existed still verifies and reports the same shape. The signature covers
@@ -1590,8 +1677,8 @@ def verify_token(token: str, ip: str = None) -> Dict:
             "action": decoded.get("action", ""),
             "cdata": decoded.get("cdata", "")
         }
-    except Exception as e:
-        return {"valid": False, "reason": str(e)}
+    except Exception:
+        return {"valid": False, "reason": "invalid_token"}
 
 
 def run_verification(
@@ -1905,7 +1992,7 @@ def collect_headers(request: Request) -> Dict[str, str]:
 async def verify(req: VerifyRequest, request: Request):
     ip = PROXY_TRUST.client_ip(request)
     # Bound the state an unvalidated site_key can allocate (sitekeys.py).
-    req.siteKey = SITE_KEYS.normalize(req.siteKey, ip)
+    req.siteKey = normalize_site_key(req.siteKey, ip)
     user_agent = request.headers.get("User-Agent", "")
     ja3_hash = PROXY_TRUST.trusted_header(request, "X-JA3-Hash")
 
@@ -1923,7 +2010,7 @@ async def verify(req: VerifyRequest, request: Request):
 async def score(req: ScoreRequest, request: Request):
     ip = PROXY_TRUST.client_ip(request)
     # Bound the state an unvalidated site_key can allocate (sitekeys.py).
-    req.siteKey = SITE_KEYS.normalize(req.siteKey, ip)
+    req.siteKey = normalize_site_key(req.siteKey, ip)
     user_agent = request.headers.get("User-Agent", "")
     ja3_hash = PROXY_TRUST.trusted_header(request, "X-JA3-Hash")
     headers = collect_headers(request)
@@ -2012,10 +2099,13 @@ async def pow_challenge(request: Request, siteKey: str = "default"):
     from detection import is_datacenter_ip
 
     ip = PROXY_TRUST.client_ip(request)
-    siteKey = SITE_KEYS.normalize(siteKey, ip)
+    siteKey = normalize_site_key(siteKey, ip)
     is_datacenter = is_datacenter_ip(ip)
 
-    challenge = pow_store.generate(siteKey, ip, is_datacenter)
+    try:
+        challenge = pow_store.generate(siteKey, ip, is_datacenter)
+    except Exception:
+        return JSONResponse(status_code=503, content={"error": "state_unavailable"})
     return challenge
 
 

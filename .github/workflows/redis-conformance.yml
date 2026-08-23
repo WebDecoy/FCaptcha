@@ -1,0 +1,54 @@
+name: Redis multi-replica conformance
+
+on:
+  pull_request:
+    paths: ['server-go/**', 'server-node/**', 'server-python/**', 'test/redis-conformance.js', 'bench/lib/pow.js', '.github/workflows/redis-conformance.yml']
+  push:
+    branches: [main]
+
+jobs:
+  replicas:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - implementation: go
+            dockerfile: docker/Dockerfile
+          - implementation: node
+            dockerfile: server-node/Dockerfile
+          - implementation: python
+            dockerfile: server-python/Dockerfile
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build production image
+        run: docker build -f ${{ matrix.dockerfile }} -t fcaptcha-redis-test .
+      - name: Start two replicas
+        env:
+          FCAPTCHA_SECRET: redis-conformance-secret
+        run: |
+          docker run -d --name fcaptcha-a --network host -e PORT=3101 -e REDIS_URL=redis://127.0.0.1:6379 -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" fcaptcha-redis-test
+          docker run -d --name fcaptcha-b --network host -e PORT=3102 -e REDIS_URL=redis://127.0.0.1:6379 -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" fcaptcha-redis-test
+          for port in 3101 3102; do
+            for attempt in $(seq 1 30); do
+              curl -fsS "http://127.0.0.1:$port/health" && break
+              if [ "$attempt" = 30 ]; then docker logs fcaptcha-a; docker logs fcaptcha-b; exit 1; fi
+              sleep 1
+            done
+          done
+      - name: Verify cross-instance security state
+        env:
+          FCAPTCHA_SECRET: redis-conformance-secret
+        run: node test/redis-conformance.js http://127.0.0.1:3101 http://127.0.0.1:3102

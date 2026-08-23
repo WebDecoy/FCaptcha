@@ -274,9 +274,8 @@ FCaptcha state is process-local by default. In the Go server, `REDIS_URL` now
 shares PoW challenges, token replay protection, Siteverify idempotency, rate
 limits, suspicion, fingerprint cardinality, and site-key rotation guards.
 Challenge and token claims are atomic. Go may run multiple replicas when Redis
-is configured. Node now shares the same security-state classes and may also run
-multiple replicas with Redis. Python does not yet use Redis and must remain
-single-instance.
+is configured. Node and Python share the same security-state classes and may
+also run multiple replicas with Redis.
 
 Run:
 
@@ -426,8 +425,7 @@ server {
 ```
 
 **Important:** Multiple Go instances require `REDIS_URL`; without it, all state
-is process-local. Node also supports multiple instances with Redis. Python
-remains entirely process-local and must run as one instance.
+is process-local. Node and Python also support multiple instances with Redis.
 
 ---
 
@@ -439,7 +437,7 @@ remains entirely process-local and must run as one instance.
 |----------|----------|---------|-------------|
 | `FCAPTCHA_SECRET` | Yes | - | Secret key for signing tokens (min 16 chars) |
 | `FCAPTCHA_INSECURE_DEV_MODE` | No | off | Explicitly use the public development signing key for local-only development. Never expose a server with this enabled |
-| `REDIS_URL` | No | - | Redis URL for shared security state. Go and Node support multiple replicas; Python does not yet use it. Configuration and runtime failures are fail-closed |
+| `REDIS_URL` | No | - | Redis URL for shared security state. Go, Node, and Python support multiple replicas. Configuration and runtime failures are fail-closed |
 | `FCAPTCHA_VERIFY_SECRET` | No | `FCAPTCHA_SECRET` | Credential your backend sends as `secret` when verifying a token. Split it from the signing key so a leaked verify credential cannot also mint tokens |
 | `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | No | off | Restore the pre-1.22.0 behaviour where token verification accepted any caller. Migration cover for one release — see [Upgrading to 1.22.0](#upgrading-to-1220) |
 | `FCAPTCHA_ALLOWED_HOSTNAMES` | No | (any) | Comma-separated hostnames permitted to mint tokens, matched against the request `Origin` (then `Referer`) |
