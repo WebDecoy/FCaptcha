@@ -246,6 +246,7 @@ class ScoringEngine {
   // Verify signals and return score
   verify(signals, ip, siteKey, userAgent, headers = {}, powSolution = null) {
     const detections = [];
+    let powSatisfied = false;
 
     // Run all detection modules
     detections.push(...this._detectVisionAI(signals));
@@ -272,6 +273,7 @@ class ScoringEngine {
           reason: `PoW verification failed: ${powResult.reason}`
         });
       } else if (powResult.serverElapsed < BASE_MIN_AGE_MS) {
+        powSatisfied = true;
         // Under the universal baseline nothing legitimate can have happened —
         // no human completes an interaction that fast.
         detections.push({
@@ -281,6 +283,7 @@ class ScoringEngine {
           reason: `Challenge solved too fast (${powResult.serverElapsed}ms server-side)`
         });
       } else if (powResult.serverElapsed < powResult.minAgeMs) {
+        powSatisfied = true;
         // Between the baseline and this source's own elevated floor is weaker
         // evidence: a client predating adaptive cost, or one served from a
         // stale cache, does not know to wait. It contributes rather than
@@ -291,6 +294,8 @@ class ScoringEngine {
           confidence: 0.5,
           reason: `Challenge submitted before the required delay for this source (${powResult.serverElapsed}ms of ${powResult.minAgeMs}ms)`
         });
+      } else {
+        powSatisfied = true;
       }
     } else {
       detections.push({
@@ -336,7 +341,12 @@ class ScoringEngine {
     else if (finalScore < 0.6) recommendation = 'challenge';
     else recommendation = 'block';
 
-    const success = finalScore < 0.5;
+    // PoW is a precondition, not weighted evidence. Expressing a missing or
+    // invalid solution only as a bot-category score lets the category weight
+    // dilute it below the allow threshold and used to mint a token for an empty
+    // request. Keep this gate independent of scoring so weight changes cannot
+    // reopen the bypass.
+    const success = finalScore < 0.5 && powSatisfied;
     const token = success ? this._generateToken(ip, siteKey, finalScore) : null;
 
     // Feed the ledger so the next challenge this source asks for is priced on
@@ -350,7 +360,8 @@ class ScoringEngine {
       timestamp: Math.floor(Date.now() / 1000),
       recommendation,
       categoryScores,
-      detections
+      detections,
+      ...(!powSatisfied ? { reason: 'pow_not_satisfied' } : {})
     };
   }
 
