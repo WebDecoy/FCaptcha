@@ -13,6 +13,30 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.30.0] — 2026-08-22
+
+### Fixed
+- **Token verification compared the wrong two addresses.** `POST
+  /api/token/verify` checked the token against the socket address of whoever
+  called it — but a token is minted for a *browser visitor*, while the
+  verification call comes from your *backend*. Whenever those were different
+  hosts, which is every ordinary production deployment, legitimate
+  verifications were rejected. The endpoint now follows Siteverify semantics:
+  `remoteip` is optional, supplying it checks the token against that visitor
+  address, and omitting it performs no IP check. The verification caller's own
+  socket address is never used for the comparison. Go, Node and Python.
+
+### Added
+- **A cross-server conformance suite.** `test/conformance.js` runs one shared
+  contract against each server's production container in CI. It deliberately
+  does not compare detector scores — those differences are documented and
+  expected — and instead pins the invariants where a divergence is a security
+  or integration defect: proof of work required; tokens and challenges
+  single-use; signal commitments unswappable; verification authentication and
+  optional visitor-IP binding; signed hostname, action and cdata claims;
+  Siteverify encoding, shape and idempotency; request-size and HEAD behaviour.
+  Documented in `test/CONFORMANCE.md`.
+
 ## [1.29.0] — 2026-08-22
 
 ### Breaking
