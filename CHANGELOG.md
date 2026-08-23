@@ -13,6 +13,45 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.31.0] — 2026-08-22
+
+### Security
+- **The npm entry point scored with an older engine than the bundled server.**
+  `require('@webdecoy/fcaptcha')` ran a reduced detector set and the
+  confidence-weighted-mean aggregation that 1.18.0 replaced, without the
+  dispositive floor added alongside it. An automated browser could therefore
+  receive a passing verdict from the library that `server.js` would have
+  refused. Integrations running `server.js`, the Docker image or the Helm chart
+  were never affected; only those importing the package as a library were.
+  Present since 1.18.0.
+- Both entry points now run one shared detection core. **If you integrate the
+  library directly, re-check your score thresholds before upgrading** — the same
+  traffic now scores higher, which is the point, but it will move where your
+  allow, challenge and block boundaries land.
+
+### Fixed
+- **Invisible scoring counted signals that only exist when there is a widget.**
+  Approach path, exploration ratio and overshoot corrections come from the
+  client's click analysis, which invisible mode never runs, so the servers read
+  the absent values as evidence against the visitor. Interaction duration means
+  time on page there rather than time spent solving, so ordinary reading tripped
+  a captcha-farm signal. All four are now gated on the interaction mode, which
+  the server establishes from the endpoint rather than from client-supplied
+  signals. Go, Node and Python.
+- **The library did not carry the accessibility exemptions the servers had.**
+  Touch, keyboard-only and screen-reader visitors were scored on
+  mouse-trajectory checks that cannot apply to them, and visitors with slow or
+  unsteady pointer movement were scored on the slow-pointer checks. The guards
+  the servers already used are now shared.
+
+### Changed
+- Node's detectors and scoring aggregation moved to `server-node/engine.js`,
+  imported by both `index.js` and `server.js`. `server.js` behaviour is
+  unchanged. No change to the HTTP API, the token format or the client.
+- `version.test.js` pins the release version across every file that carries it,
+  including the SECURITY.md supported-versions table and a matching CHANGELOG
+  entry.
+
 ## [1.30.0] — 2026-08-22
 
 ### Fixed

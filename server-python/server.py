@@ -40,8 +40,9 @@ from suspicion import (
 )
 from config import signing_secret_from_env
 
-# Keep in sync with server-node/package.json and client/fcaptcha.js on release.
-app = FastAPI(title="FCaptcha", version="1.30.0")
+# Keep in sync with server-node/package.json on release. Enforced by
+# server-node/version.test.js, which lists every file carrying the version.
+app = FastAPI(title="FCaptcha", version="1.31.0")
 
 MAX_REQUEST_BODY_BYTES = 64 * 1024
 
@@ -611,6 +612,49 @@ def _is_touch_modality(b: Dict[str, Any]) -> bool:
     return (touch_events >= 1 or touch_points >= 1) and b.get("pointerHasNonMouseType") is True
 
 
+# serverContext holds request facts the server establishes itself, kept apart
+# from the client-supplied signal tree it sits beside.
+SERVER_CONTEXT_KEY = "serverContext"
+
+
+def set_interaction_mode(signals: Dict, widget: bool) -> Dict:
+    """Record whether this request came from a rendered widget or invisible scoring.
+
+    approachPoints, approachDirectness, clickPrecision, explorationRatio and
+    overshootCorrections are all produced by the client's analyzeClick(), which
+    only runs when there is a widget to click. Invisible scoring never calls it,
+    so those fields are absent and read back as 0 - indistinguishable from "the
+    pointer teleported onto the target". Production logs showed the approach
+    check firing on 100% of invisible calls for exactly that reason.
+
+    Set this from the endpoint, never from the signals: a client that could
+    claim "invisible" could switch these checks off on the widget path.
+    """
+    if not isinstance(signals, dict):
+        return signals
+    ctx = signals.get(SERVER_CONTEXT_KEY)
+    if not isinstance(ctx, dict):
+        ctx = {}
+        signals[SERVER_CONTEXT_KEY] = ctx
+    ctx["widgetInteraction"] = bool(widget)
+    return signals
+
+
+def has_widget_interaction(signals: Dict) -> bool:
+    """Whether click-derived behavioural fields carry meaning for this request.
+
+    Absent context means widget mode: that is the long-standing behaviour, and
+    it keeps the checks on for callers that never set it.
+    """
+    ctx = signals.get(SERVER_CONTEXT_KEY) if isinstance(signals, dict) else None
+    if not isinstance(ctx, dict):
+        return True
+    value = ctx.get("widgetInteraction")
+    if isinstance(value, bool):
+        return value
+    return True
+
+
 def detect_vision_ai(signals: Dict) -> List[Detection]:
     detections = []
     b = signals.get("behavioral", {})
@@ -625,6 +669,8 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
     key_events = b.get("keyEvents", 0)
     is_touch_user = _is_touch_modality(b)
     is_keyboard_user = key_events >= 2 and total_points == 0
+    # Click-derived fields only exist when a widget was there to click.
+    is_widget = has_widget_interaction(signals)
 
     if total_points < 5 and trajectory < 10 and not is_touch_user and not is_keyboard_user:
         detections.append(Detection(
@@ -633,7 +679,9 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
             {"totalPoints": total_points, "trajectoryLength": trajectory}
         ))
 
-    if approach_pts == 0 and not is_touch_user and not is_keyboard_user:
+    # Invisible scoring has no target to approach, so a missing approach path
+    # says nothing there (see set_interaction_mode).
+    if is_widget and approach_pts == 0 and not is_touch_user and not is_keyboard_user:
         detections.append(Detection(
             ThreatCategory.VISION_AI, 0.7, 0.8,
             "No approach trajectory to target"
@@ -703,10 +751,10 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
             "Click precision is unnaturally accurate"
         ))
 
-    # Exploration
+    # Exploration. Click-derived, so widget-only.
     exploration = b.get("explorationRatio", 0.3)
     trajectory = b.get("trajectoryLength", 0)
-    if exploration < 0.05 and trajectory > 50:
+    if is_widget and exploration < 0.05 and trajectory > 50:
         detections.append(Detection(
             ThreatCategory.VISION_AI, 0.4, 0.4,
             "No exploratory mouse movement before click"
@@ -1013,22 +1061,25 @@ def detect_behavioral(signals: Dict) -> List[Detection]:
             "Mouse velocity too consistent"
         ))
 
-    # Overshoot
+    is_widget = has_widget_interaction(signals)
+
+    # Overshoot. Click-derived, so widget-only.
     overshoots = b.get("overshootCorrections", 0)
-    if overshoots == 0 and trajectory > 200:
+    if is_widget and overshoots == 0 and trajectory > 200:
         detections.append(Detection(
             ThreatCategory.BEHAVIORAL, 0.4, 0.4,
             "No overshoot corrections on long trajectory"
         ))
 
-    # Interaction speed
+    # Interaction speed. Widget mode measures time spent solving; invisible mode
+    # reuses the same field for time on page, where a minute is just a reader.
     interaction_time = b.get("interactionDuration", 1000)
     if 0 < interaction_time < 200:
         detections.append(Detection(
             ThreatCategory.BEHAVIORAL, 0.7, 0.7,
             "Interaction completed too quickly"
         ))
-    elif interaction_time > 60000:
+    elif is_widget and interaction_time > 60000:
         detections.append(Detection(
             ThreatCategory.CAPTCHA_FARM, 0.3, 0.3,
             "Unusually long interaction time"
@@ -1555,7 +1606,8 @@ def run_verification(
     pow_timing: PowTiming = None,
     peer_trusted: bool = False,
     action: str = "",
-    cdata: str = ""
+    cdata: str = "",
+    widget_interaction: bool = True
 ) -> Dict:
     from detection import (
         check_ip_reputation, analyze_headers,
@@ -1590,6 +1642,11 @@ def run_verification(
             "iterations": pow_timing.iterations,
             "difficulty": pow_timing.difficulty
         }
+
+    # Stamp the interaction mode after signals_json has been resolved above, so
+    # it lands on the dict the detectors actually read (see
+    # set_interaction_mode).
+    set_interaction_mode(signals, widget_interaction)
 
     # Verify PoW if provided.
     #
@@ -1855,7 +1912,9 @@ async def verify(req: VerifyRequest, request: Request):
     # Collect headers for analysis
     headers = collect_headers(request)
 
-    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata)
+    # Reached by clicking a rendered widget, so the client's click analysis is
+    # present and meaningful.
+    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata, widget_interaction=True)
     log_verdict("verify", req.siteKey, result)
     return result
 
@@ -1869,7 +1928,8 @@ async def score(req: ScoreRequest, request: Request):
     ja3_hash = PROXY_TRUST.trusted_header(request, "X-JA3-Hash")
     headers = collect_headers(request)
 
-    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata)
+    # Invisible scoring: no widget, so no click analysis in the signals.
+    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata, widget_interaction=False)
     log_verdict("score", req.siteKey, result)
     return {
         "success": result["success"],

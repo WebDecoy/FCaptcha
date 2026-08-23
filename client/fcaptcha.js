@@ -11,9 +11,10 @@
   'use strict';
 
   const FCaptcha = {
-    // Keep in sync with server-node/package.json and server-python/server.py
-    // when cutting a release; this string ships to integrators.
-    version: '1.30.0',
+    // Keep in sync with server-node/package.json when cutting a release; this
+    // string ships to integrators. server-node/version.test.js enforces it
+    // across every file that carries the version, and lists them.
+    version: '1.31.0',
     widgets: new Map(),
     serverUrl: null,
     // Site-wide language default. Per-widget `lang` still wins; leaving both

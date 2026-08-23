@@ -927,6 +927,8 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 	keyEventsAI := getFloat(behavioral, "keyEvents")
 	isTouchUser := isTouchModality(behavioral)
 	isKeyboardUser := keyEventsAI >= 2 && totalPoints == 0
+	// Click-derived fields only exist when a widget was there to click.
+	isWidget := hasWidgetInteraction(signals)
 
 	if totalPoints < 5 && trajectoryLen < 10 && !isTouchUser && !isKeyboardUser {
 		results = append(results, DetectionResult{
@@ -938,7 +940,9 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 		})
 	}
 
-	if approachPts == 0 && !isTouchUser && !isKeyboardUser {
+	// Invisible scoring has no target to approach, so a missing approach path
+	// says nothing there (see SetInteractionMode).
+	if isWidget && approachPts == 0 && !isTouchUser && !isKeyboardUser {
 		results = append(results, DetectionResult{
 			Category:   CategoryVisionAI,
 			Score:      0.7,
@@ -1035,10 +1039,14 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 		})
 	}
 
-	// No exploration before click
-	explorationRatio := getFloat(behavioral, "explorationRatio")
+	// No exploration before click.
+	//
+	// explorationRatio is click-derived too, and 0.3 is the "not measured"
+	// default the Node and Python engines already use — Go read the absent
+	// field as a hostile 0.
+	explorationRatio := getFloatDefault(behavioral, "explorationRatio", 0.3)
 	trajectoryLength := getFloat(behavioral, "trajectoryLength")
-	if explorationRatio < 0.05 && trajectoryLength > 50 {
+	if isWidget && explorationRatio < 0.05 && trajectoryLength > 50 {
 		results = append(results, DetectionResult{
 			Category:   CategoryVisionAI,
 			Score:      0.4,
@@ -1472,6 +1480,7 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 	keyEvents := getFloat(behavioral, "keyEvents")
 	isTouchUsr := isTouchModality(behavioral)
 	isKbdUsr := keyEvents >= 2 && totalPoints == 0
+	isWidget := hasWidgetInteraction(signals)
 
 	if totalPoints == 0 && !isTouchUsr && !isKbdUsr {
 		results = append(results, DetectionResult{
@@ -1502,9 +1511,9 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 		})
 	}
 
-	// Overshoot corrections
+	// Overshoot corrections. Click-derived, so widget-only.
 	overshoots := getFloat(behavioral, "overshootCorrections")
-	if overshoots == 0 && trajectoryLength > 200 {
+	if isWidget && overshoots == 0 && trajectoryLength > 200 {
 		results = append(results, DetectionResult{
 			Category:   CategoryBehavioral,
 			Score:      0.4,
@@ -1523,7 +1532,9 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 			Reason:     "Interaction completed too quickly",
 			Details:    map[string]interface{}{"interactionDuration": interactionTime},
 		})
-	} else if interactionTime > 60000 {
+	} else if isWidget && interactionTime > 60000 {
+		// Widget mode measures time spent solving. Invisible mode reuses the
+		// same field for time on page, where a minute is just a reader.
 		results = append(results, DetectionResult{
 			Category:   CategoryCaptchaFarm,
 			Score:      0.3,
@@ -2411,4 +2422,47 @@ func getBool(m map[string]interface{}, key string) bool {
 		return v
 	}
 	return false
+}
+
+// serverContextKey holds request facts the server establishes itself, kept
+// apart from the client-supplied signal tree it sits beside.
+const serverContextKey = "serverContext"
+
+// SetInteractionMode records whether this request came from a rendered widget
+// (a real click target) or from invisible scoring.
+//
+// approachPoints, approachDirectness, clickPrecision, explorationRatio and
+// overshootCorrections are all produced by the client's analyzeClick(), which
+// only runs when there is a widget to click. Invisible scoring never calls it,
+// so those fields are absent and read back as 0 — which is indistinguishable
+// from "the pointer teleported onto the target". Production logs showed the
+// approach check firing on 100% of invisible calls for exactly that reason.
+//
+// The mode comes from the endpoint, never from the signals: a client that
+// could claim "invisible" could switch these checks off on the widget path.
+func SetInteractionMode(signals map[string]interface{}, widget bool) {
+	if signals == nil {
+		return
+	}
+	ctx, ok := signals[serverContextKey].(map[string]interface{})
+	if !ok {
+		ctx = make(map[string]interface{})
+		signals[serverContextKey] = ctx
+	}
+	ctx["widgetInteraction"] = widget
+}
+
+// hasWidgetInteraction reports whether click-derived behavioural fields carry
+// meaning for this request. Absent context means widget mode: that is the
+// long-standing behaviour, and it keeps the checks on for any caller using the
+// plain Verify entry point.
+func hasWidgetInteraction(signals map[string]interface{}) bool {
+	ctx := getMap(signals, serverContextKey)
+	if ctx == nil {
+		return true
+	}
+	if v, ok := ctx["widgetInteraction"].(bool); ok {
+		return v
+	}
+	return true
 }

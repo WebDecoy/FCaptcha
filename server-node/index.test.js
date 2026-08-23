@@ -15,8 +15,25 @@ function solve(challenge) {
   }
 }
 
+// Human-shaped, because index.js now scores with the same engine as server.js
+// (see engine.js). The previous stub — two behavioural fields and nothing else
+// — reads as zero input events to the shared detectors and correctly scores
+// 0.6, which would make these assertions about the PoW gate fail for a reason
+// that has nothing to do with the PoW gate.
 const cleanSignals = {
-  behavioral: { microTremorScore: 0.5, approachDirectness: 0.4 },
+  behavioral: {
+    totalPoints: 60,
+    trajectoryLength: 400,
+    microTremorScore: 0.5,
+    velocityVariance: 0.5,
+    approachPoints: 12,
+    approachDirectness: 0.4,
+    explorationRatio: 0.35,
+    overshootCorrections: 2,
+    interactionDuration: 4200,
+    touchEvents: 0,
+    keyEvents: 0
+  },
   environmental: { automationFlags: {} }
 };
 const cleanHeaders = {

@@ -197,23 +197,31 @@ class FingerprintStore {
 // Scoring Engine
 // =============================================================================
 
-const WEIGHTS = {
-  vision_ai: 0.15,
-  headless: 0.15,
-  automation: 0.10,
-  behavioral: 0.20,
-  fingerprint: 0.10,
-  rate_limit: 0.05,
-  datacenter: 0.10,
-  tor_vpn: 0.05,
-  bot: 0.10
-};
-
-const AUTOMATION_UA_PATTERNS = [
-  /headless/i, /phantomjs/i, /selenium/i, /webdriver/i,
-  /puppeteer/i, /playwright/i, /cypress/i, /nightwatch/i,
-  /zombie/i, /electron/i, /chromium.*headless/i
-];
+// The detection and scoring core is shared with server.js. These used to be two
+// separate implementations, and the library was the one that fell behind: it
+// was missing seventeen detectors, had no `cdp` or `declared_ai` weight
+// category, and still aggregated with the pre-v1.18.0 confidence-weighted mean
+// (where corroborating evidence lowers the verdict) and no dispositive floor.
+// Both engines now run the same code. See engine.js.
+const {
+  AUTOMATION_UA_PATTERNS,
+  WEIGHTS,
+  setInteractionMode,
+  detectVisionAI,
+  detectHeadless,
+  detectStealthArtifacts,
+  detectAutomation,
+  detectCDP,
+  detectBehavioral,
+  detectTouchAuthenticity,
+  detectSensorEntropy,
+  detectTouchKinematics,
+  calculateCategoryScores,
+  calculateFinalScore,
+  applyDispositiveFloor,
+  applyCorroborationFloor,
+} = require('./engine');
+const { detectInputForensics } = require('./inputforensics');
 
 class ScoringEngine {
   constructor(options = {}) {
@@ -254,12 +262,24 @@ class ScoringEngine {
     let powSatisfied = false;
 
     // Run all detection modules
-    detections.push(...this._detectVisionAI(signals));
-    detections.push(...this._detectHeadless(signals, userAgent));
-    detections.push(...this._detectAutomation(signals));
-    detections.push(...this._detectBehavioral(signals));
-    detections.push(...this._detectFingerprint(signals, ip, siteKey));
-    detections.push(...this._detectRateAbuse(ip, siteKey));
+    // Run the shared detection core — the same detectors server.js runs.
+    detections.push(
+      ...detectVisionAI(signals),
+      ...detectHeadless(signals, userAgent),
+      ...detectStealthArtifacts(signals),
+      ...detectAutomation(signals),
+      ...detectCDP(signals),
+      ...detectBehavioral(signals),
+      // Input forensics v2: typing cadence and modality, the paste-shortcut /
+      // platform contradiction, scroll morphology, font coherence.
+      ...detectInputForensics(signals),
+      ...detectTouchAuthenticity(signals, userAgent),
+      ...detectSensorEntropy(signals, userAgent),
+      ...detectTouchKinematics(signals),
+      // Stateful detectors stay on the engine, which owns the stores.
+      ...this._detectFingerprint(signals, ip, siteKey),
+      ...this._detectRateAbuse(ip, siteKey)
+    );
 
     // Verify PoW
     if (powSolution && powSolution.challengeId) {
@@ -339,8 +359,13 @@ class ScoringEngine {
     }
 
     // Calculate scores
-    const categoryScores = this._calculateCategoryScores(detections);
-    const finalScore = this._calculateFinalScore(categoryScores);
+    // Same aggregation as server.js: noisy-OR within a category, weighted sum
+    // across them, then the dispositive and corroboration floors.
+    const categoryScores = calculateCategoryScores(detections, this.weights);
+    const finalScore = applyCorroborationFloor(
+      applyDispositiveFloor(calculateFinalScore(categoryScores, this.weights), detections),
+      categoryScores
+    );
 
     let recommendation;
     if (finalScore < 0.3) recommendation = 'allow';
@@ -406,249 +431,6 @@ class ScoringEngine {
     return keys.reduce((o, k) => (o && o[k] !== undefined) ? o[k] : null, obj);
   }
 
-  _detectVisionAI(signals) {
-    const detections = [];
-    const b = signals.behavioral || {};
-    const t = signals.temporal || {};
-
-    const pow = t.pow || {};
-    if (pow.duration && pow.iterations) {
-      const expectedMin = (pow.iterations / 500000) * 1000;
-      const expectedMax = (pow.iterations / 50000) * 1000;
-
-      if (pow.duration < expectedMin * 0.5) {
-        detections.push({
-          category: 'vision_ai', score: 0.8, confidence: 0.7,
-          reason: 'PoW completed impossibly fast'
-        });
-      } else if (pow.duration > expectedMax * 3) {
-        detections.push({
-          category: 'vision_ai', score: 0.6, confidence: 0.5,
-          reason: 'PoW timing suggests external processing'
-        });
-      }
-    }
-
-    const microTremor = b.microTremorScore ?? 0.5;
-    if (microTremor < 0.15) {
-      detections.push({
-        category: 'vision_ai', score: 0.7, confidence: 0.6,
-        reason: 'Mouse movement lacks natural micro-tremor'
-      });
-    }
-
-    if ((b.approachDirectness ?? 0) > 0.95) {
-      detections.push({
-        category: 'vision_ai', score: 0.5, confidence: 0.5,
-        reason: 'Mouse path to target is unnaturally direct'
-      });
-    }
-
-    const precision = b.clickPrecision ?? 10;
-    if (precision > 0 && precision < 2) {
-      detections.push({
-        category: 'vision_ai', score: 0.4, confidence: 0.5,
-        reason: 'Click precision is unnaturally accurate'
-      });
-    }
-
-    const exploration = b.explorationRatio ?? 0.3;
-    const trajectory = b.trajectoryLength ?? 0;
-    if (exploration < 0.05 && trajectory > 50) {
-      detections.push({
-        category: 'vision_ai', score: 0.4, confidence: 0.4,
-        reason: 'No exploratory mouse movement before click'
-      });
-    }
-
-    return detections;
-  }
-
-  _detectHeadless(signals, userAgent) {
-    const detections = [];
-    const env = signals.environmental || {};
-    const headless = env.headlessIndicators || {};
-    const automation = env.automationFlags || {};
-
-    if (env.webdriver) {
-      detections.push({
-        category: 'headless', score: 0.95, confidence: 0.95,
-        reason: 'WebDriver detected'
-      });
-    }
-
-    if (automation.plugins === 0) {
-      detections.push({
-        category: 'headless', score: 0.6, confidence: 0.6,
-        reason: 'No browser plugins detected'
-      });
-    }
-
-    if (automation.languages === false) {
-      detections.push({
-        category: 'headless', score: 0.5, confidence: 0.5,
-        reason: 'No navigator.languages'
-      });
-    }
-
-    if (headless.hasOuterDimensions === false) {
-      detections.push({
-        category: 'headless', score: 0.7, confidence: 0.7,
-        reason: 'Window lacks outer dimensions'
-      });
-    }
-
-    if (headless.innerEqualsOuter === true) {
-      detections.push({
-        category: 'headless', score: 0.4, confidence: 0.5,
-        reason: 'Viewport equals window size'
-      });
-    }
-
-    if (headless.notificationPermission === 'denied') {
-      detections.push({
-        category: 'headless', score: 0.3, confidence: 0.4,
-        reason: 'Notifications pre-denied'
-      });
-    }
-
-    for (const pattern of AUTOMATION_UA_PATTERNS) {
-      if (pattern.test(userAgent)) {
-        detections.push({
-          category: 'headless', score: 0.9, confidence: 0.9,
-          reason: 'Automation pattern in User-Agent'
-        });
-        break;
-      }
-    }
-
-    const renderer = (this._getNestedValue(env, 'webglInfo', 'renderer') || '').toLowerCase();
-    if (renderer.includes('swiftshader') || renderer.includes('llvmpipe')) {
-      detections.push({
-        category: 'headless', score: 0.8, confidence: 0.8,
-        reason: 'Software WebGL renderer detected'
-      });
-    }
-
-    return detections;
-  }
-
-  _detectAutomation(signals) {
-    const detections = [];
-    const env = signals.environmental || {};
-    const b = signals.behavioral || {};
-
-    const jsTime = this._getNestedValue(env, 'jsExecutionTime', 'mathOps') || 0;
-    if (jsTime > 0) {
-      if (jsTime < 0.1) {
-        detections.push({
-          category: 'automation', score: 0.4, confidence: 0.3,
-          reason: 'JS execution unusually fast'
-        });
-      } else if (jsTime > 50) {
-        detections.push({
-          category: 'automation', score: 0.3, confidence: 0.3,
-          reason: 'JS execution unusually slow'
-        });
-      }
-    }
-
-    const raf = env.rafConsistency || {};
-    if (raf.frameTimeVariance !== undefined && raf.frameTimeVariance < 0.1) {
-      detections.push({
-        category: 'automation', score: 0.5, confidence: 0.4,
-        reason: 'RequestAnimationFrame timing too consistent'
-      });
-    }
-
-    const eventVar = b.eventDeltaVariance ?? 10;
-    const totalPoints = b.totalPoints ?? 0;
-    if (eventVar < 2 && totalPoints > 10) {
-      detections.push({
-        category: 'automation', score: 0.6, confidence: 0.6,
-        reason: 'Mouse event timing unnaturally consistent'
-      });
-    }
-
-    return detections;
-  }
-
-  _detectBehavioral(signals) {
-    const detections = [];
-    const b = signals.behavioral || {};
-    const t = signals.temporal || {};
-
-    const velVar = b.velocityVariance ?? 1;
-    const trajectory = b.trajectoryLength ?? 0;
-    if (velVar < 0.02 && trajectory > 50) {
-      detections.push({
-        category: 'behavioral', score: 0.6, confidence: 0.6,
-        reason: 'Mouse velocity too consistent'
-      });
-    }
-
-    const overshoots = b.overshootCorrections ?? 0;
-    if (overshoots === 0 && trajectory > 200) {
-      detections.push({
-        category: 'behavioral', score: 0.4, confidence: 0.4,
-        reason: 'No overshoot corrections on long trajectory'
-      });
-    }
-
-    const interactionTime = b.interactionDuration ?? 1000;
-    if (interactionTime > 0 && interactionTime < 200) {
-      detections.push({
-        category: 'behavioral', score: 0.7, confidence: 0.7,
-        reason: 'Interaction completed too quickly'
-      });
-    } else if (interactionTime > 60000) {
-      detections.push({
-        category: 'captcha_farm', score: 0.3, confidence: 0.3,
-        reason: 'Unusually long interaction time'
-      });
-    }
-
-    const firstInt = t.pageLoadToFirstInteraction;
-    if (firstInt !== null && firstInt > 0 && firstInt < 100) {
-      detections.push({
-        category: 'behavioral', score: 0.5, confidence: 0.5,
-        reason: 'First interaction too soon after page load'
-      });
-    }
-
-    const eventRate = b.mouseEventRate ?? 60;
-    if (eventRate > 200) {
-      detections.push({
-        category: 'behavioral', score: 0.6, confidence: 0.5,
-        reason: 'Mouse event rate abnormally high'
-      });
-    } else if (eventRate > 0 && eventRate < 10) {
-      detections.push({
-        category: 'behavioral', score: 0.4, confidence: 0.4,
-        reason: 'Mouse event rate abnormally low'
-      });
-    }
-
-    const straight = b.straightLineRatio ?? 0;
-    if (straight > 0.8 && trajectory > 100) {
-      detections.push({
-        category: 'behavioral', score: 0.5, confidence: 0.5,
-        reason: 'Mouse movements too straight'
-      });
-    }
-
-    const dirChanges = b.directionChanges ?? 10;
-    const totalPoints = b.totalPoints ?? 0;
-    if (totalPoints > 50 && dirChanges < 3) {
-      detections.push({
-        category: 'behavioral', score: 0.4, confidence: 0.4,
-        reason: 'Too few direction changes'
-      });
-    }
-
-    return detections;
-  }
-
   _detectFingerprint(signals, ip, siteKey) {
     const detections = [];
     const env = signals.environmental || {};
@@ -709,44 +491,6 @@ class ScoringEngine {
     }
 
     return detections;
-  }
-
-  _calculateCategoryScores(detections) {
-    const categoryData = {};
-
-    for (const d of detections) {
-      if (!categoryData[d.category]) {
-        categoryData[d.category] = [];
-      }
-      categoryData[d.category].push([d.score, d.confidence]);
-    }
-
-    const result = {};
-    for (const [cat, scores] of Object.entries(categoryData)) {
-      if (scores.length > 0) {
-        const totalWeight = scores.reduce((sum, [, conf]) => sum + conf, 0);
-        if (totalWeight > 0) {
-          const weightedSum = scores.reduce((sum, [score, conf]) => sum + score * conf, 0);
-          result[cat] = Math.min(1.0, weightedSum / totalWeight);
-        }
-      }
-    }
-
-    for (const cat of Object.keys(this.weights)) {
-      if (!(cat in result)) {
-        result[cat] = 0.0;
-      }
-    }
-
-    return result;
-  }
-
-  _calculateFinalScore(categoryScores) {
-    let total = 0;
-    for (const [cat, weight] of Object.entries(this.weights)) {
-      total += (categoryScores[cat] || 0) * weight;
-    }
-    return Math.min(1.0, total);
   }
 
   _generateToken(ip, siteKey, score) {
@@ -842,6 +586,10 @@ module.exports = {
   // Factory functions
   createScoringEngine: (options) => new ScoringEngine(options),
   createMiddleware,
+
+  // Call before verify() when scoring a session that had no widget to click,
+  // so click-derived checks are not read off absent fields.
+  setInteractionMode,
 
   // Constants
   WEIGHTS,

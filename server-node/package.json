@@ -1,6 +1,6 @@
 {
   "name": "@webdecoy/fcaptcha",
-  "version": "1.30.0",
+  "version": "1.31.0",
   "description": "Open source CAPTCHA with PoW, bot detection, and Vision AI protection",
   "main": "index.js",
   "exports": {
@@ -15,7 +15,7 @@
     "test:clientip": "node clientip.test.js",
     "test:limits": "node limits.test.js",
     "test:detection": "node detection.test.js",
-    "test": "node config.test.js && node clientip.test.js && node limits.test.js && node detection.test.js && node inputforensics.test.js && node webbotauth.test.js && node siteverify.test.js && node index.test.js && node --test suspicion.test.js",
+    "test": "node version.test.js && node config.test.js && node clientip.test.js && node limits.test.js && node detection.test.js && node inputforensics.test.js && node interactionmode.test.js && node exemptions.test.js && node webbotauth.test.js && node siteverify.test.js && node index.test.js && node --test suspicion.test.js",
     "test:siteverify": "node siteverify.test.js",
     "test:forensics": "node inputforensics.test.js",
     "test:suspicion": "node --test suspicion.test.js"

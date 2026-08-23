@@ -581,6 +581,75 @@ func TestDetectVisionAI_InputForensics(t *testing.T) {
 	}
 }
 
+// TestInteractionMode_InvisibleSkipsClickDerivedChecks pins the fix for the
+// invisible-mode false positive: approachPoints, explorationRatio and
+// overshootCorrections come only from the client's analyzeClick(), which never
+// runs without a widget, and interactionDuration means time-on-page there
+// rather than time-to-solve. Production logs had the approach check firing on
+// 100% of /api/score calls before this.
+func TestInteractionMode_InvisibleSkipsClickDerivedChecks(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+
+	// One payload, so the interaction mode is the only variable. The
+	// click-derived fields carry exactly the values an absent analyzeClick()
+	// produces server-side, plus a couple of minutes on the page.
+	session := func() map[string]interface{} {
+		return map[string]interface{}{
+			"behavioral": map[string]interface{}{
+				"totalPoints": 60.0, "trajectoryLength": 400.0,
+				"microTremorScore": 0.4, "velocityVariance": 0.5,
+				"touchEvents": 0.0, "keyEvents": 0.0,
+				"approachPoints": 0.0, "explorationRatio": 0.0,
+				"overshootCorrections": 0.0,
+				"interactionDuration":  120000.0,
+			},
+		}
+	}
+
+	clickDerived := []string{
+		"No approach trajectory to target",
+		"No exploratory mouse movement before click",
+		"No overshoot corrections on long trajectory",
+		"Unusually long interaction time",
+	}
+
+	// Widget mode is the default, and must keep firing all four.
+	widget := session()
+	SetInteractionMode(widget, true)
+	widgetGot := append(e.detectVisionAI(widget), e.detectBehavioral(widget)...)
+	for _, reason := range clickDerived {
+		if !hasReasonContaining(widgetGot, reason) {
+			t.Errorf("widget mode should still fire %q, got %+v", reason, widgetGot)
+		}
+	}
+
+	// Invisible mode must fire none of them.
+	invisible := session()
+	SetInteractionMode(invisible, false)
+	invisibleGot := append(e.detectVisionAI(invisible), e.detectBehavioral(invisible)...)
+	for _, reason := range clickDerived {
+		if hasReasonContaining(invisibleGot, reason) {
+			t.Errorf("invisible mode should not fire %q, got %+v", reason, invisibleGot)
+		}
+	}
+
+	// Unset context keeps the pre-existing behaviour, so callers on the plain
+	// Verify entry point are unaffected.
+	bare := session()
+	if !hasWidgetInteraction(bare) {
+		t.Error("signals with no server context should default to widget mode")
+	}
+
+	// The mode comes from the server, so a client claiming it in its own
+	// signals must not switch the checks off.
+	spoofed := session()
+	spoofed["serverContext"] = map[string]interface{}{"widgetInteraction": false}
+	SetInteractionMode(spoofed, true)
+	if !hasWidgetInteraction(spoofed) {
+		t.Error("server-set mode must win over a client-supplied serverContext")
+	}
+}
+
 // TestAnalyzeFormInteraction_ProgrammaticFill covers the fill()-style insertion
 // signal: content with zero keystrokes and zero pastes.
 func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {

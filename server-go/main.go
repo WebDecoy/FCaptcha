@@ -549,6 +549,10 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 		// passed as preDetections so the verified/forged verdict is scored.
 		webBotAuth := webBotAuthDetections(engine, r)
 
+		// This endpoint is reached by clicking a rendered widget, so the
+		// client's click analysis is present and meaningful.
+		SetInteractionMode(signals, true)
+
 		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, req.PowSolution)
 
 		// Add signal commitment detections to results
@@ -660,6 +664,9 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 
 		// Web Bot Auth: verify signed-agent requests (see verifyHandler).
 		webBotAuth := webBotAuthDetections(engine, r)
+
+		// Invisible scoring: no widget, so no click analysis in the signals.
+		SetInteractionMode(signals, false)
 
 		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, req.PowSolution)
 		if len(scoreExtraDetections) > 0 {

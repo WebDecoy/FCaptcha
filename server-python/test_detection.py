@@ -17,7 +17,11 @@ from server import (
     apply_dispositive_floor,
     calculate_category_scores,
     calculate_final_score,
+    detect_behavioral,
+    detect_vision_ai,
+    has_widget_interaction,
     run_verification,
+    set_interaction_mode,
     DISPOSITIVE_FLOOR,
 )
 
@@ -176,6 +180,61 @@ def bot_category_alone_cannot_reach_the_threshold():
     reweighting alone."""
     saturated = {ThreatCategory.BOT.value: 1.0}
     assert calculate_final_score(saturated) < 0.5, calculate_final_score(saturated)
+
+
+def _click_derived_session():
+    """A session with click-derived fields at the values an absent
+    analyzeClick() produces server-side, plus a couple of minutes on the page."""
+    return {"behavioral": {
+        "totalPoints": 60, "trajectoryLength": 400,
+        "microTremorScore": 0.4, "velocityVariance": 0.5,
+        "touchEvents": 0, "keyEvents": 0,
+        "approachPoints": 0, "explorationRatio": 0.0,
+        "overshootCorrections": 0,
+        "interactionDuration": 120000,
+    }}
+
+
+CLICK_DERIVED_REASONS = (
+    "No approach trajectory to target",
+    "No exploratory mouse movement before click",
+    "No overshoot corrections on long trajectory",
+    "Unusually long interaction time",
+)
+
+
+@test
+def invisible_mode_skips_click_derived_checks():
+    """approachPoints, explorationRatio and overshootCorrections come only from
+    the client's analyzeClick(), which never runs without a widget, and
+    interactionDuration means time-on-page there rather than time-to-solve.
+    Production logs had the approach check firing on 100% of /api/score calls
+    before this. One payload, so the mode is the only variable."""
+    widget = set_interaction_mode(_click_derived_session(), True)
+    widget_reasons = [d.reason for d in detect_vision_ai(widget) + detect_behavioral(widget)]
+    for reason in CLICK_DERIVED_REASONS:
+        assert reason in widget_reasons, (reason, widget_reasons)
+
+    invisible = set_interaction_mode(_click_derived_session(), False)
+    invisible_reasons = [d.reason for d in detect_vision_ai(invisible) + detect_behavioral(invisible)]
+    for reason in CLICK_DERIVED_REASONS:
+        assert reason not in invisible_reasons, (reason, invisible_reasons)
+
+
+@test
+def interaction_mode_defaults_to_widget():
+    # Callers that never set it keep the pre-existing behaviour.
+    assert has_widget_interaction(_click_derived_session()) is True
+
+
+@test
+def client_cannot_claim_invisible_mode():
+    # The mode comes from the endpoint, so a client that puts serverContext in
+    # its own signals must not switch the checks off.
+    spoofed = _click_derived_session()
+    spoofed["serverContext"] = {"widgetInteraction": False}
+    set_interaction_mode(spoofed, True)
+    assert has_widget_interaction(spoofed) is True
 
 
 DetectionTests = test.testcase("DetectionTests")
