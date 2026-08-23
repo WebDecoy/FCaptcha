@@ -104,6 +104,30 @@ async function testRequestBodyLimit() {
   }
 }
 
+async function testChallengeNetworkBinding() {
+  log('Challenge network binding:', colors.cyan);
+  const { body } = await buildVerifyBody(
+    SERVER_URL,
+    'network-binding-test',
+    {},
+    { 'X-Real-IP': '203.0.113.10' }
+  );
+  const result = await makeRequest('/api/verify', {
+    headers: { 'X-Real-IP': '198.51.100.10' },
+    body,
+  });
+  const mismatch = (result.detections || []).some(
+    (d) => d.reason && d.reason.includes('challenge_network_mismatch')
+  );
+  if (!result.success && !result.token && mismatch) {
+    passed++;
+    log('  ✓ Challenge cannot be transferred to another network', colors.green);
+  } else {
+    failed++;
+    log('  ✗ Challenge transfer was not rejected', colors.red);
+  }
+}
+
 function assertDetection(result, category, shouldDetect, testName) {
   const detections = result.detections || [];
   const hasCategory = detections.some(d => d.category === category);
@@ -2688,6 +2712,7 @@ async function runTests() {
   await testTokenVerification();
   await testInvisibleMode();
   await testRequestBodyLimit();
+  await testChallengeNetworkBinding();
 
   // Summary
   log(`\n${colors.bold}═══════════════════════════════════════${colors.reset}`);

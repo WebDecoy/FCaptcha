@@ -439,6 +439,11 @@ If you want proof of work to genuinely raise an attacker's cost, the lever is th
 server-measured elapsed time, not the hash. That is what the adaptive cost keys
 on.
 
+The challenge is also bound to the source network that acquired that price
+(IPv4 `/24`, IPv6 `/56`). This prevents an attacker from obtaining baseline-cost
+challenges through an unrelated clean proxy and submitting them from an already
+suspicious source, while tolerating nearby address rotation on mobile networks.
+
 Each challenge carries a `minAgeMs`: how long it must be held before a solution
 is accepted without penalty. A visitor who has done nothing wrong gets the same
 1500ms floor the server has always applied. A source that has recently produced

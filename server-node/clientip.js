@@ -61,6 +61,18 @@ function normalizeIP(value) {
   }
 }
 
+// Bind challenges to a coarse source network: tolerant of nearby mobile address
+// rotation, but not transferable from an unrelated clean proxy.
+function networkIdentity(value) {
+  const normalized = normalizeIP(value);
+  if (!normalized) return '';
+  let addr = ipaddr.parse(normalized);
+  if (addr.kind() === 'ipv6' && addr.isIPv4MappedAddress()) addr = addr.toIPv4Address();
+  const bytes = addr.toByteArray();
+  if (addr.kind() === 'ipv4') return `4:${bytes.slice(0, 3).join('.')}`;
+  return `6:${bytes.slice(0, 7).map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+}
+
 // Node merges repeated headers into one comma-joined string for everything
 // except set-cookie, but accept an array defensively.
 function headerValue(req, name) {
@@ -225,5 +237,6 @@ class ProxyTrust {
 module.exports = {
   ProxyTrust,
   DEFAULT_TRUSTED_PROXY_CIDRS,
-  normalizeIP
+  normalizeIP,
+  networkIdentity
 };

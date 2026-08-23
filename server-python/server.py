@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from clientip import ProxyTrust
+from clientip import ProxyTrust, network_identity
 from sitekeys import SiteKeyGuard
 from siteverify import (
     HostnameAllowlist,
@@ -411,7 +411,7 @@ class PoWChallengeStore:
             "minAgeMs": min_age_ms
         }
 
-    def verify(self, solution: PoWSolution, site_key: str, signals_hash: str = None) -> Dict:
+    def verify(self, solution: PoWSolution, site_key: str, ip: str, signals_hash: str = None) -> Dict:
         if not solution or not solution.challengeId:
             return {"valid": False, "reason": "no_solution"}
 
@@ -426,6 +426,9 @@ class PoWChallengeStore:
 
         if challenge["siteKey"] != site_key:
             return {"valid": False, "reason": "site_key_mismatch"}
+
+        if network_identity(challenge["ip"]) != network_identity(ip):
+            return {"valid": False, "reason": "challenge_network_mismatch"}
 
         # Check if solution was already used
         solution_key = f"{solution.challengeId}:{solution.nonce}"
@@ -1604,7 +1607,7 @@ def run_verification(
     # correct; the aggregation discarded them.
     pow_satisfied = False
     if pow_solution:
-        pow_result = pow_store.verify(pow_solution, site_key, client_signals_hash)
+        pow_result = pow_store.verify(pow_solution, site_key, ip, client_signals_hash)
         if not pow_result["valid"]:
             detections.append(Detection(
                 ThreatCategory.BOT, 0.7, 0.8,

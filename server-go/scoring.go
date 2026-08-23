@@ -375,7 +375,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	}
 	powSatisfied := false
 	if pow != nil && pow.ChallengeID != "" {
-		powResult := e.VerifyPoWSolution(pow, siteKey, pow.SignalsHash)
+		powResult := e.VerifyPoWSolutionFromIP(pow, siteKey, ip, pow.SignalsHash)
 		if !powResult.Valid {
 			detections = append(detections, DetectionResult{
 				Category:   CategoryBot,
@@ -669,6 +669,13 @@ func (e *ScoringEngine) GeneratePoWChallenge(siteKey, ip string, isDatacenter bo
 // VerifyPoWSolution verifies a PoW solution from the client
 // signalsHash is optional; if provided, it's included in the PoW input for signal binding
 func (e *ScoringEngine) VerifyPoWSolution(solution *PoWSolution, siteKey string, signalsHash ...string) PoWVerifyResult {
+	return e.VerifyPoWSolutionFromIP(solution, siteKey, "", signalsHash...)
+}
+
+// VerifyPoWSolutionFromIP additionally binds the solution to the coarse source
+// network that acquired its adaptively priced challenge. An empty IP preserves
+// the older library method's behavior; HTTP verification always supplies one.
+func (e *ScoringEngine) VerifyPoWSolutionFromIP(solution *PoWSolution, siteKey, ip string, signalsHash ...string) PoWVerifyResult {
 	if solution == nil || solution.ChallengeID == "" {
 		return PoWVerifyResult{Valid: false, Reason: "no_solution"}
 	}
@@ -689,6 +696,10 @@ func (e *ScoringEngine) VerifyPoWSolution(solution *PoWSolution, siteKey string,
 
 	if challenge.SiteKey != siteKey {
 		return PoWVerifyResult{Valid: false, Reason: "site_key_mismatch"}
+	}
+
+	if ip != "" && NetworkIdentity(challenge.IP) != NetworkIdentity(ip) {
+		return PoWVerifyResult{Valid: false, Reason: "challenge_network_mismatch"}
 	}
 
 	// Cheap early-out for obvious replays before doing hash work.

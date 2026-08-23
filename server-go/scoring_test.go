@@ -220,6 +220,16 @@ func TestVerifyPoWSolution_ValidThenReplay(t *testing.T) {
 	}
 }
 
+func TestVerifyPoWSolutionRejectsDifferentNetwork(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	challenge := e.GeneratePoWChallenge("site-1", "203.0.113.5", false)
+	solution := solvePoW(t, challenge)
+	result := e.VerifyPoWSolutionFromIP(solution, "site-1", "198.51.100.5")
+	if result.Valid || result.Reason != "challenge_network_mismatch" {
+		t.Fatalf("got valid=%v reason=%q", result.Valid, result.Reason)
+	}
+}
+
 // TestCheckDeclaredAIAgent verifies self-identifying AI agents are flagged under
 // the declared_ai category and that ordinary browsers are not. Web Bot Auth
 // signature handling moved to CheckWebBotAuth; see TestWebBotAuth* below.
