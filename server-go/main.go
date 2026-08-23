@@ -253,6 +253,9 @@ func main() {
 	// the first component of every rate-limit, fingerprint and challenge
 	// partition key. See sitekeys.go.
 	siteKeys := SiteKeyGuardFromEnv()
+	if engine.redisClient != nil {
+		siteKeys = SiteKeyGuardFromEnvWithRedis(engine.redisClient)
+	}
 	log.Printf("site keys: %s", siteKeys.Describe())
 
 	// Holds a JA4 fingerprint per live connection, populated during the TLS

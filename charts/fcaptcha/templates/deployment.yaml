@@ -1,4 +1,5 @@
 {{- include "fcaptcha.validateSecret" . -}}
+{{- include "fcaptcha.validateSharedState" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

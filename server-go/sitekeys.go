@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/redis/go-redis/v9"
 )
 
 // Bounds on server-side state keyed by client-supplied values.
@@ -61,6 +63,7 @@ type SiteKeyGuard struct {
 	allowlist map[string]struct{} // nil = accept any key
 	maxPerIP  int
 	seen      *expirable.LRU[string, *siteKeySet]
+	redis     *redis.Client
 }
 
 // NewSiteKeyGuard builds a guard. An empty allowlist means no allowlist, which
@@ -85,6 +88,14 @@ func NewSiteKeyGuard(allowlist []string, maxPerIP int) *SiteKeyGuard {
 // SiteKeyGuardFromEnv reads FCAPTCHA_SITE_KEYS (comma-separated allowlist,
 // unset = any) and FCAPTCHA_MAX_SITE_KEYS_PER_IP.
 func SiteKeyGuardFromEnv() *SiteKeyGuard {
+	return siteKeyGuardFromEnv(nil)
+}
+
+func SiteKeyGuardFromEnvWithRedis(client *redis.Client) *SiteKeyGuard {
+	return siteKeyGuardFromEnv(client)
+}
+
+func siteKeyGuardFromEnv(client *redis.Client) *SiteKeyGuard {
 	var allowlist []string
 	if raw := os.Getenv("FCAPTCHA_SITE_KEYS"); raw != "" {
 		allowlist = strings.Split(raw, ",")
@@ -97,7 +108,9 @@ func SiteKeyGuardFromEnv() *SiteKeyGuard {
 			log.Printf("warning: ignoring invalid FCAPTCHA_MAX_SITE_KEYS_PER_IP %q", raw)
 		}
 	}
-	return NewSiteKeyGuard(allowlist, maxPerIP)
+	guard := NewSiteKeyGuard(allowlist, maxPerIP)
+	guard.redis = client
+	return guard
 }
 
 // Describe renders the configuration for the startup log.
@@ -125,6 +138,15 @@ func (g *SiteKeyGuard) Normalize(siteKey, ip string) string {
 	if ip == "" {
 		return key
 	}
+	if g.redis != nil {
+		redisKey := redisOpaqueKey("sitekeys", ip)
+		member := redisOpaqueKey("value:sitekey", key)
+		allowed, err := redisSiteKeyClaim.Run(context.Background(), g.redis, []string{redisKey}, member, g.maxPerIP, int64(siteKeyWindow.Seconds())).Int()
+		if err != nil || allowed != 1 {
+			return overflowSiteKey
+		}
+		return key
+	}
 
 	set, ok := g.seen.Get(ip)
 	if !ok {
@@ -143,3 +165,14 @@ func (g *SiteKeyGuard) Normalize(siteKey, ip string) string {
 	set.keys[key] = struct{}{}
 	return key
 }
+
+var redisSiteKeyClaim = redis.NewScript(`
+if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[3])
+  return 1
+end
+if redis.call('SCARD', KEYS[1]) >= tonumber(ARGV[2]) then return 0 end
+redis.call('SADD', KEYS[1], ARGV[1])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
+return 1
+`)

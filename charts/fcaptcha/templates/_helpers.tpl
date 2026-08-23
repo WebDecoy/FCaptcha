@@ -61,3 +61,12 @@ to do by accident, and it costs one line of setup to satisfy.
 {{- fail "\n\nfcaptcha: a token signing key is required.\n\n  --set secret=$(openssl rand -hex 32)\n\nor point at one you already manage:\n\n  --set existingSecret=my-fcaptcha-secret\n\nWithout it the server falls back to a key published in its own source, and\nanyone can mint tokens your backend will accept.\n" -}}
 {{- end -}}
 {{- end -}}
+
+{{/* Multiple Go pods require shared security state. */}}
+{{- define "fcaptcha.validateSharedState" -}}
+{{- $multiple := or (gt (int .Values.replicaCount) 1) .Values.autoscaling.enabled -}}
+{{- $redisConfigured := or .Values.redis.url .Values.redis.existingSecret -}}
+{{- if and $multiple (not $redisConfigured) -}}
+{{- fail "\n\nfcaptcha: multiple replicas require Redis-backed shared state.\n\nSet redis.url or redis.existingSecret, or keep replicaCount=1 and autoscaling.enabled=false.\n" -}}
+{{- end -}}
+{{- end -}}
