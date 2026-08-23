@@ -28,11 +28,10 @@ This guide covers installing and deploying FCaptcha for development and producti
 |----------|---------|-------|
 | Node.js | 18+ | Recommended: 20 LTS |
 | Python | 3.10+ | Recommended: 3.12 |
-| Go | 1.21+ | Recommended: 1.22 |
+| Go | 1.24+ | Required for native JA4 support |
 
 ### Optional
 
-- **Redis** - For distributed state in multi-instance deployments
 - **Docker** - For containerized deployment
 - **Nginx/Caddy** - For reverse proxy and TLS termination
 
@@ -254,7 +253,7 @@ docker run -d \
   fcaptcha-go
 ```
 
-### Docker Compose (with Redis)
+### Docker Compose (single instance)
 
 Create `docker-compose.yml`:
 
@@ -268,20 +267,11 @@ services:
       - "3000:3000"
     environment:
       - FCAPTCHA_SECRET=your-secret-key-here
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      - redis
     restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-
-volumes:
-  redis_data:
 ```
+
+FCaptcha state is process-local. `REDIS_URL` is reserved but currently unused,
+so run a single instance until the distributed-state backend is implemented.
 
 Run:
 
@@ -430,11 +420,8 @@ server {
 }
 ```
 
-**Important:** When running multiple instances, use Redis for shared state:
-
-```bash
-export REDIS_URL=redis://localhost:6379
-```
+**Important:** Do not run multiple instances yet. Server state is process-local;
+Redis-backed shared state is planned but not implemented.
 
 ---
 
@@ -449,7 +436,7 @@ export REDIS_URL=redis://localhost:6379
 | `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | No | off | Restore the pre-1.22.0 behaviour where token verification accepted any caller. Migration cover for one release — see [Upgrading to 1.22.0](#upgrading-to-1220) |
 | `FCAPTCHA_ALLOWED_HOSTNAMES` | No | (any) | Comma-separated hostnames permitted to mint tokens, matched against the request `Origin` (then `Referer`) |
 | `PORT` | No | 3000 | Server port |
-| `REDIS_URL` | No | - | Redis URL for distributed state |
+| `REDIS_URL` | No | - | Reserved; distributed state is not implemented yet |
 | `NODE_ENV` | No | development | Set to `production` for Node.js |
 | `TRUSTED_PROXIES` | No | loopback + private ranges | Peers allowed to set `X-Forwarded-For` / `X-Real-IP` / TLS-fingerprint headers. See [Trusted proxies](#trusted-proxies) |
 
