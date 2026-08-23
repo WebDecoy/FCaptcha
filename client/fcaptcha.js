@@ -532,7 +532,7 @@
       const accelerations = this.mouseAccelerations;
 
       if (positions.length < 10) {
-        return this._getEmptyAnalysis();
+        return this._getEmptyAnalysis(positions.length);
       }
 
       // Velocity statistics
@@ -717,7 +717,7 @@
     analyzeClick(clickX, clickY, targetRect) {
       const positions = this.mousePositions;
       if (positions.length < 5) {
-        return this._getEmptyClickAnalysis();
+        return this._getEmptyClickAnalysis(positions.length);
       }
 
       // Approach trajectory (last 20 points)
@@ -885,9 +885,12 @@
       return arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length;
     }
 
-    _getEmptyAnalysis() {
+    _getEmptyAnalysis(totalPoints = 0) {
       return {
-        totalPoints: 0, trajectoryLength: 0, avgVelocity: 0, velocityVariance: 0,
+        // A short trace is insufficient for stable trajectory statistics, but
+        // its sample count is still an observed fact. Reporting zero here made
+        // 1-9 genuine mouse moves indistinguishable from no mouse use at all.
+        totalPoints, trajectoryLength: 0, avgVelocity: 0, velocityVariance: 0,
         avgAcceleration: 0, accelerationChanges: 0, microTremorScore: 0.5,
         straightLineRatio: 0, microMovements: 0, directionChanges: 0,
         eventDeltas: [], eventDeltaVariance: 0, mouseEventRate: 0,
@@ -902,10 +905,10 @@
       };
     }
 
-    _getEmptyClickAnalysis() {
+    _getEmptyClickAnalysis(approachPoints = 0) {
       return {
         clickPrecision: 0, explorationRatio: 0, overshootCorrections: 0,
-        hoverTime: 0, approachDirectness: 1, approachPoints: 0
+        hoverTime: 0, approachDirectness: 1, approachPoints
       };
     }
   }
