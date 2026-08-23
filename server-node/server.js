@@ -1704,7 +1704,7 @@ app.post('/api/score', async (req, res) => {
 });
 
 app.post('/api/token/verify', (req, res) => {
-  const { token, secret } = req.body;
+  const { token, secret, remoteip } = req.body;
 
   // The secret gate. This endpoint is the boundary between "a browser finished a
   // challenge" and "my backend believes it", so it is server-to-server and needs
@@ -1719,10 +1719,10 @@ app.post('/api/token/verify', (req, res) => {
     }
   }
 
-  // Extract client IP for verification
-  const ip = PROXY_TRUST.clientIP(req);
-
-  res.json(verifyToken(token, ip));
+  // This request comes from the integrating backend, not from the visitor who
+  // received the token. Bind only when that trusted backend explicitly supplies
+  // the visitor address; using the caller socket here compares unrelated hosts.
+  res.json(verifyToken(token, typeof remoteip === 'string' && remoteip ? remoteip : null));
 });
 
 // Turnstile / reCAPTCHA / hCaptcha drop-in compatibility.

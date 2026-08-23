@@ -504,6 +504,7 @@ async function testBehavioralSignals() {
       'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
       'Accept-Language': 'en-US,en;q=0.9',
       'Accept-Encoding': 'gzip, deflate, br',
+      'X-Real-IP': '203.0.113.10',
     },
     body: {
       siteKey: 'test',
@@ -1088,13 +1089,36 @@ async function testTokenVerification() {
 
     if (tokenResult.valid) {
       passed++;
-      log(`  ✓ Token verification works (score: ${tokenResult.score})`, colors.green);
+      log(`  ✓ Backend can verify without binding to its own socket IP (score: ${tokenResult.score})`, colors.green);
     } else {
       failed++;
       log(`  ✗ Token verification failed: ${tokenResult.reason}`, colors.red);
     }
   } else {
     log(`  - Skipped: No token generated (score too high: ${verifyResult.score})`, colors.yellow);
+  }
+
+  // Explicit remoteip remains available when an integration wants binding.
+  const boundResult = await makeVerifiedRequest({
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/120.0.0.0',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'X-Real-IP': '203.0.113.20',
+    },
+    body: { siteKey: 'token-ip-binding', signals: { behavioral: { totalPoints: 80 } } }
+  });
+  if (boundResult.token) {
+    const mismatch = await makeRequest('/api/token/verify', {
+      body: { token: boundResult.token, secret: VERIFY_SECRET, remoteip: '198.51.100.20' }
+    });
+    if (!mismatch.valid && mismatch.reason === 'ip_mismatch') {
+      passed++;
+      log('  ✓ Explicit visitor remoteip mismatch is rejected', colors.green);
+    } else {
+      failed++;
+      log(`  ✗ Explicit remoteip mismatch was accepted: ${JSON.stringify(mismatch)}`, colors.red);
+    }
   }
 
   // Test invalid token

@@ -600,6 +600,10 @@ changes. If it does not, either add it:
 or set `FCAPTCHA_LEGACY_UNAUTH_VERIFY=true` to keep the old behaviour for one
 release while you update. A wrong or missing secret answers `401`.
 
+The native endpoint also accepts an optional `remoteip` containing the original
+visitor address. Omit it to skip IP binding. FCaptcha does not use the backend
+caller's socket address because that is not the visitor who received the token.
+
 **2. The token format is now identical across the three servers.**
 
 Go emitted padded base64url, Node unpadded, and Python signed a payload with

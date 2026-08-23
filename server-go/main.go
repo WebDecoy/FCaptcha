@@ -690,8 +690,9 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 
 // TokenVerifyRequest for server-side token verification
 type TokenVerifyRequest struct {
-	Token  string `json:"token"`
-	Secret string `json:"secret"`
+	Token    string `json:"token"`
+	Secret   string `json:"secret"`
+	RemoteIP string `json:"remoteip,omitempty"`
 }
 
 func tokenVerifyHandler(engine *ScoringEngine, trust *ProxyTrust, verifySecret string, requireSecret bool) http.HandlerFunc {
@@ -721,10 +722,9 @@ func tokenVerifyHandler(engine *ScoringEngine, trust *ProxyTrust, verifySecret s
 			}
 		}
 
-		// Extract client IP for verification
-		ip := trust.ClientIP(r)
-
-		result := engine.VerifyTokenWithIP(req.Token, ip)
+		// The caller is the integrating backend, not the visitor who received
+		// the token. Bind only to an explicitly supplied visitor address.
+		result := engine.VerifyTokenWithIP(req.Token, req.RemoteIP)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)

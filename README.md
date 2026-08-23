@@ -664,11 +664,17 @@ meant anyone who could reach the endpoint could spend a token — set
 `FCAPTCHA_LEGACY_UNAUTH_VERIFY=true` for one release if you need the old
 behaviour while you update your backend.
 
+`remoteip` is optional. When supplied, it must be the visitor IP associated with
+the original browser request and is checked against the token. When omitted, no
+IP check is performed. The API never uses the verification caller's socket
+address for this check because that caller is normally your backend server.
+
 ```json
 // Request
 {
   "token": "...",
-  "secret": "your-secret"
+  "secret": "your-secret",
+  "remoteip": "203.0.113.10"
 }
 
 // Response

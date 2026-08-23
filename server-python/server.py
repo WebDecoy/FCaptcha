@@ -264,6 +264,7 @@ class TokenVerifyRequest(BaseModel):
     token: str
     # Declared but never checked until now: see the token_verify handler.
     secret: str = ""
+    remoteip: Optional[str] = None
 
 
 # =============================================================================
@@ -1898,9 +1899,9 @@ async def token_verify(req: TokenVerifyRequest, request: Request):
                 status_code=401, content={"valid": False, "reason": "invalid_secret"}
             )
 
-    # Extract client IP for verification
-    ip = PROXY_TRUST.client_ip(request)
-    return verify_token(req.token, ip)
+    # The caller is the integrating backend, not the visitor who received the
+    # token. Bind only to an explicitly supplied visitor address.
+    return verify_token(req.token, req.remoteip)
 
 
 # Turnstile / reCAPTCHA / hCaptcha drop-in compatibility.
