@@ -307,6 +307,7 @@ const webBotAuthTimeout = 3 * time.Second
 type RateLimiter struct {
 	mu       sync.RWMutex
 	requests map[string][]int64
+	redis    *redis.Client
 }
 
 // FingerprintStore tracks fingerprint patterns
@@ -314,6 +315,7 @@ type FingerprintStore struct {
 	mu             sync.RWMutex
 	fingerprints   map[string]*FingerprintData
 	ipFingerprints map[string]map[string]bool
+	redis          *redis.Client
 }
 
 type FingerprintData struct {
@@ -424,6 +426,9 @@ func NewScoringEngineWithRedis(secretKey, redisURL string) *ScoringEngine {
 	engine := NewScoringEngine(secretKey)
 	engine.powStore = newRedisPoWChallengeStore(client)
 	engine.tokenStore = newRedisTokenStore(client)
+	engine.rateLimiter = newRedisRateLimiter(client)
+	engine.fingerprintStore = newRedisFingerprintStore(client)
+	engine.suspicion = NewRedisSuspicionLedger(client)
 	engine.redisClient = client
 	return engine
 }
@@ -434,11 +439,19 @@ func newRateLimiter() *RateLimiter {
 	}
 }
 
+func newRedisRateLimiter(client *redis.Client) *RateLimiter {
+	return &RateLimiter{redis: client}
+}
+
 func newFingerprintStore() *FingerprintStore {
 	return &FingerprintStore{
 		fingerprints:   make(map[string]*FingerprintData),
 		ipFingerprints: make(map[string]map[string]bool),
 	}
+}
+
+func newRedisFingerprintStore(client *redis.Client) *FingerprintStore {
+	return &FingerprintStore{redis: client}
 }
 
 func compileUAPatterns() []*regexp.Regexp {
@@ -2425,7 +2438,43 @@ func (e *ScoringEngine) computeSignature(payload []byte) string {
 // Rate Limiter Methods
 // ============================================================
 
+var redisRateCheck = redis.NewScript(`
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+local count = redis.call('ZCARD', KEYS[1])
+local added = 0
+if count < tonumber(ARGV[3]) then
+  redis.call('ZADD', KEYS[1], ARGV[2], ARGV[4])
+  count = count + 1
+  added = 1
+end
+redis.call('EXPIRE', KEYS[1], ARGV[5])
+return {count, added}
+`)
+
+func redisOpaqueKey(kind, value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return redisStatePrefix + kind + ":" + hex.EncodeToString(sum[:])
+}
+
+func randomHex(size int) string {
+	b := make([]byte, size)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return hex.EncodeToString(b)
+}
+
 func (rl *RateLimiter) Check(key string, windowSeconds int64, maxRequests int) (bool, int) {
+	if rl.redis != nil {
+		now := time.Now().UnixMilli()
+		redisKey := redisOpaqueKey("rate", key)
+		member := fmt.Sprintf("%d:%s", now, randomHex(8))
+		values, err := redisRateCheck.Run(context.Background(), rl.redis, []string{redisKey}, now-windowSeconds*1000, now, maxRequests, member, windowSeconds+1).Int64Slice()
+		if err != nil {
+			return true, maxRequests
+		}
+		return values[1] == 0, int(values[0])
+	}
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
@@ -2458,6 +2507,18 @@ func (rl *RateLimiter) Check(key string, windowSeconds int64, maxRequests int) (
 // ============================================================
 
 func (fs *FingerprintStore) Record(fingerprint, ip, siteKey string) {
+	if fs.redis != nil {
+		ctx := context.Background()
+		fpKey := redisOpaqueKey("fingerprint:ips", siteKey+"|"+fingerprint)
+		ipKey := redisOpaqueKey("fingerprint:fps", ip)
+		pipe := fs.redis.TxPipeline()
+		pipe.SAdd(ctx, fpKey, redisOpaqueKey("value:ip", ip))
+		pipe.Expire(ctx, fpKey, suspicionWindow)
+		pipe.SAdd(ctx, ipKey, redisOpaqueKey("value:fp", fingerprint))
+		pipe.Expire(ctx, ipKey, suspicionWindow)
+		_, _ = pipe.Exec(ctx)
+		return
+	}
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
@@ -2481,6 +2542,13 @@ func (fs *FingerprintStore) Record(fingerprint, ip, siteKey string) {
 }
 
 func (fs *FingerprintStore) GetIPFingerprintCount(ip string) int {
+	if fs.redis != nil {
+		count, err := fs.redis.SCard(context.Background(), redisOpaqueKey("fingerprint:fps", ip)).Result()
+		if err != nil {
+			return 100
+		}
+		return int(count)
+	}
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
@@ -2491,6 +2559,13 @@ func (fs *FingerprintStore) GetIPFingerprintCount(ip string) int {
 }
 
 func (fs *FingerprintStore) GetFingerprintIPCount(fingerprint, siteKey string) int {
+	if fs.redis != nil {
+		count, err := fs.redis.SCard(context.Background(), redisOpaqueKey("fingerprint:ips", siteKey+"|"+fingerprint)).Result()
+		if err != nil {
+			return 100
+		}
+		return int(count)
+	}
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 

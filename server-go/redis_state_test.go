@@ -79,3 +79,54 @@ func TestRedisIdempotencyResultsCrossInstances(t *testing.T) {
 		t.Fatalf("another instance did not read the idempotency result: %#v", got)
 	}
 }
+
+func TestRedisDetectionStateCrossesInstances(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisURL := "redis://" + redisServer.Addr()
+	first := NewScoringEngineWithRedis("shared-test-secret", redisURL)
+	second := NewScoringEngineWithRedis("shared-test-secret", redisURL)
+
+	for i := 0; i < 3; i++ {
+		exceeded, _ := first.rateLimiter.Check("site|203.0.113.5", 60, 3)
+		if exceeded {
+			t.Fatalf("request %d was limited before the configured ceiling", i+1)
+		}
+	}
+	if exceeded, count := second.rateLimiter.Check("site|203.0.113.5", 60, 3); !exceeded || count != 3 {
+		t.Fatalf("another instance did not enforce the shared rate limit: exceeded=%v count=%d", exceeded, count)
+	}
+
+	first.suspicion.Record("site", "203.0.113.5", 0.95)
+	if count := second.suspicion.Count("site", "203.0.113.5"); count != 1 {
+		t.Fatalf("another instance saw %d shared suspicion hits, want 1", count)
+	}
+
+	first.fingerprintStore.Record("fp-a", "203.0.113.5", "site")
+	second.fingerprintStore.Record("fp-b", "203.0.113.5", "site")
+	if count := first.fingerprintStore.GetIPFingerprintCount("203.0.113.5"); count != 2 {
+		t.Fatalf("shared address fingerprint count=%d, want 2", count)
+	}
+	second.fingerprintStore.Record("fp-a", "198.51.100.8", "site")
+	if count := first.fingerprintStore.GetFingerprintIPCount("fp-a", "site"); count != 2 {
+		t.Fatalf("shared fingerprint address count=%d, want 2", count)
+	}
+}
+
+func TestRedisSiteKeyRotationLimitCrossesInstances(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	client := NewScoringEngineWithRedis("shared-test-secret", "redis://"+redisServer.Addr()).redisClient
+	first := NewSiteKeyGuard(nil, 2)
+	first.redis = client
+	second := NewSiteKeyGuard(nil, 2)
+	second.redis = client
+
+	if got := first.Normalize("site-a", "203.0.113.5"); got != "site-a" {
+		t.Fatalf("first key normalized to %q", got)
+	}
+	if got := second.Normalize("site-b", "203.0.113.5"); got != "site-b" {
+		t.Fatalf("second key normalized to %q", got)
+	}
+	if got := first.Normalize("site-c", "203.0.113.5"); got != overflowSiteKey {
+		t.Fatalf("cross-instance rotation was not folded into overflow: %q", got)
+	}
+}

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/redis/go-redis/v9"
 )
 
 // Adaptive challenge cost: what a source pays is a function of what that source
@@ -61,8 +63,13 @@ const (
 // common case — a legitimate visitor — allocates nothing and looks up nothing
 // but a miss.
 type SuspicionLedger struct {
-	mu   sync.Mutex
-	hits *expirable.LRU[string, []int64]
+	mu    sync.Mutex
+	hits  *expirable.LRU[string, []int64]
+	redis *redis.Client
+}
+
+func NewRedisSuspicionLedger(client *redis.Client) *SuspicionLedger {
+	return &SuspicionLedger{redis: client}
 }
 
 func NewSuspicionLedger() *SuspicionLedger {
@@ -80,6 +87,18 @@ func suspicionKey(siteKey, ip string) string {
 // unusual never accumulates anything.
 func (s *SuspicionLedger) Record(siteKey, ip string, score float64) {
 	if s == nil || score < suspicionStrongScore || ip == "" {
+		return
+	}
+
+	if s.redis != nil {
+		now := time.Now().UnixMilli()
+		key := redisOpaqueKey("suspicion", suspicionKey(siteKey, ip))
+		pipe := s.redis.TxPipeline()
+		pipe.ZRemRangeByScore(context.Background(), key, "-inf", formatInt64(now-suspicionWindow.Milliseconds()))
+		pipe.ZAdd(context.Background(), key, redis.Z{Score: float64(now), Member: formatInt64(now) + ":" + randomHex(8)})
+		pipe.ZRemRangeByRank(context.Background(), key, 0, -(suspicionMaxHits + 1))
+		pipe.Expire(context.Background(), key, suspicionWindow)
+		_, _ = pipe.Exec(context.Background())
 		return
 	}
 
@@ -112,6 +131,18 @@ func (s *SuspicionLedger) Record(siteKey, ip string, score float64) {
 func (s *SuspicionLedger) Count(siteKey, ip string) int {
 	if s == nil || ip == "" {
 		return 0
+	}
+
+	if s.redis != nil {
+		now := time.Now().UnixMilli()
+		key := redisOpaqueKey("suspicion", suspicionKey(siteKey, ip))
+		pipe := s.redis.TxPipeline()
+		pipe.ZRemRangeByScore(context.Background(), key, "-inf", formatInt64(now-suspicionWindow.Milliseconds()))
+		count := pipe.ZCard(context.Background(), key)
+		if _, err := pipe.Exec(context.Background()); err != nil {
+			return suspicionMaxHits
+		}
+		return int(count.Val())
 	}
 
 	s.mu.Lock()
