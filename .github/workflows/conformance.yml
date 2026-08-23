@@ -1,0 +1,52 @@
+name: Cross-server conformance
+
+on:
+  push:
+    branches: [main]
+    paths: ['server-go/**', 'server-node/**', 'server-python/**', 'test/conformance.js', 'bench/lib/pow.js', '.github/workflows/conformance.yml']
+  pull_request:
+    paths: ['server-go/**', 'server-node/**', 'server-python/**', 'test/conformance.js', 'bench/lib/pow.js', '.github/workflows/conformance.yml']
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: go
+            dockerfile: docker/Dockerfile
+          - name: node
+            dockerfile: server-node/Dockerfile
+          - name: python
+            dockerfile: server-python/Dockerfile
+    name: ${{ matrix.name }}
+    env:
+      FCAPTCHA_SECRET: conformance-test-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build -f ${{ matrix.dockerfile }} -t fcaptcha-conformance .
+
+      - name: Start server
+        run: |
+          docker run -d --name fcaptcha-conformance -p 3000:3000 \
+            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" fcaptcha-conformance
+          for _ in $(seq 1 60); do
+            curl -sf http://localhost:3000/health >/dev/null && exit 0
+            sleep 0.5
+          done
+          docker logs fcaptcha-conformance
+          exit 1
+
+      - name: Run shared contract
+        run: node test/conformance.js http://localhost:3000
+
+      - name: Server logs
+        if: failure()
+        run: docker logs fcaptcha-conformance
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f fcaptcha-conformance >/dev/null 2>&1 || true
