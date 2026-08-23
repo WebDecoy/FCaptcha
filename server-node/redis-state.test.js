@@ -10,7 +10,11 @@ class FakeRedis {
   }
   on() {}
   async ping() { return 'PONG'; }
-  async set(key, value) { this.values.set(key, value); return 'OK'; }
+  async set(key, value, options = {}) {
+    if (options.NX && this.values.has(key)) return null;
+    this.values.set(key, value);
+    return 'OK';
+  }
   async get(key) { return this.values.get(key) || null; }
   async eval(_script, { keys }) {
     if (!this.values.has(keys[0])) return 0;
@@ -42,6 +46,14 @@ class FakeRedis {
     await issuer.claimChallenge(challenge.id, 'challenge-1:7'),
     { claimed: false, reason: 'challenge_not_found' }
   );
+
+  assert.strictEqual(await verifier.claimToken('token-signature'), true);
+  assert.strictEqual(await issuer.claimToken('token-signature'), false);
+
+  const response = { success: true, hostname: 'example.com', 'error-codes': [] };
+  await issuer.setIdempotency('retry-key', 'token', response);
+  assert.deepStrictEqual(await verifier.getIdempotency('retry-key', 'token'), response);
+  assert.strictEqual(await verifier.getIdempotency('retry-key', 'different-token'), null);
   console.log('redis shared-state tests passed');
 })().catch((err) => {
   console.error(err);
