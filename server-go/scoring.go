@@ -294,6 +294,7 @@ type ScoringEngine struct {
 	// Which page origins may mint tokens. Unrestricted unless the operator sets
 	// FCAPTCHA_ALLOWED_HOSTNAMES; see siteverify.go.
 	allowedHostnames *HostnameAllowlist
+	redisClient      *redis.Client
 }
 
 // webBotAuthTimeout bounds the whole Web Bot Auth verification, including the
@@ -328,6 +329,7 @@ type FingerprintData struct {
 type TokenStore struct {
 	mu    sync.Mutex
 	cache *expirable.LRU[string, struct{}]
+	redis *redis.Client
 }
 
 const (
@@ -341,18 +343,36 @@ func newTokenStore() *TokenStore {
 	}
 }
 
+func newRedisTokenStore(client *redis.Client) *TokenStore {
+	return &TokenStore{redis: client}
+}
+
 func (t *TokenStore) IsUsed(sig string) bool {
+	if t.redis != nil {
+		exists, err := t.redis.Exists(context.Background(), redisStatePrefix+"token:spent:"+sig).Result()
+		return err == nil && exists > 0
+	}
 	return t.cache.Contains(sig)
 }
 
 func (t *TokenStore) MarkUsed(sig string) bool {
+	claimed, err := t.Claim(sig)
+	return err == nil && claimed
+}
+
+// Claim atomically marks a token signature as spent. Redis SET NX makes this
+// safe when two backend replicas validate the same token concurrently.
+func (t *TokenStore) Claim(sig string) (bool, error) {
+	if t.redis != nil {
+		return t.redis.SetNX(context.Background(), redisStatePrefix+"token:spent:"+sig, "1", usedTokensTTL).Result()
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.cache.Contains(sig) {
-		return false
+		return false, nil
 	}
 	t.cache.Add(sig, struct{}{})
-	return true
+	return true, nil
 }
 
 // NewScoringEngine creates a new engine
@@ -403,6 +423,8 @@ func NewScoringEngineWithRedis(secretKey, redisURL string) *ScoringEngine {
 	}
 	engine := NewScoringEngine(secretKey)
 	engine.powStore = newRedisPoWChallengeStore(client)
+	engine.tokenStore = newRedisTokenStore(client)
+	engine.redisClient = client
 	return engine
 }
 
@@ -922,13 +944,6 @@ func (e *ScoringEngine) VerifyTokenWithIP(token, ip string) map[string]interface
 		return result
 	}
 
-	// Check for token replay (single-use tokens)
-	if e.tokenStore.IsUsed(sig) {
-		result["valid"] = false
-		result["reason"] = "token_already_used"
-		return result
-	}
-
 	// Verify IP matches (if provided)
 	if ip != "" {
 		ipHash, _ := data["ip_hash"].(string)
@@ -941,8 +956,20 @@ func (e *ScoringEngine) VerifyTokenWithIP(token, ip string) map[string]interface
 		}
 	}
 
-	// Mark token as used (prevents replay)
-	e.tokenStore.MarkUsed(sig)
+	// Atomically claim the token only after all non-mutating validation passes.
+	// This is authoritative; a separate IsUsed/MarkUsed pair races across both
+	// goroutines and replicas.
+	claimed, err := e.tokenStore.Claim(sig)
+	if err != nil {
+		result["valid"] = false
+		result["reason"] = "state_unavailable"
+		return result
+	}
+	if !claimed {
+		result["valid"] = false
+		result["reason"] = "token_already_used"
+		return result
+	}
 
 	result["valid"] = true
 	result["site_key"] = data["site_key"]

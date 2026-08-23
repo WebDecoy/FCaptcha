@@ -68,9 +68,9 @@ extraEnv: []
 ## captcha chart, and the honest answer for anything you care about keeping is a
 ## managed instance or a purpose-built operator. Point this at one.
 ##
-## The Go server uses this for shared PoW challenge and atomic claim state.
-## Other stores remain in memory, and Node/Python do not use it yet, so
-## replicaCount still defaults to 1.
+## The Go server uses this for shared PoW, token replay, and Siteverify
+## idempotency state. Other stores remain in memory, and Node/Python do not use
+## it yet, so replicaCount still defaults to 1.
 redis:
   url: ""
   existingSecret: ""
@@ -147,9 +147,9 @@ tolerations: []
 affinity: {}
 topologySpreadConstraints: []
 
-## Off by default because token replay protection, rate limiting, suspicion,
-## fingerprints, and idempotency remain per-pod. Go can share PoW challenges,
-## but that alone does not make horizontal scaling safe.
+## Off by default because rate limiting, suspicion, and fingerprints remain
+## per-pod. Go shares PoW, token replay, and idempotency state, but that alone
+## does not make horizontal scaling safe.
 autoscaling:
   enabled: false
   minReplicas: 2

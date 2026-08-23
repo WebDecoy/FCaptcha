@@ -271,9 +271,11 @@ services:
 ```
 
 FCaptcha state is process-local by default. In the Go server, `REDIS_URL` now
-shares PoW challenges and their atomic single-use claim across instances. Other
-state remains local, so continue to run one instance until the remaining stores
-and the Node/Python implementations gain shared-state support.
+shares PoW challenges, token replay protection, and Siteverify idempotency
+results across instances. Challenge and token claims are atomic. Rate limits,
+suspicion, and fingerprints remain local, so continue to run one instance until
+the remaining stores and the Node/Python implementations gain shared-state
+support.
 
 Run:
 
@@ -422,10 +424,10 @@ server {
 }
 ```
 
-**Important:** Do not run multiple instances yet. The Go server can share PoW
-challenge state through Redis, but token replay protection, rate limiting,
-suspicion, fingerprints, and idempotency are still process-local. Node and
-Python remain entirely process-local.
+**Important:** Do not run multiple instances yet. The Go server shares PoW,
+token replay, and Siteverify idempotency state through Redis, but rate limiting,
+suspicion, and fingerprints are still process-local. Node and Python remain
+entirely process-local.
 
 ---
 
@@ -437,7 +439,7 @@ Python remain entirely process-local.
 |----------|----------|---------|-------------|
 | `FCAPTCHA_SECRET` | Yes | - | Secret key for signing tokens (min 16 chars) |
 | `FCAPTCHA_INSECURE_DEV_MODE` | No | off | Explicitly use the public development signing key for local-only development. Never expose a server with this enabled |
-| `REDIS_URL` | No | - | Go only: Redis URL used for shared PoW challenge and atomic replay state. Configuration is fail-closed; it does not yet make every store distributed |
+| `REDIS_URL` | No | - | Go only: Redis URL for shared PoW, token replay, and Siteverify idempotency state. Configuration is fail-closed; it does not yet make every store distributed |
 | `FCAPTCHA_VERIFY_SECRET` | No | `FCAPTCHA_SECRET` | Credential your backend sends as `secret` when verifying a token. Split it from the signing key so a leaked verify credential cannot also mint tokens |
 | `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | No | off | Restore the pre-1.22.0 behaviour where token verification accepted any caller. Migration cover for one release — see [Upgrading to 1.22.0](#upgrading-to-1220) |
 | `FCAPTCHA_ALLOWED_HOSTNAMES` | No | (any) | Comma-separated hostnames permitted to mint tokens, matched against the request `Origin` (then `Referer`) |

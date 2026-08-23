@@ -35,6 +35,7 @@ package main
 // Mirrors server-node/siteverify.js and server-python/siteverify.py.
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -47,6 +48,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -74,13 +76,13 @@ const (
 // The error-code vocabulary. These strings are the contract — integrators
 // branch on them — so they match Cloudflare's spelling exactly, hyphens and all.
 const (
-	errMissingSecret     = "missing-input-secret"
-	errInvalidSecret     = "invalid-input-secret"
-	errMissingResponse   = "missing-input-response"
-	errInvalidResponse   = "invalid-input-response"
-	errBadRequest        = "bad-request"
+	errMissingSecret      = "missing-input-secret"
+	errInvalidSecret      = "invalid-input-secret"
+	errMissingResponse    = "missing-input-response"
+	errInvalidResponse    = "invalid-input-response"
+	errBadRequest         = "bad-request"
 	errTimeoutOrDuplicate = "timeout-or-duplicate"
-	errInternalError     = "internal-error"
+	errInternalError      = "internal-error"
 )
 
 // reasonToErrorCode maps VerifyTokenWithIP's internal reason onto that
@@ -271,6 +273,14 @@ func (a *HostnameAllowlist) Describe() string {
 // degrades that case to an ordinary fresh verification.
 type IdempotencyStore struct {
 	entries *expirable.LRU[string, SiteverifyResponse]
+	redis   *redis.Client
+}
+
+// NewRedisIdempotencyStore shares retry responses between replicas. Keys are
+// hashed before leaving the process so caller-provided idempotency values and
+// tokens never appear in Redis key listings.
+func NewRedisIdempotencyStore(client *redis.Client) *IdempotencyStore {
+	return &IdempotencyStore{redis: client}
 }
 
 // NewIdempotencyStore builds a bounded, self-expiring result cache.
@@ -285,10 +295,26 @@ func (s *IdempotencyStore) key(idempotencyKey, token string) string {
 	return idempotencyKey + ":" + hex.EncodeToString(sum[:])[:32]
 }
 
+func (s *IdempotencyStore) redisKey(idempotencyKey, token string) string {
+	sum := sha256.Sum256([]byte(s.key(idempotencyKey, token)))
+	return redisStatePrefix + "siteverify:idempotency:" + hex.EncodeToString(sum[:])
+}
+
 // Get returns a cached response, if one is still live.
 func (s *IdempotencyStore) Get(idempotencyKey, token string) (SiteverifyResponse, bool) {
 	if idempotencyKey == "" {
 		return SiteverifyResponse{}, false
+	}
+	if s.redis != nil {
+		payload, err := s.redis.Get(context.Background(), s.redisKey(idempotencyKey, token)).Bytes()
+		if err != nil {
+			return SiteverifyResponse{}, false
+		}
+		var response SiteverifyResponse
+		if json.Unmarshal(payload, &response) != nil {
+			return SiteverifyResponse{}, false
+		}
+		return response, true
 	}
 	return s.entries.Get(s.key(idempotencyKey, token))
 }
@@ -296,6 +322,13 @@ func (s *IdempotencyStore) Get(idempotencyKey, token string) (SiteverifyResponse
 // Set records a response for replay.
 func (s *IdempotencyStore) Set(idempotencyKey, token string, resp SiteverifyResponse) {
 	if idempotencyKey == "" {
+		return
+	}
+	if s.redis != nil {
+		payload, err := json.Marshal(resp)
+		if err == nil {
+			_ = s.redis.Set(context.Background(), s.redisKey(idempotencyKey, token), payload, idempotencyTTL).Err()
+		}
 		return
 	}
 	s.entries.Add(s.key(idempotencyKey, token), resp)
