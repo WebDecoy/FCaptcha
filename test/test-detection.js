@@ -88,6 +88,22 @@ async function makeVerifiedRequest(options = {}) {
   return makeRequest('/api/verify', { ...options, body: { ...requested, ...body } });
 }
 
+async function testRequestBodyLimit() {
+  log('Request body limits:', colors.cyan);
+  const response = await fetch(`${SERVER_URL}/api/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ padding: 'x'.repeat(64 * 1024) }),
+  });
+  if (response.status === 413) {
+    passed++;
+    log('  ✓ Oversized request rejected with 413', colors.green);
+  } else {
+    failed++;
+    log(`  ✗ Oversized request returned ${response.status}, expected 413`, colors.red);
+  }
+}
+
 function assertDetection(result, category, shouldDetect, testName) {
   const detections = result.detections || [];
   const hasCategory = detections.some(d => d.category === category);
@@ -2647,6 +2663,7 @@ async function runTests() {
   await testHeadRequests();
   await testTokenVerification();
   await testInvisibleMode();
+  await testRequestBodyLimit();
 
   // Summary
   log(`\n${colors.bold}═══════════════════════════════════════${colors.reset}`);
