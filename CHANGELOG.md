@@ -13,6 +13,18 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.33.2] — 2026-08-23
+
+### Fixed
+- **Short mouse traces no longer become false zero-movement reports.** The
+  browser client discarded the observed `totalPoints` count whenever it saw
+  fewer than ten mouse samples, and discarded `approachPoints` below five.
+  That made a genuine sparse trace indistinguishable from no mouse activity and
+  could trigger the backend's zero-movement detections. The client now preserves
+  both factual counts while keeping only the under-sampled derived trajectory
+  metrics at neutral defaults. A browser regression test inspects the exact
+  `/api/verify` payload for a nine-point trace.
+
 ## [1.33.1] — 2026-08-23
 
 ### Fixed

@@ -14,7 +14,7 @@
     // Keep in sync with server-node/package.json when cutting a release; this
     // string ships to integrators. server-node/version.test.js enforces it
     // across every file that carries the version, and lists them.
-    version: '1.33.1',
+    version: '1.33.2',
     widgets: new Map(),
     serverUrl: null,
     // Site-wide language default. Per-widget `lang` still wins; leaving both
