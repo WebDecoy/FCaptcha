@@ -14,7 +14,7 @@
     // Keep in sync with server-node/package.json when cutting a release; this
     // string ships to integrators. server-node/version.test.js enforces it
     // across every file that carries the version, and lists them.
-    version: '1.33.2',
+    version: '1.34.0',
     widgets: new Map(),
     serverUrl: null,
     // Site-wide language default. Per-widget `lang` still wins; leaving both
@@ -109,6 +109,12 @@
   // label, branding — so without this the layout reads backwards for roughly
   // half a billion people.
   const RTL_LANGUAGES = new Set(['ar', 'he', 'fa', 'ur', 'ps', 'sd', 'yi']);
+
+  // All three servers reject a token older than 300s. The widget expires its
+  // own a little sooner, so a form submitted right on the boundary is not
+  // refused by a token the checkbox still shows as valid.
+  const TOKEN_LIFETIME_MS = 300000;
+  const TOKEN_EXPIRY_MARGIN_MS = 15000;
 
   /**
    * Picks the best available translation for a requested tag.
@@ -3117,8 +3123,32 @@
       this.spinner.style.display = 'none';
       this.label.textContent = this.strings.verified;
 
+      this._armTokenExpiry();
+
       if (this.options.callback) this.options.callback(token);
       this.container.dispatchEvent(new CustomEvent('fcaptcha:verified', { detail: { token } }));
+    }
+
+    // A token is only good for TOKEN_LIFETIME_MS server-side. Until now the
+    // widget kept showing "verified" past that point and expiredCallback — a
+    // documented option since the first release — was never called, so a form
+    // left open for five minutes failed on submit with nothing to react to.
+    _armTokenExpiry() {
+      this._clearTokenExpiry();
+      this._expiryTimer = setTimeout(() => {
+        this._expiryTimer = null;
+        if (!this.verified) return;
+        this.reset();
+        if (this.options.expiredCallback) this.options.expiredCallback();
+        this.container.dispatchEvent(new CustomEvent('fcaptcha:expired'));
+      }, Math.max(1000, TOKEN_LIFETIME_MS - TOKEN_EXPIRY_MARGIN_MS));
+    }
+
+    _clearTokenExpiry() {
+      if (this._expiryTimer) {
+        clearTimeout(this._expiryTimer);
+        this._expiryTimer = null;
+      }
     }
 
     _showFailure(message) {
@@ -3144,6 +3174,7 @@
     getToken() { return this.token; }
 
     reset() {
+      this._clearTokenExpiry();
       this.verified = false;
       this.token = null;
       this.behavioral = new BehavioralCollector();

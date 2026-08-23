@@ -13,6 +13,21 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.34.0] — 2026-08-23
+
+### Added
+- **The widget now expires its own token, and `expiredCallback` finally
+  fires.** All three servers reject a token older than 300 seconds, but the
+  checkbox went on showing "verified" past that point, and `expiredCallback` —
+  present in the public options object since the first release — was invoked
+  nowhere. A form left open for five minutes failed on submit with nothing for
+  the integrator to react to. The widget now resets itself shortly before the
+  server-side lifetime elapses, clears the stale token, calls
+  `expiredCallback()` and dispatches a `fcaptcha:expired` event. A manual
+  `reset()` cancels the pending expiry rather than reporting one afterwards.
+  The margin means a form submitted right on the boundary is not refused by a
+  token the checkbox still showed as good.
+
 ## [1.33.2] — 2026-08-23
 
 ### Fixed
