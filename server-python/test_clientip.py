@@ -6,9 +6,19 @@ Run: python3 test_clientip.py
 
 from testkit import TestRegistry
 
-from clientip import MAX_PROXY_MISCONFIG_WARNINGS, ProxyTrust
+from clientip import MAX_PROXY_MISCONFIG_WARNINGS, ProxyTrust, network_identity
 
 DEFAULT_SPEC = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+test = TestRegistry()
+
+
+@test
+def challenge_network_identity_uses_v4_24_and_v6_56():
+    assert network_identity("192.0.2.1") == network_identity("192.0.2.254")
+    assert network_identity("192.0.2.1") != network_identity("192.0.3.1")
+    assert network_identity("2001:db8:abcd:1200::1") == network_identity("2001:db8:abcd:12ff::2")
+    assert network_identity("2001:db8:abcd:1200::1") != network_identity("2001:db8:abcd:1300::1")
 
 
 class _Headers(dict):
@@ -29,10 +39,6 @@ class FakeRequest:
     def __init__(self, host, headers=None):
         self.client = _Client(host) if host is not None else None
         self.headers = _Headers({k.lower(): v for k, v in (headers or {}).items()})
-
-
-test = TestRegistry()
-
 
 @test
 def headers_from_untrusted_peer_are_ignored():

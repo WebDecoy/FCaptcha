@@ -11,7 +11,7 @@
 
 const crypto = require('crypto');
 const detection = require('./detection');
-const { ProxyTrust } = require('./clientip');
+const { ProxyTrust, networkIdentity } = require('./clientip');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 const { signingSecret } = require('./config');
 
@@ -64,7 +64,7 @@ class PoWChallengeStore {
     return challengeData;
   }
 
-  verify(challengeId, nonce, hash, siteKey) {
+  verify(challengeId, nonce, hash, siteKey, ip) {
     const challenge = this.challenges.get(challengeId);
 
     if (!challenge) {
@@ -78,6 +78,10 @@ class PoWChallengeStore {
 
     if (challenge.siteKey !== siteKey) {
       return { valid: false, reason: 'site_key_mismatch' };
+    }
+
+    if (networkIdentity(challenge.ip) !== networkIdentity(ip)) {
+      return { valid: false, reason: 'challenge_network_mismatch' };
     }
 
     // Check for replay
@@ -263,7 +267,8 @@ class ScoringEngine {
         powSolution.challengeId,
         powSolution.nonce,
         powSolution.hash,
-        siteKey
+        siteKey,
+        ip
       );
 
       if (!powResult.valid) {

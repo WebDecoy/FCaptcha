@@ -72,6 +72,15 @@ def normalize_ip(value: Optional[str]) -> Optional[str]:
     return str(addr) if addr is not None else None
 
 
+def network_identity(value: Optional[str]) -> str:
+    """Return the IPv4 /24 or IPv6 /56 containing an address."""
+    addr = _parse_ip(value)
+    if addr is None:
+        return ""
+    prefix = 24 if isinstance(addr, ipaddress.IPv4Address) else 56
+    return str(ipaddress.ip_network(f"{addr}/{prefix}", strict=False))
+
+
 # Bounds the misconfiguration hint below. A directly exposed server sees spoof
 # attempts continuously, and that is working as intended - the operator needs the
 # hint once, not a running commentary.

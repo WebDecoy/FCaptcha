@@ -10,6 +10,20 @@ import (
 	"sync/atomic"
 )
 
+// NetworkIdentity returns the IPv4 /24 or IPv6 /56 containing an address.
+// This tolerates nearby mobile address rotation without making challenges
+// transferable between unrelated source networks.
+func NetworkIdentity(value string) string {
+	ip := net.ParseIP(hostOnly(value))
+	if ip == nil {
+		return ""
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4.Mask(net.CIDRMask(24, 32)).String() + "/24"
+	}
+	return ip.Mask(net.CIDRMask(56, 128)).String() + "/56"
+}
+
 // Client IP resolution.
 //
 // Every IP-derived signal in FCaptcha — datacenter ranges, Tor/VPN, rate

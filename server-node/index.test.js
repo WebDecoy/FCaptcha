@@ -64,4 +64,18 @@ const cleanHeaders = {
   assert.ok(result.token, 'valid PoW may mint a token');
 }
 
+{
+  const engine = createScoringEngine({ secret: 'test-secret' });
+  const challenge = engine.generateChallenge('site', '203.0.113.1', {
+    difficulty: 1,
+    scaleByReputation: false
+  });
+  const result = engine.verify(
+    cleanSignals, '198.51.100.1', 'site', 'Mozilla/5.0', cleanHeaders, solve(challenge)
+  );
+  assert.strictEqual(result.success, false, 'a different network must not spend the challenge');
+  assert.strictEqual(result.reason, 'pow_not_satisfied');
+  assert.ok(result.detections.some((d) => d.reason.includes('challenge_network_mismatch')));
+}
+
 console.log('index.js security gate tests passed');

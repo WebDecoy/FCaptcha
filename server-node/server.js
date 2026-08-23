@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const path = require('path');
 const detection = require('./detection');
 const webbotauth = require('./webbotauth');
-const { ProxyTrust } = require('./clientip');
+const { ProxyTrust, networkIdentity } = require('./clientip');
 const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
 const { signingSecretFromEnv } = require('./config');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
@@ -182,7 +182,7 @@ const powChallengeStore = {
   },
 
   // Verify a PoW solution (signalsHash is optional for backward compat)
-  verify(challengeId, nonce, hash, siteKey, signalsHash = null) {
+  verify(challengeId, nonce, hash, siteKey, ip, signalsHash = null) {
     const challenge = this.challenges.get(challengeId);
 
     if (!challenge) {
@@ -196,6 +196,10 @@ const powChallengeStore = {
 
     if (challenge.siteKey !== siteKey) {
       return { valid: false, reason: 'site_key_mismatch' };
+    }
+
+    if (networkIdentity(challenge.ip) !== networkIdentity(ip)) {
+      return { valid: false, reason: 'challenge_network_mismatch' };
     }
 
     // Check if solution was already used (prevent replay)
@@ -1420,6 +1424,7 @@ function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash 
       powSolution.nonce,
       powSolution.hash,
       siteKey,
+      ip,
       clientSignalsHash
     );
     powValid = powVerification.valid;

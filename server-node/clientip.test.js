@@ -5,7 +5,7 @@
  */
 
 const assert = require('assert');
-const { ProxyTrust } = require('./clientip');
+const { ProxyTrust, networkIdentity } = require('./clientip');
 
 const DEFAULT_SPEC = '127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16';
 
@@ -18,6 +18,13 @@ function request(remoteAddress, headers = {}) {
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
+
+test('challenge network identity uses IPv4 /24 and IPv6 /56', () => {
+  assert.strictEqual(networkIdentity('192.0.2.1'), networkIdentity('192.0.2.254'));
+  assert.notStrictEqual(networkIdentity('192.0.2.1'), networkIdentity('192.0.3.1'));
+  assert.strictEqual(networkIdentity('2001:db8:abcd:1200::1'), networkIdentity('2001:db8:abcd:12ff::2'));
+  assert.notStrictEqual(networkIdentity('2001:db8:abcd:1200::1'), networkIdentity('2001:db8:abcd:1300::1'));
+});
 
 // The bypass this file exists to prevent: a caller reaching the server directly
 // claims a residential IP and expects the datacenter/Tor/rate-limit checks to
