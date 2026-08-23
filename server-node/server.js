@@ -81,9 +81,32 @@ const PROXY_TRUST = ProxyTrust.fromEnv();
 // limits.js — the cap is unconditional; FCAPTCHA_SITE_KEYS adds an allowlist.
 const SITE_KEYS = SiteKeyGuard.fromEnv();
 
+async function normalizeSiteKey(siteKey, ip) {
+  const key = siteKey || 'default';
+  if (SITE_KEYS.allowlist && !SITE_KEYS.allowlist.has(key)) return ' overflow';
+  if (!SHARED_STATE || !ip) return SITE_KEYS.normalize(key, ip);
+  try {
+    return await SHARED_STATE.claimSiteKey(key, ip, SITE_KEYS.maxPerIp) ? key : ' overflow';
+  } catch (_) {
+    return ' overflow';
+  }
+}
+
 // Recent strong verdicts per source, used to price the next challenge that
 // source asks for. Bounded and short-lived; see suspicion.js.
-const suspicionLedger = new SuspicionLedger();
+const localSuspicionLedger = new SuspicionLedger();
+const suspicionLedger = {
+  async record(siteKey, ip, score) {
+    if (!SHARED_STATE) return localSuspicionLedger.record(siteKey, ip, score);
+    if (score < 0.8 || !ip) return;
+    try { await SHARED_STATE.recordSuspicion(siteKey, ip); } catch (_) { /* fail closed on reads */ }
+  },
+  async count(siteKey, ip) {
+    if (!SHARED_STATE) return localSuspicionLedger.count(siteKey, ip);
+    if (!ip) return 0;
+    try { return await SHARED_STATE.suspicionCount(siteKey, ip); } catch (_) { return 16; }
+  }
+};
 
 // Express's own `trust proxy` would re-derive req.ip from the same headers on
 // its own terms; IP resolution goes through PROXY_TRUST.clientIP exclusively.
@@ -284,7 +307,11 @@ const powChallengeStore = {
 const rateLimiter = {
   requests: new BoundedMap(),
 
-  check(key, windowSeconds = 60, maxRequests = 10) {
+  async check(key, windowSeconds = 60, maxRequests = 10) {
+    if (SHARED_STATE) {
+      try { return await SHARED_STATE.rateCheck(key, windowSeconds, maxRequests); }
+      catch (_) { return [true, maxRequests]; }
+    }
     const now = Date.now();
     const cutoff = now - (windowSeconds * 1000);
 
@@ -306,7 +333,11 @@ const fingerprintStore = {
   fingerprints: new BoundedMap(),
   ipFingerprints: new BoundedMap(),
 
-  record(fp, ip, siteKey) {
+  async record(fp, ip, siteKey) {
+    if (SHARED_STATE) {
+      try { await SHARED_STATE.recordFingerprint(fp, ip, siteKey); } catch (_) { /* reads fail closed */ }
+      return;
+    }
     const key = `${siteKey}:${fp}`;
 
     if (!this.fingerprints.has(key)) {
@@ -322,11 +353,17 @@ const fingerprintStore = {
     this.ipFingerprints.get(ip).add(fp);
   },
 
-  getIpFpCount(ip) {
+  async getIpFpCount(ip) {
+    if (SHARED_STATE) {
+      try { return await SHARED_STATE.ipFingerprintCount(ip); } catch (_) { return 100; }
+    }
     return this.ipFingerprints.get(ip)?.size || 0;
   },
 
-  getFpIpCount(fp, siteKey) {
+  async getFpIpCount(fp, siteKey) {
+    if (SHARED_STATE) {
+      try { return await SHARED_STATE.fingerprintIpCount(fp, siteKey); } catch (_) { return 100; }
+    }
     const key = `${siteKey}:${fp}`;
     return this.fingerprints.get(key)?.ips.size || 0;
   }
@@ -381,7 +418,7 @@ const {
 } = require('./engine');
 
 // Stateful detectors stay here: they read the module-level stores below.
-function detectFingerprint(signals, ip, siteKey) {
+async function detectFingerprint(signals, ip, siteKey) {
   const detections = [];
   const env = signals.environmental || {};
   const automation = env.automationFlags || {};
@@ -395,10 +432,10 @@ function detectFingerprint(signals, ip, siteKey) {
   ];
   const fp = crypto.createHash('sha256').update(components.join('|')).digest('hex').slice(0, 16);
 
-  fingerprintStore.record(fp, ip, siteKey);
+  await fingerprintStore.record(fp, ip, siteKey);
 
   // IP fingerprint count
-  const ipFpCount = fingerprintStore.getIpFpCount(ip);
+  const ipFpCount = await fingerprintStore.getIpFpCount(ip);
   if (ipFpCount > 5) {
     detections.push({
       category: 'fingerprint', score: 0.6, confidence: 0.6,
@@ -407,7 +444,7 @@ function detectFingerprint(signals, ip, siteKey) {
   }
 
   // Fingerprint IP count
-  const fpIpCount = fingerprintStore.getFpIpCount(fp, siteKey);
+  const fpIpCount = await fingerprintStore.getFpIpCount(fp, siteKey);
   if (fpIpCount > 10) {
     detections.push({
       category: 'fingerprint', score: 0.5, confidence: 0.5,
@@ -427,11 +464,11 @@ function detectFingerprint(signals, ip, siteKey) {
   return detections;
 }
 
-function detectRateAbuse(ip, siteKey) {
+async function detectRateAbuse(ip, siteKey) {
   const detections = [];
   const key = `${siteKey}:${ip}`;
 
-  const [exceeded, count] = rateLimiter.check(key, 60, 10);
+  const [exceeded, count] = await rateLimiter.check(key, 60, 10);
   if (exceeded) {
     detections.push({
       category: 'rate_limit', score: 0.8, confidence: 0.9,
@@ -690,10 +727,10 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
     ...detectInputForensics(signals),
     ...detectTouchAuthenticity(signals, userAgent),
     ...detectSensorEntropy(signals, userAgent),
-    ...detectTouchKinematics(signals),
-    ...detectFingerprint(signals, ip, siteKey),
-    ...detectRateAbuse(ip, siteKey)
+    ...detectTouchKinematics(signals)
   );
+  detections.push(...await detectFingerprint(signals, ip, siteKey));
+  detections.push(...await detectRateAbuse(ip, siteKey));
 
   // Add IP reputation check (async but we'll use sync version for simplicity)
   if (detection.isDatacenterIP(ip)) {
@@ -795,7 +832,7 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
 
   // Feed the ledger so the next challenge this source asks for is priced on
   // what it just did.
-  suspicionLedger.record(siteKey, ip, finalScore);
+  await suspicionLedger.record(siteKey, ip, finalScore);
 
   return {
     success,
@@ -837,7 +874,7 @@ app.post('/api/verify', async (req, res) => {
   const { siteKey: rawSiteKey, signals, powSolution, signalsJson, powTiming, action, cdata } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
   // Bound the state an unvalidated siteKey can allocate (limits.js).
-  const siteKey = SITE_KEYS.normalize(rawSiteKey, ip);
+  const siteKey = await normalizeSiteKey(rawSiteKey, ip);
   const userAgent = req.headers['user-agent'] || '';
   // Only honoured from a trusted proxy: a client that can state its own TLS
   // fingerprint would just claim a stock Chrome one.
@@ -858,7 +895,7 @@ app.post('/api/verify', async (req, res) => {
 app.post('/api/score', async (req, res) => {
   const { siteKey: rawSiteKey, signals, action, cdata, powSolution, signalsJson, powTiming } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
-  const siteKey = SITE_KEYS.normalize(rawSiteKey, ip);
+  const siteKey = await normalizeSiteKey(rawSiteKey, ip);
   const userAgent = req.headers['user-agent'] || '';
   const ja3Hash = PROXY_TRUST.trustedHeader(req, 'x-ja3-hash') || null;
 
@@ -938,14 +975,14 @@ app.post('/siteverify', siteverifyHandler);
 // PoW Challenge endpoint - client fetches this on page load
 app.get('/api/pow/challenge', async (req, res) => {
   const ip = PROXY_TRUST.clientIP(req);
-  const siteKey = SITE_KEYS.normalize(req.query.siteKey, ip);
+  const siteKey = await normalizeSiteKey(req.query.siteKey, ip);
 
   // Cost scaling. See suspicion.js for why the escalation lands almost
   // entirely on minAgeMs rather than on difficulty.
   const rateKey = `pow:${siteKey}:${ip}`;
-  const [exceeded, count] = rateLimiter.check(rateKey, 60, 20);
+  const [exceeded, count] = await rateLimiter.check(rateKey, 60, 20);
   const cost = computeChallengeCost(
-    suspicionLedger.count(siteKey, ip),
+    await suspicionLedger.count(siteKey, ip),
     detection.isDatacenterIP(ip),
     count,
     exceeded
