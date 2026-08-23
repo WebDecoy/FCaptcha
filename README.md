@@ -50,11 +50,16 @@ This gives you:
 - Client JS at `http://localhost:3000/fcaptcha.js`
 - Demo page at `http://localhost:3000/demo/`
 
-With Redis (for distributed state):
+Docker Compose (single instance):
 
 ```bash
 FCAPTCHA_SECRET=my-secret docker compose -f docker/docker-compose.yml up -d
 ```
+
+FCaptcha state is currently process-local. `REDIS_URL` is reserved for a future
+distributed-state backend and is not read by the servers yet. Run one server
+instance only: multiple replicas do not share challenges, replay protection,
+rate limits, suspicion history, or idempotency results.
 
 Kubernetes:
 
@@ -122,7 +127,7 @@ Two options, and the tradeoff is real:
 
 <!-- CDN: no server needed to try it, pinned and integrity-checked. -->
 <script
-  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.24.0/dist/fcaptcha.min.js"
+  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.28.1/dist/fcaptcha.min.js"
   integrity="sha384-…"
   crossorigin="anonymous"></script>
 ```
@@ -759,7 +764,7 @@ Set `action` (and optionally `cdata`) when you request the token —
 | `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | Restore the pre-1.22.0 behaviour where token verification accepted any caller. One release of migration cover; **do not leave it on** | off |
 | `FCAPTCHA_ALLOWED_HOSTNAMES` | Comma-separated hostnames permitted to mint tokens, matched against the request's `Origin` (then `Referer`). Unset accepts any origin. A request with no derivable origin (native app, server-side call) is always allowed — an attacker who can forge an `Origin` would just forge a listed one | (any) |
 | `PORT` | Server port | 3000 |
-| `REDIS_URL` | Redis URL for distributed state | (in-memory) |
+| `REDIS_URL` | Reserved; distributed state is not implemented yet | (unused) |
 | `TRUSTED_PROXIES` | Comma-separated CIDRs/IPs of peers allowed to set `X-Forwarded-For`, `X-Real-IP` and the TLS-fingerprint headers. `*` trusts every peer, `none` trusts none. See [Trusted proxies](#trusted-proxies) | loopback + private ranges |
 | `FCAPTCHA_SITE_KEYS` | Comma-separated allowlist of accepted site keys. Unset accepts any key (zero-config self-hosting); unlisted keys are folded into a shared overflow bucket rather than allocating their own rate-limit/fingerprint state | (any) |
 | `FCAPTCHA_MAX_SITE_KEYS_PER_IP` | Distinct site keys one IP may allocate state for before the excess is folded into the overflow bucket. The cap itself is unconditional | 8 |
@@ -886,7 +891,7 @@ fcaptcha/
 │   └── index.html           # Interactive demo page
 ├── docker/
 │   ├── Dockerfile           # Multi-stage build (Go binary + client + demo)
-│   └── docker-compose.yml   # Docker compose with Redis
+│   └── docker-compose.yml   # Single-instance Docker Compose deployment
 ├── .github/workflows/
 │   ├── bench.yml            # Unit tests + E2E + gated detection benchmark
 │   ├── docker-publish.yml   # GHCR publish on release
