@@ -43,7 +43,7 @@ from config import signing_secret_from_env
 
 # Keep in sync with server-node/package.json on release. Enforced by
 # server-node/version.test.js, which lists every file carrying the version.
-app = FastAPI(title="FCaptcha", version="1.33.0")
+app = FastAPI(title="FCaptcha", version="1.33.1")
 
 MAX_REQUEST_BODY_BYTES = 64 * 1024
 

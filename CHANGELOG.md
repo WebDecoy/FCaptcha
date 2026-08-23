@@ -13,6 +13,20 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.33.1] — 2026-08-23
+
+### Fixed
+- **`errorCallback` was handed `undefined` on the most common failure.** All
+  three servers refuse a verification with `success:false` and no `message`
+  field, but the widget passed that absent field straight to the integrator's
+  `errorCallback`. Anyone rendering it — as the project's own demo page did —
+  got a blank error. The label already fell back to the localized "verification
+  failed" string; the callback now receives that same string, and still
+  receives the server's text verbatim when there is one.
+- The Node library printed the `FCAPTCHA_INSECURE_DEV_MODE` warning twice,
+  because the challenge store and the scoring engine each resolve the secret.
+  It warns once per process.
+
 ## [1.33.0] — 2026-08-22
 
 ### Added

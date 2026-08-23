@@ -14,7 +14,7 @@
     // Keep in sync with server-node/package.json when cutting a release; this
     // string ships to integrators. server-node/version.test.js enforces it
     // across every file that carries the version, and lists them.
-    version: '1.33.0',
+    version: '1.33.1',
     widgets: new Map(),
     serverUrl: null,
     // Site-wide language default. Per-widget `lang` still wins; leaving both
@@ -3122,9 +3122,15 @@
       this.checkbox.classList.remove('loading');
       this.checkbox.classList.add('failed');
       this.spinner.style.display = 'none';
-      this.label.textContent = message || this.strings.failed;
+      // A refused verification carries no message: all three servers answer
+      // with success:false and no `message` field, so this is undefined on the
+      // most common failure path. Resolve it once so the label and the
+      // integrator's errorCallback get the same localized string, rather than
+      // the callback being handed undefined.
+      const reason = message || this.strings.failed;
+      this.label.textContent = reason;
 
-      if (this.options.errorCallback) this.options.errorCallback(message);
+      if (this.options.errorCallback) this.options.errorCallback(reason);
 
       setTimeout(() => {
         this.checkbox.classList.remove('failed');
