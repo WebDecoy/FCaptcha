@@ -325,7 +325,11 @@ func main() {
 	// integration at this server should be a base-URL change and nothing else.
 	// See siteverify.go for the adapter itself.
 	log.Printf("allowed hostnames: %s", engine.allowedHostnames.Describe())
-	compat := siteverifyHandler(engine, proxyTrust, NewIdempotencyStore(), verifySecret, requireVerifySecret)
+	idempotencyStore := NewIdempotencyStore()
+	if engine.redisClient != nil {
+		idempotencyStore = NewRedisIdempotencyStore(engine.redisClient)
+	}
+	compat := siteverifyHandler(engine, proxyTrust, idempotencyStore, verifySecret, requireVerifySecret)
 	r.Post("/turnstile/v0/siteverify", compat)
 	r.Post("/recaptcha/api/siteverify", compat)
 	r.Post("/siteverify", compat)
