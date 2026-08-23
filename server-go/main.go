@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	_ "net/http/pprof"
@@ -21,6 +23,33 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 )
+
+const maxRequestBodyBytes int64 = 64 * 1024
+
+// limitRequestBody rejects oversized requests before JSON or form decoding.
+// Reading at most limit+1 bytes keeps the memory bound explicit and lets every
+// handler, including the compatibility endpoints, return the same 413 status.
+func limitRequestBody(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxRequestBodyBytes+1))
+		if err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+		if int64(len(body)) > maxRequestBodyBytes {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			json.NewEncoder(w).Encode(map[string]string{"error": "request_too_large"})
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		next.ServeHTTP(w, r)
+	})
+}
 
 // resolveClientPath finds fcaptcha.js at startup so the widget can be served
 // from the same origin as the API (matches the Node and Python servers).
@@ -224,6 +253,7 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(limitRequestBody)
 
 	// CORS for widget
 	r.Use(cors.Handler(cors.Options{

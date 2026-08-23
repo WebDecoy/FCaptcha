@@ -27,11 +27,14 @@ const {
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Captured widget payloads are about 10-15 KiB. Four times that leaves ample
+// room for future signals while bounding work done by the public JSON parsers.
+const MAX_REQUEST_BODY_BYTES = 64 * 1024;
+app.use(express.json({ limit: MAX_REQUEST_BODY_BYTES }));
 // The siteverify contract accepts form-encoded bodies as well as JSON, and most
 // PHP and Python integrations in the wild post form-encoded. Parsing both here
 // costs nothing on the JSON path.
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: MAX_REQUEST_BODY_BYTES }));
 
 const SECRET_KEY = process.env.FCAPTCHA_SECRET || 'dev-secret-change-in-production';
 
@@ -1785,6 +1788,16 @@ app.get('/api/challenge', (req, res) => {
     powDifficulty: 4,
     expires: Math.floor(Date.now() / 1000) + 300
   });
+});
+
+// Express identifies parser limit failures with status 413 / entity.too.large.
+// Handle them explicitly so all three servers expose the same status instead
+// of falling through to Express's HTML error response.
+app.use((err, req, res, next) => {
+  if (err && (err.status === 413 || err.type === 'entity.too.large')) {
+    return res.status(413).json({ error: 'request_too_large' });
+  }
+  return next(err);
 });
 
 // =============================================================================
