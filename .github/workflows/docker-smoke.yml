@@ -44,7 +44,7 @@ jobs:
 
       - name: Start
         run: |
-          docker run -d --name smoke -p 3000:3000 smoke-img
+          docker run -d --name smoke -p 3000:3000 -e FCAPTCHA_SECRET=container-smoke-test-secret smoke-img
           for _ in $(seq 1 60); do
             curl -sf http://localhost:3000/health >/dev/null && exit 0
             sleep 0.5

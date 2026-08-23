@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -134,6 +135,21 @@ func envFlagEnabled(key string) bool {
 	}
 }
 
+const insecureDefaultSecret = "dev-secret-change-in-production"
+
+func signingSecretFromEnv(getenv func(string) string) (string, error) {
+	secret := strings.TrimSpace(getenv("FCAPTCHA_SECRET"))
+	if secret != "" && secret != insecureDefaultSecret {
+		return secret, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(getenv("FCAPTCHA_INSECURE_DEV_MODE"))) {
+	case "1", "true", "yes", "on":
+		log.Printf("WARNING: FCAPTCHA_INSECURE_DEV_MODE enabled; tokens use a public signing key. Never expose this server to a network.")
+		return insecureDefaultSecret, nil
+	}
+	return "", fmt.Errorf("FCAPTCHA_SECRET is required and must not be the public development key; for local-only development, explicitly set FCAPTCHA_INSECURE_DEV_MODE=1")
+}
+
 // logVerdict emits one privacy-safe JSON line describing a scoring outcome.
 // No-op unless verdict logging is enabled. Omits IP, user agent, and raw signals;
 // the free-text detection Reason is included only when verdictLogIncludeRaw is set.
@@ -176,9 +192,9 @@ func main() {
 	log.SetOutput(os.Stdout)
 
 	// Configuration
-	secretKey := os.Getenv("FCAPTCHA_SECRET")
-	if secretKey == "" {
-		secretKey = "dev-secret-change-in-production"
+	secretKey, err := signingSecretFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	// The credential a backend presents to validate a token. Defaults to the

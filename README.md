@@ -760,6 +760,7 @@ Set `action` (and optionally `cdata`) when you request the token —
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `FCAPTCHA_SECRET` | Secret key for token signing | (required) |
+| `FCAPTCHA_INSECURE_DEV_MODE` | Explicitly use the public development signing key. Local-only escape hatch; never expose a server with this enabled | off |
 | `FCAPTCHA_VERIFY_SECRET` | Credential a backend presents to `/api/token/verify` and the siteverify endpoints. Split it from `FCAPTCHA_SECRET` so a leaked verify credential cannot also mint tokens | (`FCAPTCHA_SECRET`) |
 | `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | Restore the pre-1.22.0 behaviour where token verification accepted any caller. One release of migration cover; **do not leave it on** | off |
 | `FCAPTCHA_ALLOWED_HOSTNAMES` | Comma-separated hostnames permitted to mint tokens, matched against the request's `Origin` (then `Referer`). Unset accepts any origin. A request with no derivable origin (native app, server-side call) is always allowed — an attacker who can forge an `Origin` would just forge a listed one | (any) |
@@ -907,13 +908,13 @@ fcaptcha/
 
 ```bash
 # Run Go server
-cd server-go && go run .
+cd server-go && FCAPTCHA_SECRET=local-development-secret go run .
 
 # Run Python server
-cd server-python && python server.py
+cd server-python && FCAPTCHA_SECRET=local-development-secret python server.py
 
 # Run Node server
-cd server-node && node server.js
+cd server-node && FCAPTCHA_SECRET=local-development-secret node server.js
 
 # Open demo
 open demo/index.html
@@ -945,7 +946,7 @@ End-to-end detection suite (runs against a live server):
 
 ```bash
 # Start a server first (any language)
-cd server-node && node server.js &
+cd server-node && FCAPTCHA_SECRET=fcaptcha-test-suite-secret node server.js &
 
 # Run the suite
 node test/test-detection.js

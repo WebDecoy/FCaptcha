@@ -49,7 +49,7 @@ cd fcaptcha
 # Start the Node.js server (easiest)
 cd server-node
 npm install
-node server.js
+FCAPTCHA_SECRET=local-development-secret node server.js
 
 # Server is now running at http://localhost:3000
 ```
@@ -432,6 +432,7 @@ Redis-backed shared state is planned but not implemented.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `FCAPTCHA_SECRET` | Yes | - | Secret key for signing tokens (min 16 chars) |
+| `FCAPTCHA_INSECURE_DEV_MODE` | No | off | Explicitly use the public development signing key for local-only development. Never expose a server with this enabled |
 | `FCAPTCHA_VERIFY_SECRET` | No | `FCAPTCHA_SECRET` | Credential your backend sends as `secret` when verifying a token. Split it from the signing key so a leaked verify credential cannot also mint tokens |
 | `FCAPTCHA_LEGACY_UNAUTH_VERIFY` | No | off | Restore the pre-1.22.0 behaviour where token verification accepted any caller. Migration cover for one release — see [Upgrading to 1.22.0](#upgrading-to-1220) |
 | `FCAPTCHA_ALLOWED_HOSTNAMES` | No | (any) | Comma-separated hostnames permitted to mint tokens, matched against the request `Origin` (then `Referer`) |

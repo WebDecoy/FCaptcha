@@ -64,4 +64,6 @@ jobs:
       # report 12 tests and two import errors where there are in fact 43.
       - name: Test
         working-directory: server-python
+        env:
+          FCAPTCHA_SECRET: python-unit-test-secret
         run: python -m unittest discover -p "test_*.py" -v

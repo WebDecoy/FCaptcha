@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const detection = require('./detection');
 const { ProxyTrust } = require('./clientip');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
+const { signingSecret } = require('./config');
 
 // =============================================================================
 // PoW Challenge Store (can be extended with Redis)
@@ -20,7 +21,7 @@ const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./su
 
 class PoWChallengeStore {
   constructor(options = {}) {
-    this.secret = options.secret || 'dev-secret-change-in-production';
+    this.secret = signingSecret(options.secret);
     this.challenges = new Map();
     this.usedSolutions = new Set();
     this.expirationMs = options.expirationMs || 5 * 60 * 1000; // 5 minutes
@@ -212,7 +213,7 @@ const AUTOMATION_UA_PATTERNS = [
 
 class ScoringEngine {
   constructor(options = {}) {
-    this.secret = options.secret || 'dev-secret-change-in-production';
+    this.secret = signingSecret(options.secret);
     this.powStore = options.powStore || new PoWChallengeStore({ secret: this.secret });
     this.rateLimiter = options.rateLimiter || new RateLimiter();
     this.fingerprintStore = options.fingerprintStore || new FingerprintStore();

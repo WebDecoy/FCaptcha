@@ -89,9 +89,10 @@ is, older lines are not maintained — upgrade rather than expect a backport.
 Several ways to make a correct build insecure, documented because they are easy
 to get wrong and fail quietly:
 
-- **`FCAPTCHA_SECRET`** signs every token. Set it. The default,
-  `dev-secret-change-in-production`, is in the source and therefore public — a
-  deployment using it can have tokens minted by anyone.
+- **`FCAPTCHA_SECRET`** signs every token and is required. Servers refuse to
+  start without it or when it equals the public development key. The explicit
+  `FCAPTCHA_INSECURE_DEV_MODE=1` escape hatch exists only for local development;
+  a deployment using it can have tokens minted by anyone.
 - **`TRUSTED_PROXIES`** decides whose `X-Forwarded-For` is believed. Left
   unset behind a proxy, every visitor is attributed to the proxy and rate
   limiting collapses onto one address. Set wrong, a client can claim any IP.
