@@ -18,6 +18,7 @@ import (
 	webbotauth "github.com/WebDecoy/web-bot-auth"
 	"github.com/WebDecoy/web-bot-auth/httpsig"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/redis/go-redis/v9"
 )
 
 // ThreatCategory represents types of detected threats
@@ -82,7 +83,7 @@ type PoWChallenge struct {
 	// accepted without penalty. Sent to the client, which waits it out, and
 	// covered by Sig so it cannot be lowered on the way back.
 	MinAgeMs int64  `json:"minAgeMs"`
-	IP       string `json:"-"` // Not sent to client
+	IP       string `json:"ip"` // Stored server-side; HTTP response uses a separate DTO.
 }
 
 // PoWSolution from client
@@ -113,6 +114,7 @@ type PoWChallengeStore struct {
 	mu            sync.RWMutex
 	challenges    map[string]*PoWChallenge
 	usedSolutions *expirable.LRU[string, struct{}]
+	redis         *redis.Client
 }
 
 const (
@@ -128,6 +130,93 @@ func newPoWChallengeStore() *PoWChallengeStore {
 	// Start cleanup goroutine
 	go store.cleanupLoop()
 	return store
+}
+
+func newRedisPoWChallengeStore(client *redis.Client) *PoWChallengeStore {
+	return &PoWChallengeStore{redis: client}
+}
+
+const redisStatePrefix = "fcaptcha:v1:"
+
+func (s *PoWChallengeStore) putChallenge(challenge *PoWChallenge) error {
+	if s.redis == nil {
+		s.mu.Lock()
+		s.challenges[challenge.ID] = challenge
+		s.mu.Unlock()
+		return nil
+	}
+	payload, err := json.Marshal(challenge)
+	if err != nil {
+		return err
+	}
+	ttl := time.Until(time.UnixMilli(challenge.ExpiresAt))
+	if ttl <= 0 {
+		return fmt.Errorf("challenge already expired")
+	}
+	return s.redis.Set(context.Background(), redisStatePrefix+"pow:challenge:"+challenge.ID, payload, ttl).Err()
+}
+
+func (s *PoWChallengeStore) getChallenge(id string) (*PoWChallenge, error) {
+	if s.redis == nil {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		challenge := s.challenges[id]
+		return challenge, nil
+	}
+	payload, err := s.redis.Get(context.Background(), redisStatePrefix+"pow:challenge:"+id).Bytes()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var challenge PoWChallenge
+	if err := json.Unmarshal(payload, &challenge); err != nil {
+		return nil, err
+	}
+	return &challenge, nil
+}
+
+var claimRedisChallenge = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+if redis.call('SET', KEYS[2], '1', 'NX', 'PX', ARGV[1]) == false then return -1 end
+redis.call('DEL', KEYS[1])
+return 1
+`)
+
+// claimChallenge atomically consumes a challenge and records the winning
+// solution. This is the cross-instance replay boundary: exactly one verifier
+// may turn an issued challenge into a token.
+func (s *PoWChallengeStore) claimChallenge(challengeID, solutionKey string) (bool, string, error) {
+	if s.redis == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if _, ok := s.challenges[challengeID]; !ok {
+			return false, "challenge_not_found", nil
+		}
+		if s.usedSolutions.Contains(solutionKey) {
+			return false, "solution_already_used", nil
+		}
+		s.usedSolutions.Add(solutionKey, struct{}{})
+		delete(s.challenges, challengeID)
+		return true, "", nil
+	}
+	keys := []string{
+		redisStatePrefix + "pow:challenge:" + challengeID,
+		redisStatePrefix + "pow:spent:" + solutionKey,
+	}
+	result, err := claimRedisChallenge.Run(context.Background(), s.redis, keys, usedSolutionsTTL.Milliseconds()).Int()
+	if err != nil {
+		return false, "", err
+	}
+	switch result {
+	case 1:
+		return true, "", nil
+	case -1:
+		return false, "solution_already_used", nil
+	default:
+		return false, "challenge_not_found", nil
+	}
 }
 
 func (s *PoWChallengeStore) cleanupLoop() {
@@ -154,6 +243,10 @@ func (s *PoWChallengeStore) cleanup() {
 // replays before doing any hash verification work. The authoritative
 // test-and-set is MarkSolutionUsed.
 func (s *PoWChallengeStore) IsSolutionUsed(key string) bool {
+	if s.redis != nil {
+		exists, err := s.redis.Exists(context.Background(), redisStatePrefix+"pow:spent:"+key).Result()
+		return err == nil && exists > 0
+	}
 	return s.usedSolutions.Contains(key)
 }
 
@@ -171,6 +264,10 @@ func (s *PoWChallengeStore) MarkSolutionUsed(key string) bool {
 
 // DeleteChallenge removes a one-time challenge after it has been spent.
 func (s *PoWChallengeStore) DeleteChallenge(id string) {
+	if s.redis != nil {
+		_ = s.redis.Del(context.Background(), redisStatePrefix+"pow:challenge:"+id).Err()
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.challenges, id)
@@ -294,8 +391,19 @@ func NewScoringEngine(secretKey string) *ScoringEngine {
 
 // NewScoringEngineWithRedis creates engine with Redis backend
 func NewScoringEngineWithRedis(secretKey, redisURL string) *ScoringEngine {
-	// TODO: Implement Redis-backed storage
-	return NewScoringEngine(secretKey)
+	options, err := redis.ParseURL(redisURL)
+	if err != nil {
+		panic(fmt.Sprintf("invalid REDIS_URL: %v", err))
+	}
+	client := redis.NewClient(options)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx).Err(); err != nil {
+		panic(fmt.Sprintf("REDIS_URL is configured but unavailable: %v", err))
+	}
+	engine := NewScoringEngine(secretKey)
+	engine.powStore = newRedisPoWChallengeStore(client)
+	return engine
 }
 
 func newRateLimiter() *RateLimiter {
@@ -413,10 +521,10 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 				// payload. Revokes the pass granted above.
 				powSatisfied = false
 				detections = append(detections, DetectionResult{
-					Category:    CategoryBot,
-					Score:       0.9,
-					Confidence:  0.9,
-					Reason: "Challenge nonce mismatch (signals not bound to challenge)",
+					Category:   CategoryBot,
+					Score:      0.9,
+					Confidence: 0.9,
+					Reason:     "Challenge nonce mismatch (signals not bound to challenge)",
 					// Not dispositive, for the same reason as above: the gate
 					// already refuses the token, and a stale challenge produces
 					// this too.
@@ -453,10 +561,10 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 	} else {
 		// No PoW solution provided - hard fail
 		detections = append(detections, DetectionResult{
-			Category:    CategoryBot,
-			Score:       0.9,
-			Confidence:  0.95,
-			Reason: "No PoW solution provided",
+			Category:   CategoryBot,
+			Score:      0.9,
+			Confidence: 0.95,
+			Reason:     "No PoW solution provided",
 			// Not dispositive. The gate refuses the token; inflating the score
 			// on top of that only mislabels whoever hit a stale page.
 		})
@@ -658,10 +766,12 @@ func (e *ScoringEngine) GeneratePoWChallenge(siteKey, ip string, isDatacenter bo
 	h.Write(sigData)
 	challenge.Sig = hex.EncodeToString(h.Sum(nil))
 
-	// Store challenge
-	e.powStore.mu.Lock()
-	e.powStore.challenges[challengeID] = challenge
-	e.powStore.mu.Unlock()
+	// Store challenge. Redis failures are deliberately fail-closed: returning a
+	// challenge that another replica can never verify would create a misleading
+	// success path. The HTTP handler converts this sentinel into a 503.
+	if err := e.powStore.putChallenge(challenge); err != nil {
+		return nil
+	}
 
 	return challenge
 }
@@ -680,17 +790,17 @@ func (e *ScoringEngine) VerifyPoWSolutionFromIP(solution *PoWSolution, siteKey, 
 		return PoWVerifyResult{Valid: false, Reason: "no_solution"}
 	}
 
-	e.powStore.mu.Lock()
-	defer e.powStore.mu.Unlock()
-
-	challenge, ok := e.powStore.challenges[solution.ChallengeID]
-	if !ok {
+	challenge, err := e.powStore.getChallenge(solution.ChallengeID)
+	if err != nil {
+		return PoWVerifyResult{Valid: false, Reason: "state_unavailable"}
+	}
+	if challenge == nil {
 		return PoWVerifyResult{Valid: false, Reason: "challenge_not_found"}
 	}
 
 	now := time.Now().UnixMilli()
 	if now > challenge.ExpiresAt {
-		delete(e.powStore.challenges, solution.ChallengeID)
+		e.powStore.DeleteChallenge(solution.ChallengeID)
 		return PoWVerifyResult{Valid: false, Reason: "challenge_expired"}
 	}
 
@@ -728,18 +838,16 @@ func (e *ScoringEngine) VerifyPoWSolutionFromIP(solution *PoWSolution, siteKey, 
 		return PoWVerifyResult{Valid: false, Reason: "insufficient_difficulty"}
 	}
 
-	// Atomic claim — called under powStore.mu, so operate directly on usedSolutions
-	// without going through MarkSolutionUsed/DeleteChallenge (which re-acquire the same lock).
-	if e.powStore.usedSolutions.Contains(solutionKey) {
-		return PoWVerifyResult{Valid: false, Reason: "solution_already_used"}
+	claimed, reason, err := e.powStore.claimChallenge(solution.ChallengeID, solutionKey)
+	if err != nil {
+		return PoWVerifyResult{Valid: false, Reason: "state_unavailable"}
 	}
-	e.powStore.usedSolutions.Add(solutionKey, struct{}{})
+	if !claimed {
+		return PoWVerifyResult{Valid: false, Reason: reason}
+	}
 
 	// Calculate server-side elapsed time (un-spoofable)
 	serverElapsed := now - challenge.Timestamp
-
-	// Delete challenge (one-time use) — inline, lock already held
-	delete(e.powStore.challenges, solution.ChallengeID)
 
 	minAge := challenge.MinAgeMs
 	if minAge <= 0 {

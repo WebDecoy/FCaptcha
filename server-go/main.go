@@ -669,9 +669,9 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 		logVerdict("score", req.SiteKey, result)
 
 		resp := map[string]interface{}{
-			"success":        result.Success,
-			"score":          result.Score,
-			"token":          result.Token,
+			"success": result.Success,
+			"score":   result.Score,
+			"token":   result.Token,
 			// Echo the sanitized form, not the raw input: this is what got
 			// signed into the token, so a caller comparing the two sees the
 			// same value.
@@ -753,6 +753,10 @@ func powChallengeHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *Sit
 
 		isDatacenter := IsDatacenterIP(ip)
 		challenge := engine.GeneratePoWChallenge(siteKey, ip, isDatacenter)
+		if challenge == nil {
+			http.Error(w, `{"error":"state_unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
 
 		resp := PoWChallengeResponse{
 			ChallengeID: challenge.ID,

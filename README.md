@@ -56,10 +56,16 @@ Docker Compose (single instance):
 FCAPTCHA_SECRET=my-secret docker compose -f docker/docker-compose.yml up -d
 ```
 
-FCaptcha state is currently process-local. `REDIS_URL` is reserved for a future
-distributed-state backend and is not read by the servers yet. Run one server
-instance only: multiple replicas do not share challenges, replay protection,
-rate limits, suspicion history, or idempotency results.
+FCaptcha state is currently process-local by default. The Go server can use
+`REDIS_URL` to share PoW challenges and atomically consume them across replicas;
+it refuses to start if the configured Redis service is unavailable and returns
+503 rather than issuing an unpersisted challenge if Redis fails later.
+
+This is the first shared-state slice, not yet permission to scale the entire
+service horizontally: token replay protection, rate limits, suspicion history,
+fingerprint history, and idempotency results remain per-process, and the Node
+and Python servers do not yet use Redis. Run one replica until those stores are
+also shared.
 
 Kubernetes:
 
