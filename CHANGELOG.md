@@ -13,6 +13,20 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.34.1] — 2026-08-30
+
+### Fixed
+- **A form left open past the challenge lifetime can be solved again.** The
+  widget fetched a proof-of-work challenge when it loaded and never replaced
+  it, so a form filled in slowly — or a tab returned to later — submitted a
+  solution to a challenge the server had already expired. The server refused
+  the proof and withheld the token, while scoring the visitor as human and
+  recommending `allow`; the checkbox reported "Verification failed". The
+  failure path also kept the spent challenge, so every retry failed the same
+  way until a reload. The widget now replaces a challenge at or near its expiry
+  before solving, and lines up a fresh one after a failed attempt. Browser
+  regression tests cover all three cases.
+
 ## [1.34.0] — 2026-08-23
 
 ### Added

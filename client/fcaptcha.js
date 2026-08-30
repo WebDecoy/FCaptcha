@@ -116,6 +116,13 @@
   const TOKEN_LIFETIME_MS = 300000;
   const TOKEN_EXPIRY_MARGIN_MS = 15000;
 
+  // A PoW challenge is fetched when the widget loads and is only good until the
+  // server's expiry. Anything left sitting on the page longer than that — a
+  // contact form filled in slowly, a tab restored from the background — would
+  // otherwise submit a solution to a challenge that no longer exists and be
+  // refused, so a challenge this close to expiring is replaced before solving.
+  const CHALLENGE_REFRESH_MARGIN_MS = 15000;
+
   /**
    * Picks the best available translation for a requested tag.
    *
@@ -2505,6 +2512,15 @@
       }
     }
 
+    // Whether the held challenge is at or near its expiry. A challenge with no
+    // expiry stated is treated as good, since there is nothing to compare.
+    challengeExpired() {
+      const expiresAt = this.challenge && this.challenge.expiresAt;
+      if (!expiresAt) return false;
+
+      return Date.now() >= expiresAt - CHALLENGE_REFRESH_MARGIN_MS;
+    }
+
     _generateLocalChallenge() {
       const id = Math.random().toString(36).substr(2) + Date.now().toString(36);
       this.challenge = {
@@ -2555,8 +2571,8 @@
     async _solve(siteKey, signalsHash) {
       if (this.solving) return this.solvePromise;
 
-      // Fetch challenge if not already fetched
-      if (!this.challenge) {
+      // Fetch a challenge if there isn't one, or if the one we have is spent.
+      if (!this.challenge || this.challengeExpired()) {
         await this.fetchChallenge(siteKey);
       }
 
@@ -3164,6 +3180,13 @@
       this.label.textContent = reason;
 
       if (this.options.errorCallback) this.options.errorCallback(reason);
+
+      // The challenge that produced this attempt is spent either way — the
+      // server has seen its solution, or it refused one it no longer holds — so
+      // clicking again with the same one fails again. Line up a fresh challenge
+      // now, while the label counts down, so the retry has one to work with.
+      this.powManager.reset();
+      this._fetchChallenge();
 
       setTimeout(() => {
         this.checkbox.classList.remove('failed');
