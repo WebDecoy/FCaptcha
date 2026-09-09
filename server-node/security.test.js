@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { createScoringEngine, createMiddleware } = require('./index');
 const { FingerprintStore } = require('./fingerprint-store');
 const { TokenStore } = require('./token-store');
+const { reasonToErrorCode } = require('./siteverify');
 
 const signals = () => ({ behavioral: { totalPoints: 60, trajectoryLength: 400,
   microTremorScore: 0.5, velocityVariance: 0.5, approachPoints: 12,
@@ -33,6 +34,37 @@ test('full replay store fails closed and recovers after retention expires', () =
   assert.equal(store.markUsed('first'), false);
   now = 600001;
   assert.equal(store.markUsed('second'), true);
+});
+
+test('capacity errors are distinct from replays in token verification', () => {
+  const engine = createScoringEngine({ secret: 'test-secret', tokenStore: new TokenStore({ maxEntries: 1 }) });
+  const first = engine._generateToken('ip', 'site', 0.1);
+  const second = engine._generateToken('ip', 'site', 0.1);
+  assert.equal(engine.verifyToken(first).valid, true);
+  assert.deepEqual(engine.verifyToken(second), { valid: false, reason: 'token_store_full' });
+  assert.deepEqual(engine.verifyToken(first), { valid: false, reason: 'token_already_used' });
+  assert.equal(reasonToErrorCode('token_store_full'), 'internal-error');
+});
+
+test('issued nonces are required for both committed and legacy proofs', () => {
+  for (const committed of [false, true]) {
+    for (const nonceMode of ['correct', 'missing', 'wrong']) {
+      const engine = createScoringEngine({ secret: 'test-secret' });
+      const challenge = engine.generateChallenge('site', '203.0.113.1', { difficulty: 1, scaleByReputation: false });
+      engine.powStore.challenges.get(challenge.id).timestamp -= 2000;
+      const body = signals();
+      if (nonceMode !== 'missing') body.meta = { challengeNonce: nonceMode === 'correct' ? challenge.nonce : 'wrong' };
+      const raw = JSON.stringify(body);
+      const signalsHash = committed ? sha(raw) : null;
+      const prefix = committed ? `${challenge.prefix}:${signalsHash}` : challenge.prefix;
+      let nonce = 0;
+      while (!sha(`${prefix}:${nonce}`).startsWith('0')) nonce++;
+      const result = engine.verify(body, '203.0.113.1', 'site', 'Mozilla/5.0', headers,
+        { challengeId: challenge.id, nonce, hash: sha(`${prefix}:${nonce}`), signalsHash }, committed ? raw : null);
+      assert.equal(result.success, nonceMode === 'correct', `${committed}/${nonceMode}`);
+      assert.equal(result.detections.some((d) => d.reason.startsWith('Challenge nonce mismatch')), nonceMode !== 'correct');
+    }
+  }
 });
 
 test('widget-format proofs pass middleware and cannot be reused or altered', () => {
@@ -92,6 +124,7 @@ test('malformed public requests return errors while the server stays available',
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
     for (const path of ['/api/verify', '/api/score']) {
+      assert.equal((await fetch(base + path)).status, 404, 'GET does not run POST validation');
       for (const body of [{}, { signals: null }, { signals: [] }, { signals: { behavioral: [] } },
         { signals: {}, signalsJson: 'null', powSolution: { signalsHash: sha('null') } }]) {
         const response = await fetch(base + path, { method: 'POST',

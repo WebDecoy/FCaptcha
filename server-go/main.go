@@ -519,11 +519,6 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 			http.Error(w, "Invalid signals", http.StatusBadRequest)
 			return
 		}
-		extraDetections := []DetectionResult{}
-		if !commitmentValid {
-			req.PowSolution = nil
-			extraDetections = append(extraDetections, commitmentFailureDetection())
-		}
 
 		// Inject powTiming into signals.temporal.pow
 		if req.PowTiming != nil {
@@ -548,12 +543,7 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 		// client's click analysis is present and meaningful.
 		SetInteractionMode(signals, true)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, req.PowSolution)
-
-		// Add signal commitment detections to results
-		if len(extraDetections) > 0 {
-			result.Detections = append(extraDetections, result.Detections...)
-		}
+		result := engine.verifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, commitmentValid, req.PowSolution)
 
 		logVerdict("verify", req.SiteKey, result)
 
@@ -624,11 +614,6 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 			http.Error(w, "Invalid signals", http.StatusBadRequest)
 			return
 		}
-		scoreExtraDetections := []DetectionResult{}
-		if !commitmentValid {
-			req.PowSolution = nil
-			scoreExtraDetections = append(scoreExtraDetections, commitmentFailureDetection())
-		}
 
 		// Inject powTiming
 		if req.PowTiming != nil {
@@ -650,10 +635,7 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 		// Invisible scoring: no widget, so no click analysis in the signals.
 		SetInteractionMode(signals, false)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, req.PowSolution)
-		if len(scoreExtraDetections) > 0 {
-			result.Detections = append(scoreExtraDetections, result.Detections...)
-		}
+		result := engine.verifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, commitmentValid, req.PowSolution)
 
 		logVerdict("score", req.SiteKey, result)
 

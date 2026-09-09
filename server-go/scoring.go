@@ -493,8 +493,16 @@ func compileUAPatterns() []*regexp.Regexp {
 // request-context struct. Left positional for now so the vendored copy in
 // fcaptcha-cloud stays a straight file copy rather than a port.
 func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash, nativeJA4 string, peerTrusted bool, preDetections []DetectionResult, binding TokenBinding, powSolution ...*PoWSolution) *VerificationResult {
+	return e.verifyWithHeaders(signals, ip, siteKey, userAgent, headers, ja3Hash, nativeJA4, peerTrusted, preDetections, binding, true, powSolution...)
+}
+
+// commitmentValid is supplied only by the HTTP parser, never by signal fields.
+func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, siteKey, userAgent string, headers map[string]string, ja3Hash, nativeJA4 string, peerTrusted bool, preDetections []DetectionResult, binding TokenBinding, commitmentValid bool, powSolution ...*PoWSolution) *VerificationResult {
 	detections := make([]DetectionResult, 0, len(preDetections)+8)
 	detections = append(detections, preDetections...)
+	if !commitmentValid {
+		detections = append(detections, commitmentFailureDetection())
+	}
 
 	// Verify PoW if provided.
 	//
@@ -539,7 +547,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 				// author, in an ordinary browser.
 			})
 		} else {
-			powSatisfied = powResult.ServerElapsed >= max(baseMinAgeMs, powResult.MinAgeMs)
+			powSatisfied = commitmentValid && powResult.ServerElapsed >= max(baseMinAgeMs, powResult.MinAgeMs)
 		}
 
 		// Verify challenge nonce binding

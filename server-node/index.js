@@ -296,8 +296,13 @@ class ScoringEngine {
           reason: `Challenge submitted before the required delay for this source (${powResult.serverElapsed}ms of ${powResult.minAgeMs}ms)`
         });
       } else {
-        powSatisfied = resolved.commitmentValid &&
-          (!powSolution.signalsHash || signals.meta?.challengeNonce === powResult.nonce);
+        powSatisfied = resolved.commitmentValid;
+      }
+      // The server-issued nonce is required even for legacy, uncommitted PoW.
+      if (powResult.valid && powResult.nonce && signals.meta?.challengeNonce !== powResult.nonce) {
+        powSatisfied = false;
+        detections.push({ category: 'bot', score: 0.9, confidence: 0.9,
+          reason: 'Challenge nonce mismatch (signals not bound to challenge)' });
       }
     } else {
       detections.push({
@@ -394,7 +399,8 @@ class ScoringEngine {
       if (ip && decoded.ip_hash !== crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8)) {
         return { valid: false, reason: 'ip_mismatch' };
       }
-      if (!this.tokenStore.markUsed(sig)) return { valid: false, reason: 'token_already_used' };
+      const claim = this.tokenStore.claim(sig);
+      if (!claim.claimed) return { valid: false, reason: claim.reason };
       return {
         valid: true,
         site_key: decoded.site_key,

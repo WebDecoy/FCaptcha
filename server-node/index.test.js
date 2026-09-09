@@ -70,7 +70,7 @@ const cleanHeaders = {
   challenge.timestamp -= 2000;
   engine.powStore.challenges.get(challenge.id).timestamp -= 2000;
   const result = engine.verify(
-    cleanSignals,
+    { ...cleanSignals, meta: { challengeNonce: challenge.nonce } },
     '203.0.113.1',
     'site',
     'Mozilla/5.0',
@@ -88,7 +88,7 @@ const cleanHeaders = {
     scaleByReputation: false
   });
   const result = engine.verify(
-    cleanSignals, '198.51.100.1', 'site', 'Mozilla/5.0', cleanHeaders, solve(challenge)
+    { ...cleanSignals, meta: { challengeNonce: challenge.nonce } }, '198.51.100.1', 'site', 'Mozilla/5.0', cleanHeaders, solve(challenge)
   );
   assert.strictEqual(result.success, false, 'a different network must not spend the challenge');
   assert.strictEqual(result.reason, 'pow_not_satisfied');

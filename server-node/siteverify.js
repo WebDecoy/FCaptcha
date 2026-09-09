@@ -79,6 +79,7 @@ const ERROR_CODES = {
 const REASON_TO_ERROR_CODE = {
   expired: ERROR_CODES.TIMEOUT_OR_DUPLICATE,
   token_already_used: ERROR_CODES.TIMEOUT_OR_DUPLICATE,
+  token_store_full: ERROR_CODES.INTERNAL_ERROR,
   invalid_signature: ERROR_CODES.INVALID_RESPONSE,
   invalid_encoding: ERROR_CODES.INVALID_RESPONSE,
   invalid_json: ERROR_CODES.INVALID_RESPONSE,

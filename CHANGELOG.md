@@ -13,6 +13,33 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [Unreleased]
+
+### Security and fixes
+- Reject mismatched signal commitments and unmet challenge minimum ages outside
+  the weighted score. Go consumes a verified proof even when its signal
+  commitment fails, matching Node and Python.
+- Require the server-issued challenge nonce in npm engine signals, including
+  proofs without `signalsHash`. Missing or incorrect nonces withhold tokens and
+  produce the same diagnostic as the standalone server.
+- Prevent Node request errors from terminating the server. Request validation
+  applies only to scoring POST routes; other methods retain normal routing.
+- Make issued tokens unique and npm verification single-use. A full local Node
+  replay store reports `token_store_full` (Siteverify: `internal-error`) instead
+  of reporting an unused token as a replay.
+- Fix expired and consumed challenge reuse and clean up browser session resources.
+
+### Behavior changes
+- Invisible form protection executes a fresh verification on every submission;
+  it no longer reuses the previous 60 seconds' score and single-use token.
+- Direct npm `engine.verify()` callers receive an exception with `status: 400`
+  for malformed signal objects instead of a verification result.
+- Fingerprint cardinality uses fixed 15-minute windows, capped at 16 members
+  per bucket, rather than sliding retention.
+- Go and Python launcher access logs are off unless `FCAPTCHA_LOG_ACCESS=1`.
+- Importing the Node server exports `{ app, start }`; programmatic consumers
+  call `start()` to open a listener. CLI startup is unchanged.
+
 ## [1.34.1] — 2026-08-30
 
 ### Fixed

@@ -11,6 +11,10 @@ class TokenStore {
   }
 
   markUsed(signature) {
+    return this.claim(signature).claimed;
+  }
+
+  claim(signature) {
     const now = this.now();
     if (now >= this.nextCleanup) {
       for (const [key, expiresAt] of this.entries) {
@@ -18,9 +22,10 @@ class TokenStore {
       }
       this.nextCleanup = now + 60000;
     }
-    if (this.entries.has(signature) || this.entries.size >= this.maxEntries) return false;
+    if (this.entries.has(signature)) return { claimed: false, reason: 'token_already_used' };
+    if (this.entries.size >= this.maxEntries) return { claimed: false, reason: 'token_store_full' };
     this.entries.set(signature, now + 10 * 60 * 1000);
-    return true;
+    return { claimed: true };
   }
 }
 

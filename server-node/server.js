@@ -495,15 +495,15 @@ async function verifyToken(token, ip = null) {
       }
     }
 
-    let claimed;
+    let claim;
     try {
-      claimed = SHARED_STATE
-        ? await SHARED_STATE.claimToken(sig)
-        : tokenStore.markUsed(sig);
+      claim = SHARED_STATE
+        ? { claimed: await SHARED_STATE.claimToken(sig), reason: 'token_already_used' }
+        : tokenStore.claim(sig);
     } catch (_) {
       return { valid: false, reason: 'state_unavailable' };
     }
-    if (!claimed) return { valid: false, reason: 'token_already_used' };
+    if (!claim.claimed) return { valid: false, reason: claim.reason };
 
     // hostname/action/cdata default to '' so a token minted before they existed
     // still verifies and reports the same shape. The signature covers whatever
@@ -823,9 +823,8 @@ function validateScoringRequest(req, res, next) {
       (body.powTiming != null && !isObject(body.powTiming))) return next(invalidRequest());
   next();
 }
-app.use(['/api/verify', '/api/score'], validateScoringRequest);
 
-app.post('/api/verify', asyncRoute(async (req, res) => {
+app.post('/api/verify', validateScoringRequest, asyncRoute(async (req, res) => {
   const { siteKey: rawSiteKey, signals, powSolution, signalsJson, powTiming, action, cdata } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
   // Bound the state an unvalidated siteKey can allocate (limits.js).
@@ -847,7 +846,7 @@ app.post('/api/verify', asyncRoute(async (req, res) => {
   res.json(result);
 }));
 
-app.post('/api/score', asyncRoute(async (req, res) => {
+app.post('/api/score', validateScoringRequest, asyncRoute(async (req, res) => {
   const { siteKey: rawSiteKey, signals, action, cdata, powSolution, signalsJson, powTiming } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
   const siteKey = await normalizeSiteKey(rawSiteKey, ip);
