@@ -6,6 +6,8 @@ import secrets
 import time
 
 import redis
+from redis.backoff import NoBackoff
+from redis.retry import Retry
 
 PREFIX = "fcaptcha:v1:"
 POW_TTL_MS = 300_000
@@ -36,9 +38,21 @@ redis.call('SADD', KEYS[1], ARGV[1]); redis.call('PEXPIRE', KEYS[1], ARGV[3]); r
 """
 
 
+RECORD_FINGERPRINT = """
+if redis.call('SCARD', KEYS[2]) >= 16 and redis.call('SISMEMBER', KEYS[2], ARGV[2]) == 0 then return 0 end
+if redis.call('SCARD', KEYS[1]) < 16 then redis.call('SADD', KEYS[1], ARGV[1]) end
+if redis.call('SCARD', KEYS[2]) < 16 then redis.call('SADD', KEYS[2], ARGV[2]) end
+for i = 1, 2 do
+  if redis.call('PTTL', KEYS[i]) < 0 then redis.call('PEXPIRE', KEYS[i], ARGV[3]) end
+end
+return 1
+"""
+
+
 class RedisState:
     def __init__(self, url: str, client=None):
-        self.client = client or redis.Redis.from_url(url, decode_responses=True)
+        self.client = client or redis.Redis.from_url(url, decode_responses=True,
+            socket_connect_timeout=2, socket_timeout=2, retry=Retry(NoBackoff(), 0))
         self.client.ping()
 
     @staticmethod
@@ -112,9 +126,8 @@ class RedisState:
     def record_fingerprint(self, fp: str, ip: str, site_key: str) -> None:
         fp_key = self.opaque("fingerprint:ips", f"{site_key}|{fp}")
         ip_key = self.opaque("fingerprint:fps", ip)
-        with self.client.pipeline(transaction=True) as p:
-            p.sadd(fp_key, self.opaque("value:ip", ip)).pexpire(fp_key, DETECTION_TTL_MS)
-            p.sadd(ip_key, self.opaque("value:fp", fp)).pexpire(ip_key, DETECTION_TTL_MS).execute()
+        self.client.eval(RECORD_FINGERPRINT, 2, fp_key, ip_key,
+            self.opaque("value:ip", ip), self.opaque("value:fp", fp), DETECTION_TTL_MS)
 
     def ip_fingerprint_count(self, ip: str) -> int:
         return int(self.client.scard(self.opaque("fingerprint:fps", ip)))

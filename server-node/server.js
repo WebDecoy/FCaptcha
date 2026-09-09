@@ -16,6 +16,9 @@ const { signingSecretFromEnv } = require('./config');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 const { detectInputForensics } = require('./inputforensics');
 const { RedisState } = require('./redis-state');
+const { FingerprintStore } = require('./fingerprint-store');
+const { TokenStore } = require('./token-store');
+const { resolveSignals, isObject, invalidRequest } = require('./protocol');
 const {
   HostnameAllowlist,
   IdempotencyStore,
@@ -283,7 +286,8 @@ const powChallengeStore = {
     }
 
     // Calculate server-side elapsed time (un-spoofable)
-    const serverElapsed = Date.now() - challenge.createdAt;
+    // timestamp is shared by all Redis writers; createdAt was Node-only.
+    const serverElapsed = Date.now() - challenge.timestamp;
 
     return {
       valid: true,
@@ -329,72 +333,22 @@ const rateLimiter = {
   }
 };
 
+const localFingerprintStore = new FingerprintStore();
 const fingerprintStore = {
-  fingerprints: new BoundedMap(),
-  ipFingerprints: new BoundedMap(),
-
   async record(fp, ip, siteKey) {
-    if (SHARED_STATE) {
-      try { await SHARED_STATE.recordFingerprint(fp, ip, siteKey); } catch (_) { /* reads fail closed */ }
-      return;
-    }
-    const key = `${siteKey}:${fp}`;
-
-    if (!this.fingerprints.has(key)) {
-      this.fingerprints.set(key, { count: 0, ips: new Set() });
-    }
-    const data = this.fingerprints.get(key);
-    data.count++;
-    data.ips.add(ip);
-
-    if (!this.ipFingerprints.has(ip)) {
-      this.ipFingerprints.set(ip, new Set());
-    }
-    this.ipFingerprints.get(ip).add(fp);
+    if (!SHARED_STATE) return localFingerprintStore.record(fp, ip, siteKey);
+    try { await SHARED_STATE.recordFingerprint(fp, ip, siteKey); } catch (_) { /* reads fail closed */ }
   },
-
   async getIpFpCount(ip) {
-    if (SHARED_STATE) {
-      try { return await SHARED_STATE.ipFingerprintCount(ip); } catch (_) { return 100; }
-    }
-    return this.ipFingerprints.get(ip)?.size || 0;
+    if (!SHARED_STATE) return localFingerprintStore.getIpFpCount(ip);
+    try { return await SHARED_STATE.ipFingerprintCount(ip); } catch (_) { return 100; }
   },
-
   async getFpIpCount(fp, siteKey) {
-    if (SHARED_STATE) {
-      try { return await SHARED_STATE.fingerprintIpCount(fp, siteKey); } catch (_) { return 100; }
-    }
-    const key = `${siteKey}:${fp}`;
-    return this.fingerprints.get(key)?.ips.size || 0;
+    if (!SHARED_STATE) return localFingerprintStore.getFpIpCount(fp, siteKey);
+    try { return await SHARED_STATE.fingerprintIpCount(fp, siteKey); } catch (_) { return 100; }
   }
 };
-
-// Token Store - prevents token replay attacks
-const tokenStore = {
-  usedTokens: new BoundedSet(),
-
-  // Mark a token as used (returns false if already used)
-  markUsed(tokenSig) {
-    if (this.usedTokens.has(tokenSig)) {
-      return false; // Already used
-    }
-    this.usedTokens.add(tokenSig);
-
-    // Cleanup old tokens periodically (tokens expire after 5 min anyway)
-    if (Math.random() < 0.1) this._cleanup();
-    return true;
-  },
-
-  isUsed(tokenSig) {
-    return this.usedTokens.has(tokenSig);
-  },
-
-  _cleanup() {
-    // In production with Redis, use TTL instead. In memory usedTokens is a
-    // BoundedSet, so it evicts its oldest entries rather than clearing wholesale
-    // — clearing would let an attacker who forced the threshold replay a token.
-  }
-};
+const tokenStore = new TokenStore();
 
 // Detection patterns, the pure detectors and the scoring aggregation now
 // live in engine.js, shared with the npm library entry point (index.js).
@@ -499,6 +453,7 @@ function generateToken(ip, siteKey, score, binding = {}) {
   const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8);
   const data = {
     site_key: siteKey,
+    jti: crypto.randomBytes(16).toString('hex'),
     timestamp: Math.floor(Date.now() / 1000),
     score: Math.round(score * 1000) / 1000,
     ip_hash: ipHash,
@@ -540,15 +495,15 @@ async function verifyToken(token, ip = null) {
       }
     }
 
-    let claimed;
+    let claim;
     try {
-      claimed = SHARED_STATE
-        ? await SHARED_STATE.claimToken(sig)
-        : tokenStore.markUsed(sig);
+      claim = SHARED_STATE
+        ? { claimed: await SHARED_STATE.claimToken(sig), reason: 'token_already_used' }
+        : tokenStore.claim(sig);
     } catch (_) {
       return { valid: false, reason: 'state_unavailable' };
     }
-    if (!claimed) return { valid: false, reason: 'token_already_used' };
+    if (!claim.claimed) return { valid: false, reason: claim.reason };
 
     // hostname/action/cdata default to '' so a token minted before they existed
     // still verifies and reports the same shape. The signature covers whatever
@@ -588,24 +543,12 @@ async function verifyWebBotAuth(req) {
 async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja3Hash = null, powSolution = null, signalsJson = null, powTiming = null, preDetections = [], opts = {}) {
   const detections = Array.isArray(preDetections) ? [...preDetections] : [];
 
-  // Verify signal commitment (signalsJson hash must match powSolution.signalsHash)
   const clientSignalsHash = powSolution?.signalsHash || null;
-  if (signalsJson && clientSignalsHash) {
-    const computedHash = crypto.createHash('sha256').update(signalsJson).digest('hex');
-    if (computedHash !== clientSignalsHash) {
-      detections.push({
-        category: 'bot',
-        score: 0.95,
-        confidence: 0.95,
-        reason: 'Signals tampered after PoW (signalsHash mismatch)'
-      });
-    }
-    // Use signalsJson as the canonical signals source
-    try {
-      signals = JSON.parse(signalsJson);
-    } catch (e) {
-      // Fall back to parsed signals if signalsJson is invalid
-    }
+  const resolved = resolveSignals(signals, signalsJson, clientSignalsHash);
+  signals = resolved.signals;
+  if (!resolved.commitmentValid) {
+    detections.push({ category: 'bot', score: 0.95, confidence: 0.95,
+      reason: 'Signals tampered after PoW (signalsHash mismatch)' });
   }
 
   // Inject powTiming into signals.temporal.pow for detection functions
@@ -660,7 +603,8 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
         // replays a solution. All ordinary things that happen to real people.
       });
     } else {
-      powSatisfied = true;
+      powSatisfied = resolved.commitmentValid &&
+        powVerification.serverElapsed >= Math.max(BASE_MIN_AGE_MS, powVerification.minAgeMs || 0);
     }
 
     // Verify challenge nonce binding
@@ -692,9 +636,8 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
         reason: `Challenge solved too fast (${powVerification.serverElapsed}ms server-side)`
       });
     } else if (powValid && powVerification.serverElapsed < (powVerification.minAgeMs || BASE_MIN_AGE_MS)) {
-      // Between the baseline and this source's own elevated floor is weaker
-      // evidence: a client predating adaptive cost, or one served from a stale
-      // cache, does not know to wait. It contributes rather than deciding.
+      // Keep the diagnostic weaker than a baseline violation; token issuance
+      // independently requires the full advertised delay.
       detections.push({
         category: 'bot',
         score: 0.5,
@@ -870,7 +813,18 @@ function collectHeaders(req) {
   return headers;
 }
 
-app.post('/api/verify', async (req, res) => {
+const asyncRoute = (handler) => (req, res, next) => Promise.resolve().then(() => handler(req, res)).catch(next);
+
+function validateScoringRequest(req, res, next) {
+  const body = req.body;
+  if (!isObject(body) || !isObject(body.signals) ||
+      (body.siteKey != null && typeof body.siteKey !== 'string') ||
+      (body.powSolution != null && !isObject(body.powSolution)) ||
+      (body.powTiming != null && !isObject(body.powTiming))) return next(invalidRequest());
+  next();
+}
+
+app.post('/api/verify', validateScoringRequest, asyncRoute(async (req, res) => {
   const { siteKey: rawSiteKey, signals, powSolution, signalsJson, powTiming, action, cdata } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
   // Bound the state an unvalidated siteKey can allocate (limits.js).
@@ -890,9 +844,9 @@ app.post('/api/verify', async (req, res) => {
   const result = await runVerification(signals, ip, siteKey, userAgent, headers, ja3Hash, powSolution, signalsJson, powTiming, webBotAuth, { peerTrusted, action, cdata, widgetInteraction: true });
   logVerdict('verify', siteKey, result);
   res.json(result);
-});
+}));
 
-app.post('/api/score', async (req, res) => {
+app.post('/api/score', validateScoringRequest, asyncRoute(async (req, res) => {
   const { siteKey: rawSiteKey, signals, action, cdata, powSolution, signalsJson, powTiming } = req.body;
   const ip = PROXY_TRUST.clientIP(req);
   const siteKey = await normalizeSiteKey(rawSiteKey, ip);
@@ -924,9 +878,9 @@ app.post('/api/score', async (req, res) => {
     // needs to know which precondition failed.
     ...(result.reason ? { reason: result.reason } : {})
   });
-});
+}));
 
-app.post('/api/token/verify', async (req, res) => {
+app.post('/api/token/verify', asyncRoute(async (req, res) => {
   const { token, secret, remoteip } = req.body;
 
   // The secret gate. This endpoint is the boundary between "a browser finished a
@@ -946,7 +900,7 @@ app.post('/api/token/verify', async (req, res) => {
   // received the token. Bind only when that trusted backend explicitly supplies
   // the visitor address; using the caller socket here compares unrelated hosts.
   res.json(await verifyToken(token, typeof remoteip === 'string' && remoteip ? remoteip : null));
-});
+}));
 
 // Turnstile / reCAPTCHA / hCaptcha drop-in compatibility.
 //
@@ -968,12 +922,13 @@ async function siteverifyHandler(req, res) {
   );
 }
 
-app.post('/turnstile/v0/siteverify', siteverifyHandler);
-app.post('/recaptcha/api/siteverify', siteverifyHandler);
-app.post('/siteverify', siteverifyHandler);
+app.post('/turnstile/v0/siteverify', asyncRoute(siteverifyHandler));
+app.post('/recaptcha/api/siteverify', asyncRoute(siteverifyHandler));
+app.post('/siteverify', asyncRoute(siteverifyHandler));
 
 // PoW Challenge endpoint - client fetches this on page load
-app.get('/api/pow/challenge', async (req, res) => {
+app.get('/api/pow/challenge', asyncRoute(async (req, res) => {
+  if (req.query.siteKey != null && typeof req.query.siteKey !== 'string') throw invalidRequest();
   const ip = PROXY_TRUST.clientIP(req);
   const siteKey = await normalizeSiteKey(req.query.siteKey, ip);
 
@@ -1007,7 +962,7 @@ app.get('/api/pow/challenge', async (req, res) => {
     // wait instead of as a worse score.
     minAgeMs: challenge.minAgeMs
   });
-});
+}));
 
 // Legacy challenge endpoint for backwards compatibility
 app.get('/api/challenge', (req, res) => {
@@ -1026,7 +981,8 @@ app.use((err, req, res, next) => {
   if (err && (err.status === 413 || err.type === 'entity.too.large')) {
     return res.status(413).json({ error: 'request_too_large' });
   }
-  return next(err);
+  const status = err && err.status === 400 ? 400 : 500;
+  res.status(status).json({ error: status === 400 ? 'invalid_request' : 'internal_error' });
 });
 
 // =============================================================================
@@ -1035,15 +991,19 @@ app.use((err, req, res, next) => {
 
 async function start() {
   if (SHARED_STATE) await SHARED_STATE.connect();
-  app.listen(PORT, () => {
-    console.log(`FCaptcha server running on port ${PORT}`);
+  const server = app.listen(PORT, () => {
+    console.log(`FCaptcha server running on port ${server.address().port}`);
     console.log(`Trusted proxies: ${PROXY_TRUST.describe()}`);
     console.log(`Site keys: ${SITE_KEYS.describe()}`);
     console.log(`Shared state: ${SHARED_STATE ? 'Redis (PoW)' : 'in-memory'}`);
   });
+  return server;
 }
 
-start().catch((err) => {
-  console.error(`FCaptcha failed to start: ${err.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  start().catch((err) => {
+    console.error(`FCaptcha failed to start: ${err.message}`);
+    process.exit(1);
+  });
+}
+module.exports = { app, start };

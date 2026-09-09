@@ -11,6 +11,8 @@ import hashlib
 import base64
 import json
 import re
+import secrets
+from functools import wraps
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from enum import Enum
@@ -20,9 +22,10 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from clientip import ProxyTrust, network_identity
-from sitekeys import SiteKeyGuard, OVERFLOW_SITE_KEY
+from sitekeys import SiteKeyGuard, OVERFLOW_SITE_KEY, BoundedLRU
 from redis_state import RedisState
 from siteverify import (
     HostnameAllowlist,
@@ -352,9 +355,27 @@ class RateLimiter:
 
 
 class FingerprintStore:
-    def __init__(self):
-        self.fingerprints: Dict[str, Dict] = {}
-        self.ip_fingerprints: Dict[str, set] = defaultdict(set)
+    MAX_MEMBERS = 16
+    TTL = 15 * 60
+
+    def __init__(self, max_entries=100_000):
+        self.fingerprints = BoundedLRU(max_entries)
+        self.ip_fingerprints = BoundedLRU(max_entries)
+
+    def _get(self, store, key):
+        entry = store.get(key)
+        if entry and entry["expires_at"] <= time.time():
+            store.delete(key)
+            return None
+        return entry
+
+    def _add(self, store, key, value):
+        entry = self._get(store, key)
+        if entry is None:
+            entry = {"values": set(), "expires_at": time.time() + self.TTL}
+            store.set(key, entry)
+        if len(entry["values"]) < self.MAX_MEMBERS:
+            entry["values"].add(value)
 
     def record(self, fp: str, ip: str, site_key: str):
         if SHARED_STATE:
@@ -363,12 +384,11 @@ class FingerprintStore:
             except Exception:
                 pass
             return
-        key = f"{site_key}:{fp}"
-        if key not in self.fingerprints:
-            self.fingerprints[key] = {"count": 0, "ips": set()}
-        self.fingerprints[key]["count"] += 1
-        self.fingerprints[key]["ips"].add(ip)
-        self.ip_fingerprints[ip].add(fp)
+        entry = self._get(self.ip_fingerprints, ip)
+        if entry and len(entry["values"]) >= self.MAX_MEMBERS and fp not in entry["values"]:
+            return
+        self._add(self.ip_fingerprints, ip, fp)
+        self._add(self.fingerprints, f"{site_key}:{fp}", ip)
 
     def get_ip_fp_count(self, ip: str) -> int:
         if SHARED_STATE:
@@ -376,7 +396,8 @@ class FingerprintStore:
                 return SHARED_STATE.ip_fingerprint_count(ip)
             except Exception:
                 return 100
-        return len(self.ip_fingerprints.get(ip, set()))
+        entry = self._get(self.ip_fingerprints, ip)
+        return len(entry["values"]) if entry else 0
 
     def get_fp_ip_count(self, fp: str, site_key: str) -> int:
         if SHARED_STATE:
@@ -384,8 +405,8 @@ class FingerprintStore:
                 return SHARED_STATE.fingerprint_ip_count(fp, site_key)
             except Exception:
                 return 100
-        key = f"{site_key}:{fp}"
-        return len(self.fingerprints.get(key, {}).get("ips", set()))
+        entry = self._get(self.fingerprints, f"{site_key}:{fp}")
+        return len(entry["values"]) if entry else 0
 
 
 class PoWChallengeStore:
@@ -1609,6 +1630,7 @@ def generate_token(
     ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:8]
     data = {
         "site_key": site_key,
+        "jti": secrets.token_hex(16),
         "timestamp": int(time.time()),
         "score": round(score, 3),
         "ip_hash": ip_hash,
@@ -1705,20 +1727,20 @@ def run_verification(
 
     detections = []
 
-    # Verify signal commitment (signalsJson hash must match powSolution.signalsHash)
     client_signals_hash = pow_solution.signalsHash if pow_solution else None
-    if signals_json and client_signals_hash:
-        computed_hash = hashlib.sha256(signals_json.encode()).hexdigest()
-        if computed_hash != client_signals_hash:
-            detections.append(Detection(
-                ThreatCategory.BOT, 0.95, 0.95,
-                "Signals tampered after PoW (signalsHash mismatch)"
-            ))
-        # Use signalsJson as the canonical signals source
-        try:
-            signals = json.loads(signals_json)
-        except json.JSONDecodeError:
-            pass  # Fall back to parsed signals
+    commitment_valid = True
+    if client_signals_hash:
+        commitment_valid = isinstance(signals_json, str) and hashlib.sha256(signals_json.encode()).hexdigest() == client_signals_hash
+        if signals_json:
+            try:
+                signals = json.loads(signals_json)
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Invalid signals")
+        if not commitment_valid:
+            detections.append(Detection(ThreatCategory.BOT, 0.95, 0.95,
+                "Signals tampered after PoW (signalsHash mismatch)"))
+    if not isinstance(signals, dict):
+        raise HTTPException(status_code=400, detail="Invalid signals")
 
     # Inject powTiming into signals.temporal.pow for detection functions
     if pow_timing:
@@ -1764,7 +1786,7 @@ def run_verification(
                 # the outstanding ones, and a double-click replays a solution.
             ))
         else:
-            pow_satisfied = True
+            pow_satisfied = commitment_valid and pow_result["serverElapsed"] >= max(BASE_MIN_AGE_MS, pow_result.get("minAgeMs") or BASE_MIN_AGE_MS)
 
         # Verify challenge nonce binding
         if pow_result["valid"] and pow_result.get("nonce"):
@@ -1793,10 +1815,8 @@ def run_verification(
                     f"Challenge solved too fast ({elapsed}ms server-side)"
                 ))
             elif elapsed < min_age:
-                # Between the baseline and this source's own elevated floor is
-                # weaker evidence: a client predating adaptive cost, or one
-                # served from a stale cache, does not know to wait. It
-                # contributes rather than deciding.
+                # Keep the diagnostic weaker than a baseline violation; token
+                # issuance independently requires the full advertised delay.
                 detections.append(Detection(
                     ThreatCategory.BOT, 0.5, 0.5,
                     f"Challenge submitted before the required delay for this "
@@ -1988,8 +2008,22 @@ def collect_headers(request: Request) -> Dict[str, str]:
     }
 
 
+async def run_stateful(fn, *args, **kwargs):
+    if SHARED_STATE:
+        return await run_in_threadpool(fn, *args, **kwargs)
+    return fn(*args, **kwargs)
+
+
+def stateful_route(fn):
+    @wraps(fn)
+    async def route(*args, **kwargs):
+        return await run_stateful(fn, *args, **kwargs)
+    return route
+
+
 @app.post("/api/verify")
-async def verify(req: VerifyRequest, request: Request):
+@stateful_route
+def verify(req: VerifyRequest, request: Request):
     ip = PROXY_TRUST.client_ip(request)
     # Bound the state an unvalidated site_key can allocate (sitekeys.py).
     req.siteKey = normalize_site_key(req.siteKey, ip)
@@ -2007,7 +2041,8 @@ async def verify(req: VerifyRequest, request: Request):
 
 
 @app.post("/api/score")
-async def score(req: ScoreRequest, request: Request):
+@stateful_route
+def score(req: ScoreRequest, request: Request):
     ip = PROXY_TRUST.client_ip(request)
     # Bound the state an unvalidated site_key can allocate (sitekeys.py).
     req.siteKey = normalize_site_key(req.siteKey, ip)
@@ -2034,7 +2069,8 @@ async def score(req: ScoreRequest, request: Request):
 
 
 @app.post("/api/token/verify")
-async def token_verify(req: TokenVerifyRequest, request: Request):
+@stateful_route
+def token_verify(req: TokenVerifyRequest, request: Request):
     # The secret gate. This endpoint is the boundary between "a browser finished
     # a challenge" and "my backend believes it", so it is server-to-server and
     # needs a credential - without one, anyone who can reach the host can spend a
@@ -2078,7 +2114,7 @@ async def _read_siteverify_body(request: Request) -> Any:
 
 async def _siteverify_route(request: Request):
     body = await _read_siteverify_body(request)
-    return siteverify(
+    return await run_stateful(siteverify,
         body=body,
         # Bind to this server's token store, so replay state is shared with the
         # native endpoint rather than kept in a parallel universe.
@@ -2095,7 +2131,8 @@ app.post("/siteverify")(_siteverify_route)
 
 
 @app.get("/api/pow/challenge")
-async def pow_challenge(request: Request, siteKey: str = "default"):
+@stateful_route
+def pow_challenge(request: Request, siteKey: str = "default"):
     from detection import is_datacenter_ip
 
     ip = PROXY_TRUST.client_ip(request)
@@ -2145,4 +2182,5 @@ if __name__ == "__main__":
     #
     # Running uvicorn directly? Pass --no-proxy-headers. Under gunicorn, set
     # forwarded_allow_ips to nothing. See INSTALLATION.md.
-    uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=False)
+    uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=False,
+        access_log=_env_flag("FCAPTCHA_LOG_ACCESS"))

@@ -269,7 +269,9 @@ func main() {
 	// address to the datacenter, Tor/VPN and rate-limit checks and leave no
 	// un-forged source to fall back on. ProxyTrust.ClientIP does the same job
 	// gated on the peer.
-	r.Use(middleware.Logger)
+	if envFlagEnabled("FCAPTCHA_LOG_ACCESS") {
+		r.Use(middleware.Logger)
+	}
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(limitRequestBody)
@@ -512,29 +514,10 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 		// TLS fingerprint would just claim a stock Chrome one.
 		ja3Hash := trust.TrustedHeader(r, "X-JA3-Hash")
 
-		// Verify signal commitment
-		signals := req.Signals
-		clientSignalsHash := ""
-		if req.PowSolution != nil {
-			clientSignalsHash = req.PowSolution.SignalsHash
-		}
-		extraDetections := make([]DetectionResult, 0)
-		if req.SignalsJson != "" && clientSignalsHash != "" {
-			computedHash := sha256.Sum256([]byte(req.SignalsJson))
-			computedHashHex := hex.EncodeToString(computedHash[:])
-			if computedHashHex != clientSignalsHash {
-				extraDetections = append(extraDetections, DetectionResult{
-					Category:   CategoryBot,
-					Score:      0.95,
-					Confidence: 0.95,
-					Reason:     "Signals tampered after PoW (signalsHash mismatch)",
-				})
-			}
-			// Use signalsJson as the canonical signals source
-			var parsed map[string]interface{}
-			if err := json.Unmarshal([]byte(req.SignalsJson), &parsed); err == nil {
-				signals = parsed
-			}
+		signals, commitmentValid, err := resolveCommittedSignals(req.Signals, req.SignalsJson, req.PowSolution)
+		if err != nil {
+			http.Error(w, "Invalid signals", http.StatusBadRequest)
+			return
 		}
 
 		// Inject powTiming into signals.temporal.pow
@@ -560,12 +543,7 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 		// client's click analysis is present and meaningful.
 		SetInteractionMode(signals, true)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, req.PowSolution)
-
-		// Add signal commitment detections to results
-		if len(extraDetections) > 0 {
-			result.Detections = append(extraDetections, result.Detections...)
-		}
+		result := engine.verifyWithHeaders(signals, ip, req.SiteKey, userAgent, headers, ja3Hash, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, commitmentValid, req.PowSolution)
 
 		logVerdict("verify", req.SiteKey, result)
 
@@ -631,28 +609,10 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 		}
 		ja3 := trust.TrustedHeader(r, "X-JA3-Hash")
 
-		// Verify signal commitment
-		signals := req.Signals
-		clientSigHash := ""
-		if req.PowSolution != nil {
-			clientSigHash = req.PowSolution.SignalsHash
-		}
-		scoreExtraDetections := make([]DetectionResult, 0)
-		if req.SignalsJson != "" && clientSigHash != "" {
-			cHash := sha256.Sum256([]byte(req.SignalsJson))
-			cHashHex := hex.EncodeToString(cHash[:])
-			if cHashHex != clientSigHash {
-				scoreExtraDetections = append(scoreExtraDetections, DetectionResult{
-					Category:   CategoryBot,
-					Score:      0.95,
-					Confidence: 0.95,
-					Reason:     "Signals tampered after PoW (signalsHash mismatch)",
-				})
-			}
-			var parsed map[string]interface{}
-			if err := json.Unmarshal([]byte(req.SignalsJson), &parsed); err == nil {
-				signals = parsed
-			}
+		signals, commitmentValid, err := resolveCommittedSignals(req.Signals, req.SignalsJson, req.PowSolution)
+		if err != nil {
+			http.Error(w, "Invalid signals", http.StatusBadRequest)
+			return
 		}
 
 		// Inject powTiming
@@ -675,10 +635,7 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 		// Invisible scoring: no widget, so no click analysis in the signals.
 		SetInteractionMode(signals, false)
 
-		result := engine.VerifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, req.PowSolution)
-		if len(scoreExtraDetections) > 0 {
-			result.Detections = append(scoreExtraDetections, result.Detections...)
-		}
+		result := engine.verifyWithHeaders(signals, ip, req.SiteKey, userAgent, scoreHeaders, ja3, ja4s.Lookup(r.RemoteAddr), peerTrusted, webBotAuth, TokenBinding{Action: req.Action, CData: req.CData}, commitmentValid, req.PowSolution)
 
 		logVerdict("score", req.SiteKey, result)
 
@@ -807,4 +764,29 @@ func challengeHandler(engine *ScoringEngine) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	}
+}
+
+// Resolve the exact committed bytes before injecting server-derived signals.
+func resolveCommittedSignals(signals map[string]interface{}, raw string, proof *PoWSolution) (map[string]interface{}, bool, error) {
+	valid := true
+	if proof != nil && proof.SignalsHash != "" {
+		hash := sha256.Sum256([]byte(raw))
+		valid = raw != "" && hex.EncodeToString(hash[:]) == proof.SignalsHash
+		if raw != "" {
+			var parsed map[string]interface{}
+			if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+				return nil, false, err
+			}
+			signals = parsed
+		}
+	}
+	if signals == nil {
+		return nil, false, fmt.Errorf("signals must be an object")
+	}
+	return signals, valid, nil
+}
+
+func commitmentFailureDetection() DetectionResult {
+	return DetectionResult{Category: CategoryBot, Score: 0.95, Confidence: 0.95,
+		Reason: "Signals tampered after PoW (signalsHash mismatch)"}
 }

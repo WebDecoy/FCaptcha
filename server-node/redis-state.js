@@ -38,6 +38,16 @@ redis.call('PEXPIRE', KEYS[1], ARGV[3])
 return 1
 `;
 
+const RECORD_FINGERPRINT = `
+if redis.call('SCARD', KEYS[2]) >= 16 and redis.call('SISMEMBER', KEYS[2], ARGV[2]) == 0 then return 0 end
+if redis.call('SCARD', KEYS[1]) < 16 then redis.call('SADD', KEYS[1], ARGV[1]) end
+if redis.call('SCARD', KEYS[2]) < 16 then redis.call('SADD', KEYS[2], ARGV[2]) end
+for i = 1, 2 do
+  if redis.call('PTTL', KEYS[i]) < 0 then redis.call('PEXPIRE', KEYS[i], ARGV[3]) end
+end
+return 1
+`;
+
 class RedisState {
   constructor(url, client = null) {
     this.client = client || createClient({ url });
@@ -148,10 +158,10 @@ class RedisState {
   async recordFingerprint(fingerprint, ip, siteKey) {
     const fpKey = this.opaqueKey('fingerprint:ips', `${siteKey}|${fingerprint}`);
     const ipKey = this.opaqueKey('fingerprint:fps', ip);
-    await this.client.multi()
-      .sAdd(fpKey, this.opaqueKey('value:ip', ip)).pExpire(fpKey, DETECTION_TTL_MS)
-      .sAdd(ipKey, this.opaqueKey('value:fp', fingerprint)).pExpire(ipKey, DETECTION_TTL_MS)
-      .exec();
+    await this.client.eval(RECORD_FINGERPRINT, {
+      keys: [fpKey, ipKey],
+      arguments: [this.opaqueKey('value:ip', ip), this.opaqueKey('value:fp', fingerprint), String(DETECTION_TTL_MS)]
+    });
   }
 
   async ipFingerprintCount(ip) {

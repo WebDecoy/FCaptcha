@@ -6,7 +6,7 @@
  * Usage:
  *   const fcaptcha = require('@webdecoy/fcaptcha');
  *   const engine = fcaptcha.createScoringEngine({ secret: 'your-secret' });
- *   const result = engine.verify(signals, ip, siteKey, userAgent, headers, powSolution);
+ *   const result = engine.verify(signals, ip, siteKey, userAgent, headers, powSolution, signalsJson, powTiming);
  */
 
 const crypto = require('crypto');
@@ -14,6 +14,10 @@ const detection = require('./detection');
 const { ProxyTrust, networkIdentity } = require('./clientip');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 const { signingSecret } = require('./config');
+const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
+const { FingerprintStore } = require('./fingerprint-store');
+const { TokenStore } = require('./token-store');
+const { resolveSignals } = require('./protocol');
 
 // =============================================================================
 // PoW Challenge Store (can be extended with Redis)
@@ -22,8 +26,8 @@ const { signingSecret } = require('./config');
 class PoWChallengeStore {
   constructor(options = {}) {
     this.secret = signingSecret(options.secret);
-    this.challenges = new Map();
-    this.usedSolutions = new Set();
+    this.challenges = new BoundedMap();
+    this.usedSolutions = new BoundedSet();
     this.expirationMs = options.expirationMs || 5 * 60 * 1000; // 5 minutes
   }
 
@@ -41,6 +45,7 @@ class PoWChallengeStore {
       // How long the client must hold this challenge before submitting a
       // solution. Inside the signed payload so it cannot be talked down.
       minAgeMs,
+      nonce: crypto.randomBytes(16).toString('hex'),
       prefix: `${challengeId}:${timestamp}:${difficulty}`
     };
 
@@ -64,7 +69,7 @@ class PoWChallengeStore {
     return challengeData;
   }
 
-  verify(challengeId, nonce, hash, siteKey, ip) {
+  verify(challengeId, nonce, hash, siteKey, ip, signalsHash = null) {
     const challenge = this.challenges.get(challengeId);
 
     if (!challenge) {
@@ -91,7 +96,7 @@ class PoWChallengeStore {
     }
 
     // Verify the hash
-    const input = `${challenge.prefix}:${nonce}`;
+    const input = signalsHash ? `${challenge.prefix}:${signalsHash}:${nonce}` : `${challenge.prefix}:${nonce}`;
     const expectedHash = crypto.createHash('sha256').update(input).digest('hex');
 
     if (hash !== expectedHash) {
@@ -111,6 +116,7 @@ class PoWChallengeStore {
     return {
       valid: true,
       difficulty: challenge.difficulty,
+      nonce: challenge.nonce,
       serverElapsed: Date.now() - challenge.timestamp,
       // Fall back for challenges issued before adaptive cost existed.
       minAgeMs: challenge.minAgeMs || BASE_MIN_AGE_MS
@@ -124,9 +130,6 @@ class PoWChallengeStore {
         this.challenges.delete(id);
       }
     }
-    if (this.usedSolutions.size > 10000) {
-      this.usedSolutions.clear();
-    }
   }
 }
 
@@ -136,7 +139,7 @@ class PoWChallengeStore {
 
 class RateLimiter {
   constructor() {
-    this.requests = new Map();
+    this.requests = new BoundedMap();
   }
 
   check(key, windowSeconds = 60, maxRequests = 10) {
@@ -154,42 +157,6 @@ class RateLimiter {
     timestamps.push(now);
     this.requests.set(key, timestamps);
     return [false, count + 1];
-  }
-}
-
-// =============================================================================
-// Fingerprint Store
-// =============================================================================
-
-class FingerprintStore {
-  constructor() {
-    this.fingerprints = new Map();
-    this.ipFingerprints = new Map();
-  }
-
-  record(fp, ip, siteKey) {
-    const key = `${siteKey}:${fp}`;
-
-    if (!this.fingerprints.has(key)) {
-      this.fingerprints.set(key, { count: 0, ips: new Set() });
-    }
-    const data = this.fingerprints.get(key);
-    data.count++;
-    data.ips.add(ip);
-
-    if (!this.ipFingerprints.has(ip)) {
-      this.ipFingerprints.set(ip, new Set());
-    }
-    this.ipFingerprints.get(ip).add(fp);
-  }
-
-  getIpFpCount(ip) {
-    return this.ipFingerprints.get(ip)?.size || 0;
-  }
-
-  getFpIpCount(fp, siteKey) {
-    const key = `${siteKey}:${fp}`;
-    return this.fingerprints.get(key)?.ips.size || 0;
   }
 }
 
@@ -231,6 +198,7 @@ class ScoringEngine {
     this.fingerprintStore = options.fingerprintStore || new FingerprintStore();
     this.suspicion = options.suspicion || new SuspicionLedger();
     this.weights = options.weights || WEIGHTS;
+    this.tokenStore = options.tokenStore || new TokenStore();
   }
 
   // Generate a PoW challenge
@@ -257,8 +225,16 @@ class ScoringEngine {
   }
 
   // Verify signals and return score
-  verify(signals, ip, siteKey, userAgent, headers = {}, powSolution = null) {
+  verify(signals, ip, siteKey, userAgent, headers = {}, powSolution = null, signalsJson = null, powTiming = null) {
+    const resolved = resolveSignals(signals, signalsJson, powSolution?.signalsHash);
+    signals = resolved.signals;
+    if (powTiming) {
+      signals.temporal = signals.temporal || {};
+      signals.temporal.pow = powTiming;
+    }
     const detections = [];
+    if (!resolved.commitmentValid) detections.push({ category: 'bot', score: 0.95,
+      confidence: 0.95, reason: 'Signals tampered after PoW (signalsHash mismatch)' });
     let powSatisfied = false;
 
     // Run all detection modules
@@ -288,7 +264,8 @@ class ScoringEngine {
         powSolution.nonce,
         powSolution.hash,
         siteKey,
-        ip
+        ip,
+        powSolution.signalsHash
       );
 
       if (!powResult.valid) {
@@ -299,7 +276,7 @@ class ScoringEngine {
           reason: `PoW verification failed: ${powResult.reason}`
         });
       } else if (powResult.serverElapsed < BASE_MIN_AGE_MS) {
-        powSatisfied = true;
+        powSatisfied = false;
         // Under the universal baseline nothing legitimate can have happened —
         // no human completes an interaction that fast.
         detections.push({
@@ -309,11 +286,9 @@ class ScoringEngine {
           reason: `Challenge solved too fast (${powResult.serverElapsed}ms server-side)`
         });
       } else if (powResult.serverElapsed < powResult.minAgeMs) {
-        powSatisfied = true;
-        // Between the baseline and this source's own elevated floor is weaker
-        // evidence: a client predating adaptive cost, or one served from a
-        // stale cache, does not know to wait. It contributes rather than
-        // deciding.
+        powSatisfied = false;
+        // Keep the diagnostic weaker than a baseline violation; token issuance
+        // independently requires the full advertised delay.
         detections.push({
           category: 'bot',
           score: 0.5,
@@ -321,7 +296,13 @@ class ScoringEngine {
           reason: `Challenge submitted before the required delay for this source (${powResult.serverElapsed}ms of ${powResult.minAgeMs}ms)`
         });
       } else {
-        powSatisfied = true;
+        powSatisfied = resolved.commitmentValid;
+      }
+      // The server-issued nonce is required even for legacy, uncommitted PoW.
+      if (powResult.valid && powResult.nonce && signals.meta?.challengeNonce !== powResult.nonce) {
+        powSatisfied = false;
+        detections.push({ category: 'bot', score: 0.9, confidence: 0.9,
+          reason: 'Challenge nonce mismatch (signals not bound to challenge)' });
       }
     } else {
       detections.push({
@@ -397,7 +378,7 @@ class ScoringEngine {
   }
 
   // Verify a previously issued token
-  verifyToken(token) {
+  verifyToken(token, ip = null) {
     try {
       const decoded = JSON.parse(Buffer.from(token, 'base64url').toString());
 
@@ -415,14 +396,22 @@ class ScoringEngine {
         return { valid: false, reason: 'invalid_signature' };
       }
 
+      if (ip && decoded.ip_hash !== crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8)) {
+        return { valid: false, reason: 'ip_mismatch' };
+      }
+      const claim = this.tokenStore.claim(sig);
+      if (!claim.claimed) return { valid: false, reason: claim.reason };
       return {
         valid: true,
         site_key: decoded.site_key,
         timestamp: decoded.timestamp,
-        score: decoded.score
+        score: decoded.score,
+        hostname: decoded.hostname || '',
+        action: decoded.action || '',
+        cdata: decoded.cdata || ''
       };
     } catch (e) {
-      return { valid: false, reason: e.message };
+      return { valid: false, reason: 'invalid_token' };
     }
   }
 
@@ -497,6 +486,7 @@ class ScoringEngine {
     const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8);
     const data = {
       site_key: siteKey,
+      jti: crypto.randomBytes(16).toString('hex'),
       timestamp: Math.floor(Date.now() / 1000),
       score: Math.round(score * 1000) / 1000,
       ip_hash: ipHash
@@ -516,6 +506,7 @@ class ScoringEngine {
 
 function createMiddleware(options = {}) {
   const engine = new ScoringEngine(options);
+  const siteKeys = SiteKeyGuard.fromEnv();
   const proxyTrust = options.trustedProxies !== undefined
     ? new ProxyTrust(options.trustedProxies)
     : ProxyTrust.fromEnv();
@@ -533,8 +524,9 @@ function createMiddleware(options = {}) {
 
     // Challenge route handler
     challengeHandler: (req, res) => {
-      const siteKey = req.query.siteKey || 'default';
+      const rawSiteKey = req.query.siteKey || 'default';
       const ip = options.getIP ? options.getIP(req) : proxyTrust.clientIP(req);
+      const siteKey = siteKeys.normalize(rawSiteKey, ip);
       const challenge = engine.generateChallenge(siteKey, ip);
 
       res.json({
@@ -542,14 +534,17 @@ function createMiddleware(options = {}) {
         prefix: challenge.prefix,
         difficulty: challenge.difficulty,
         expiresAt: challenge.expiresAt,
-        sig: challenge.sig
+        sig: challenge.sig,
+        nonce: challenge.nonce,
+        minAgeMs: challenge.minAgeMs
       });
     },
 
     // Verify route handler
     verifyHandler: (req, res) => {
-      const { siteKey, signals, powSolution } = req.body;
+      const { siteKey: rawSiteKey, signals, powSolution, signalsJson, powTiming } = req.body;
       const ip = options.getIP ? options.getIP(req) : proxyTrust.clientIP(req);
+      const siteKey = siteKeys.normalize(rawSiteKey || 'default', ip);
       const userAgent = req.headers['user-agent'] || '';
 
       const headers = {};
@@ -557,14 +552,14 @@ function createMiddleware(options = {}) {
         headers[key.toLowerCase()] = Array.isArray(value) ? value[0] : value;
       }
 
-      const result = engine.verify(signals, ip, siteKey, userAgent, headers, powSolution);
+      const result = engine.verify(signals, ip, siteKey, userAgent, headers, powSolution, signalsJson, powTiming);
       res.json(result);
     },
 
     // Token verify route handler
     tokenVerifyHandler: (req, res) => {
-      const { token } = req.body;
-      res.json(engine.verifyToken(token));
+      const { token, remoteip } = req.body;
+      res.json(engine.verifyToken(token, typeof remoteip === 'string' ? remoteip : null));
     }
   };
 }

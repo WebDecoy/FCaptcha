@@ -217,6 +217,10 @@ FCaptcha.render('captcha', {
 Overrides are HTML-escaped, so a string coming from a CMS or locale file cannot
 turn the widget into an injection point.
 
+For pages that mount and unmount widgets, call `FCaptcha.destroy(widgetId)` to
+release listeners, sensors, timers, and workers. Invisible sessions expose
+`session.destroy()`; the one-shot `FCaptcha.execute()` cleans itself up.
+
 **Invisible Mode (Zero-Click)**
 
 ```html
@@ -793,6 +797,10 @@ Set `action` (and optionally `cdata`) when you request the token —
 | `FCAPTCHA_PPROF_ADDR` | (Go) Listen address for pprof when enabled — keep it loopback-only | `127.0.0.1:3001` |
 | `FCAPTCHA_LOG_VERDICTS` | Log one privacy-safe JSON line per `/api/verify` and `/api/score` (score, recommendation, category scores, and per-hit category/score/confidence). Omits IP, user agent, raw signals, and free-text detection reasons. For observability/tuning (`1`/`true`/`yes`/`on`) | off |
 | `FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW` | Also include the free-text detection `reason` in verdict logs. **Reasons can contain visitor-derived data** (reverse-DNS hostnames, UA/header fragments, form field ids) — only enable in trusted debugging contexts with no privacy obligations. Requires `FCAPTCHA_LOG_VERDICTS` | off |
+
+Go and Python HTTP access logs are off by default. Set `FCAPTCHA_LOG_ACCESS=1` to enable
+them; they include client addresses and request URLs. This is separate from
+`FCAPTCHA_LOG_VERDICTS`.
 
 ### Trusted proxies
 
