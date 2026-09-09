@@ -313,16 +313,14 @@ type RateLimiter struct {
 // FingerprintStore tracks fingerprint patterns
 type FingerprintStore struct {
 	mu             sync.RWMutex
-	fingerprints   map[string]*FingerprintData
-	ipFingerprints map[string]map[string]bool
+	fingerprints   *expirable.LRU[string, map[string]bool]
+	ipFingerprints *expirable.LRU[string, map[string]bool]
 	redis          *redis.Client
 }
 
-type FingerprintData struct {
-	FirstSeen int64
-	Count     int
-	IPs       map[string]bool
-}
+const fingerprintMembersCap = 16
+const fingerprintEntriesCap = 100000
+const fingerprintTTL = 15 * time.Minute
 
 // TokenStore prevents token replay attacks. Backed by a bounded LRU with TTL
 // so the store size is capped under sustained load and the previous O(n)
@@ -445,8 +443,8 @@ func newRedisRateLimiter(client *redis.Client) *RateLimiter {
 
 func newFingerprintStore() *FingerprintStore {
 	return &FingerprintStore{
-		fingerprints:   make(map[string]*FingerprintData),
-		ipFingerprints: make(map[string]map[string]bool),
+		fingerprints:   expirable.NewLRU[string, map[string]bool](fingerprintEntriesCap, nil, fingerprintTTL),
+		ipFingerprints: expirable.NewLRU[string, map[string]bool](fingerprintEntriesCap, nil, fingerprintTTL),
 	}
 }
 
@@ -541,7 +539,7 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 				// author, in an ordinary browser.
 			})
 		} else {
-			powSatisfied = true
+			powSatisfied = powResult.ServerElapsed >= max(baseMinAgeMs, powResult.MinAgeMs)
 		}
 
 		// Verify challenge nonce binding
@@ -567,14 +565,8 @@ func (e *ScoringEngine) VerifyWithHeaders(signals map[string]interface{}, ip, si
 			}
 		}
 
-		// Two thresholds, because they mean different things. Under the
-		// universal baseline nothing legitimate can have happened: no human
-		// completes an interaction that fast, so it scores as it always has.
-		//
-		// Between the baseline and this source's own elevated floor is weaker
-		// evidence. A client that predates adaptive cost does not know to wait,
-		// and neither does one served from a stale cache, so a full-strength
-		// penalty there would punish the wrong people. It contributes instead.
+		// Timing diagnostics distinguish baseline and elevated-delay violations.
+		// The token gate above independently enforces the full advertised delay.
 		if powResult.Valid {
 			switch {
 			case powResult.ServerElapsed < baseMinAgeMs:
@@ -2394,6 +2386,7 @@ func (e *ScoringEngine) generateToken(ip, siteKey string, score float64, binding
 
 	data := map[string]interface{}{
 		"site_key":  siteKey,
+		"jti":       newTokenID(),
 		"timestamp": time.Now().Unix(),
 		"score":     math.Round(score*1000) / 1000,
 		"ip_hash":   hex.EncodeToString(ipHash[:4]),
@@ -2506,39 +2499,47 @@ func (rl *RateLimiter) Check(key string, windowSeconds int64, maxRequests int) (
 // Fingerprint Store Methods
 // ============================================================
 
+var recordFingerprintScript = redis.NewScript(`
+if redis.call('SCARD', KEYS[2]) >= 16 and redis.call('SISMEMBER', KEYS[2], ARGV[2]) == 0 then return 0 end
+if redis.call('SCARD', KEYS[1]) < 16 then redis.call('SADD', KEYS[1], ARGV[1]) end
+if redis.call('SCARD', KEYS[2]) < 16 then redis.call('SADD', KEYS[2], ARGV[2]) end
+for i = 1, 2 do
+  if redis.call('PTTL', KEYS[i]) < 0 then redis.call('PEXPIRE', KEYS[i], ARGV[3]) end
+end
+return 1
+`)
+
 func (fs *FingerprintStore) Record(fingerprint, ip, siteKey string) {
 	if fs.redis != nil {
 		ctx := context.Background()
 		fpKey := redisOpaqueKey("fingerprint:ips", siteKey+"|"+fingerprint)
 		ipKey := redisOpaqueKey("fingerprint:fps", ip)
-		pipe := fs.redis.TxPipeline()
-		pipe.SAdd(ctx, fpKey, redisOpaqueKey("value:ip", ip))
-		pipe.Expire(ctx, fpKey, suspicionWindow)
-		pipe.SAdd(ctx, ipKey, redisOpaqueKey("value:fp", fingerprint))
-		pipe.Expire(ctx, ipKey, suspicionWindow)
-		_, _ = pipe.Exec(ctx)
+		_, _ = recordFingerprintScript.Run(ctx, fs.redis, []string{fpKey, ipKey},
+			redisOpaqueKey("value:ip", ip), redisOpaqueKey("value:fp", fingerprint), fingerprintTTL.Milliseconds()).Result()
 		return
 	}
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
-
+	fps, ok := fs.ipFingerprints.Get(ip)
+	if !ok {
+		fps = make(map[string]bool)
+		fs.ipFingerprints.Add(ip, fps)
+	}
+	if len(fps) >= fingerprintMembersCap && !fps[fingerprint] {
+		return
+	}
+	if len(fps) < fingerprintMembersCap {
+		fps[fingerprint] = true
+	}
 	key := siteKey + ":" + fingerprint
-
-	if _, ok := fs.fingerprints[key]; !ok {
-		fs.fingerprints[key] = &FingerprintData{
-			FirstSeen: time.Now().Unix(),
-			Count:     0,
-			IPs:       make(map[string]bool),
-		}
+	ips, ok := fs.fingerprints.Get(key)
+	if !ok {
+		ips = make(map[string]bool)
+		fs.fingerprints.Add(key, ips)
 	}
-
-	fs.fingerprints[key].Count++
-	fs.fingerprints[key].IPs[ip] = true
-
-	if _, ok := fs.ipFingerprints[ip]; !ok {
-		fs.ipFingerprints[ip] = make(map[string]bool)
+	if len(ips) < fingerprintMembersCap {
+		ips[ip] = true
 	}
-	fs.ipFingerprints[ip][fingerprint] = true
 }
 
 func (fs *FingerprintStore) GetIPFingerprintCount(ip string) int {
@@ -2552,7 +2553,7 @@ func (fs *FingerprintStore) GetIPFingerprintCount(ip string) int {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
 
-	if fps, ok := fs.ipFingerprints[ip]; ok {
+	if fps, ok := fs.ipFingerprints.Get(ip); ok {
 		return len(fps)
 	}
 	return 0
@@ -2570,8 +2571,8 @@ func (fs *FingerprintStore) GetFingerprintIPCount(fingerprint, siteKey string) i
 	defer fs.mu.RUnlock()
 
 	key := siteKey + ":" + fingerprint
-	if data, ok := fs.fingerprints[key]; ok {
-		return len(data.IPs)
+	if data, ok := fs.fingerprints.Get(key); ok {
+		return len(data)
 	}
 	return 0
 }
@@ -2675,4 +2676,12 @@ func hasWidgetInteraction(signals map[string]interface{}) bool {
 		return v
 	}
 	return true
+}
+
+func newTokenID() string {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(id[:])
 }

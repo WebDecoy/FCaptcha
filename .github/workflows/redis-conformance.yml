@@ -19,6 +19,15 @@ jobs:
             dockerfile: server-node/Dockerfile
           - implementation: python
             dockerfile: server-python/Dockerfile
+          - implementation: go-node
+            dockerfile: docker/Dockerfile
+            peerDockerfile: server-node/Dockerfile
+          - implementation: node-python
+            dockerfile: server-node/Dockerfile
+            peerDockerfile: server-python/Dockerfile
+          - implementation: python-go
+            dockerfile: server-python/Dockerfile
+            peerDockerfile: docker/Dockerfile
     services:
       redis:
         image: redis:7-alpine
@@ -35,12 +44,19 @@ jobs:
           node-version: '20'
       - name: Build production image
         run: docker build -f ${{ matrix.dockerfile }} -t fcaptcha-redis-test .
+      - name: Build peer image
+        run: |
+          if [ -n "${{ matrix.peerDockerfile }}" ]; then
+            docker build -f "${{ matrix.peerDockerfile }}" -t fcaptcha-redis-peer .
+          else
+            docker tag fcaptcha-redis-test fcaptcha-redis-peer
+          fi
       - name: Start two replicas
         env:
           FCAPTCHA_SECRET: redis-conformance-secret
         run: |
           docker run -d --name fcaptcha-a --network host -e PORT=3101 -e REDIS_URL=redis://127.0.0.1:6379 -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" fcaptcha-redis-test
-          docker run -d --name fcaptcha-b --network host -e PORT=3102 -e REDIS_URL=redis://127.0.0.1:6379 -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" fcaptcha-redis-test
+          docker run -d --name fcaptcha-b --network host -e PORT=3102 -e REDIS_URL=redis://127.0.0.1:6379 -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" fcaptcha-redis-peer
           for port in 3101 3102; do
             for attempt in $(seq 1 30); do
               curl -fsS "http://127.0.0.1:$port/health" && break

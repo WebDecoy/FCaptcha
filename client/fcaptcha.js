@@ -2315,6 +2315,8 @@
      * Spoofed values often don't match between contexts
      */
     async _checkWorkerConsistency() {
+      let worker;
+      let workerUrl;
       try {
         if (typeof Worker === 'undefined') {
           return { supported: false };
@@ -2338,7 +2340,8 @@
         `;
 
         const blob = new Blob([workerCode], { type: 'application/javascript' });
-        const worker = new Worker(URL.createObjectURL(blob));
+        workerUrl = URL.createObjectURL(blob);
+        worker = new Worker(workerUrl);
 
         const workerData = await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => reject(new Error('timeout')), 2000);
@@ -2386,6 +2389,9 @@
         };
       } catch (e) {
         return { supported: false, error: true };
+      } finally {
+        if (worker) worker.terminate();
+        if (workerUrl) URL.revokeObjectURL(workerUrl);
       }
     }
   }
@@ -2406,7 +2412,12 @@
   // ============================================================
 
   class PoWManager {
-    constructor() {
+    constructor(serverUrl = null) {
+      this.serverUrl = serverUrl;
+      this.generation = 0;
+      this.fetchPromise = null;
+      this.fetchController = null;
+      this._cancelSolve = null;
       this.workers = [];
       this.challenge = null;
       this.challengeReceivedAt = null;
@@ -2468,7 +2479,8 @@
       `;
 
       const blob = new Blob([workerCode], { type: 'application/javascript' });
-      return new Worker(URL.createObjectURL(blob));
+      const url = URL.createObjectURL(blob);
+      try { return new Worker(url); } finally { URL.revokeObjectURL(url); }
     }
 
     // Pick a worker count that uses available cores without monopolizing them.
@@ -2486,20 +2498,44 @@
     }
 
     // Fetch challenge from server
-    async fetchChallenge(siteKey) {
-      const serverUrl = FCaptcha.serverUrl;
+    async ensureChallenge(siteKey) {
+      if (this.fetchPromise) await this.fetchPromise;
+      if (!this.challenge || this.solution || this.challengeExpired()) {
+        await this.fetchChallenge(siteKey);
+      }
+      return this.challenge;
+    }
+
+    fetchChallenge(siteKey) {
+      if (this.fetchPromise) return this.fetchPromise;
+      const generation = this.generation;
+      this.fetchPromise = this._fetchChallenge(siteKey).finally(() => {
+        if (generation === this.generation) this.fetchPromise = null;
+      });
+      return this.fetchPromise;
+    }
+
+    async _fetchChallenge(siteKey) {
+      const generation = this.generation;
+      const serverUrl = this.serverUrl || FCaptcha.serverUrl;
       if (!serverUrl) {
         // Fallback to local challenge generation
         return this._generateLocalChallenge();
       }
 
       try {
-        const response = await fetch(`${serverUrl}/api/pow/challenge?siteKey=${encodeURIComponent(siteKey || 'default')}`);
+        this.fetchController = new AbortController();
+        const response = await fetch(`${serverUrl}/api/pow/challenge?siteKey=${encodeURIComponent(siteKey || 'default')}`, {
+          signal: this.fetchController.signal
+        });
         if (!response.ok) {
           console.warn('PoW challenge fetch failed (status ' + response.status + '), using local challenge');
           return this._generateLocalChallenge();
         }
-        this.challenge = await response.json();
+        const challenge = await response.json();
+        if (generation !== this.generation) throw new Error('Challenge fetch cancelled');
+        this.challenge = challenge;
+        this.solution = null;
         // Time the wait from when the challenge arrived, not from the
         // timestamp inside it. Receipt is necessarily later than issue, so a
         // wait measured from here always clears the server's floor — and it
@@ -2507,6 +2543,7 @@
         this.challengeReceivedAt = Date.now();
         return this.challenge;
       } catch (e) {
+        if (generation !== this.generation || e.name === 'AbortError') throw e;
         console.warn('PoW challenge fetch failed, using local challenge:', e);
         return this._generateLocalChallenge();
       }
@@ -2564,22 +2601,27 @@
     }
 
     // Solve with signals hash bound into PoW input
-    async solveWithSignalsHash(siteKey, signalsHash) {
-      return this._solve(siteKey, signalsHash);
+    async solveWithSignalsHash(siteKey, signalsHash, challenge = null) {
+      return this._solve(siteKey, signalsHash, challenge);
     }
 
-    async _solve(siteKey, signalsHash) {
+    async _solve(siteKey, signalsHash, boundChallenge = null) {
       if (this.solving) return this.solvePromise;
 
-      // Fetch a challenge if there isn't one, or if the one we have is spent.
-      if (!this.challenge || this.challengeExpired()) {
-        await this.fetchChallenge(siteKey);
+      if (boundChallenge) {
+        if (this.challenge !== boundChallenge || this.challengeExpired()) {
+          throw new Error('Challenge changed before solving');
+        }
+      } else {
+        await this.ensureChallenge(siteKey);
       }
+      const generation = this.generation;
 
       this.solving = true;
       this.startTime = performance.now();
 
       this.solvePromise = new Promise((resolve, reject) => {
+        this._cancelSolve = () => reject(new Error('PoW cancelled'));
         const threads = this._threadCount();
         let settled = false;
 
@@ -2591,12 +2633,15 @@
           // since there is no solution to hold back.
           if (fn === resolve) {
             this._awaitMinAge().then(() => {
+              if (generation !== this.generation) return;
               this.solving = false;
+              this._cancelSolve = null;
               fn(value);
             });
             return;
           }
           this.solving = false;
+          this._cancelSolve = null;
           fn(value);
         };
 
@@ -2654,6 +2699,12 @@
 
     // Reset for new challenge
     reset() {
+      this.generation++;
+      if (this.fetchController) this.fetchController.abort();
+      this.fetchController = null;
+      this.fetchPromise = null;
+      if (this._cancelSolve) this._cancelSolve();
+      this._cancelSolve = null;
       this._terminateWorkers();
       this.challenge = null;
       this.challengeReceivedAt = null;
@@ -2661,15 +2712,6 @@
       this.solving = false;
       this.solvePromise = null;
     }
-  }
-
-  // Global PoW manager - starts solving on page load
-  let globalPoWManager = null;
-  function getPoWManager() {
-    if (!globalPoWManager) {
-      globalPoWManager = new PoWManager();
-    }
-    return globalPoWManager;
   }
 
   // ============================================================
@@ -2785,10 +2827,12 @@
       this.environmental = new EnvironmentalCollector();
       this.temporal = new TemporalCollector();
       this.sensor = new SensorCollector();
-      this.powManager = getPoWManager();
+      this.powManager = new PoWManager();
       this.token = null;
       this.verified = false;
 
+      this.destroyed = false;
+      this._listenerController = new AbortController();
       this._init();
     }
 
@@ -2951,41 +2995,41 @@
 
     _attachListeners() {
       // Global tracking
-      document.addEventListener('mousemove', (e) => this.behavioral.recordMouseMove(e), { passive: true });
-      document.addEventListener('mousedown', (e) => this.behavioral.recordMouseDown(e), { passive: true });
-      document.addEventListener('mouseup', (e) => this.behavioral.recordMouseUp(e), { passive: true });
-      document.addEventListener('scroll', (e) => this.behavioral.recordScroll(e), { passive: true });
-      document.addEventListener('keydown', (e) => this.behavioral.recordKeyEvent(e), { passive: true });
-      document.addEventListener('keyup', (e) => this.behavioral.recordKeyEvent(e), { passive: true });
-      document.addEventListener('touchstart', (e) => this.behavioral.recordTouch(e), { passive: true });
-      document.addEventListener('touchmove', (e) => this.behavioral.recordTouch(e), { passive: true });
-      document.addEventListener('pointermove', (e) => this.behavioral.recordPointer(e), { passive: true });
-      document.addEventListener('pointerdown', (e) => this.behavioral.recordPointer(e), { passive: true });
-      document.addEventListener('pointerup', (e) => this.behavioral.recordPointer(e), { passive: true });
-      document.addEventListener('focus', (e) => this.behavioral.recordFocus(e), { passive: true, capture: true });
-      document.addEventListener('blur', (e) => this.behavioral.recordFocus(e), { passive: true, capture: true });
+      document.addEventListener('mousemove', (e) => this.behavioral.recordMouseMove(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('mousedown', (e) => this.behavioral.recordMouseDown(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('mouseup', (e) => this.behavioral.recordMouseUp(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('scroll', (e) => this.behavioral.recordScroll(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('keydown', (e) => this.behavioral.recordKeyEvent(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('keyup', (e) => this.behavioral.recordKeyEvent(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('touchstart', (e) => this.behavioral.recordTouch(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('touchmove', (e) => this.behavioral.recordTouch(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('pointermove', (e) => this.behavioral.recordPointer(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('pointerdown', (e) => this.behavioral.recordPointer(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('pointerup', (e) => this.behavioral.recordPointer(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('focus', (e) => this.behavioral.recordFocus(e), { passive: true, capture: true, signal: this._listenerController.signal });
+      document.addEventListener('blur', (e) => this.behavioral.recordFocus(e), { passive: true, capture: true, signal: this._listenerController.signal });
 
       // Passive device sensors (no permission request; absence treated as neutral server-side)
       this.sensor.attach();
 
       // First interaction
       const recordFirst = () => this.temporal.recordFirstInteraction();
-      document.addEventListener('mousemove', recordFirst, { once: true });
-      document.addEventListener('touchstart', recordFirst, { once: true });
-      document.addEventListener('keydown', recordFirst, { once: true });
+      document.addEventListener('mousemove', recordFirst, { once: true, signal: this._listenerController.signal });
+      document.addEventListener('touchstart', recordFirst, { once: true, signal: this._listenerController.signal });
+      document.addEventListener('keydown', recordFirst, { once: true, signal: this._listenerController.signal });
 
       // Checkbox click
-      this.checkbox.addEventListener('click', (e) => this._handleClick(e));
+      this.checkbox.addEventListener('click', (e) => this._handleClick(e), { signal: this._listenerController.signal });
       this.checkbox.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           this._handleClick(e);
         }
-      });
+      }, { signal: this._listenerController.signal });
     }
 
     async _handleClick(e) {
-      if (this.verified || this.checkbox.classList.contains('loading')) return;
+      if (this.destroyed || this.verified || this.checkbox.classList.contains('loading')) return;
 
       const clickTime = performance.now();
       const rect = this.checkbox.getBoundingClientRect();
@@ -3010,6 +3054,10 @@
 
         const formAnalysis = getFormAnalyzer().analyze();
 
+        if (this.destroyed) return;
+        const challenge = await this.powManager.ensureChallenge(this.options.siteKey);
+        if (this.destroyed) return;
+
         // Step 2: Build signals object (without pow timing)
         const sensorData = this.sensor.analyze();
         const signals = {
@@ -3020,7 +3068,7 @@
           meta: {
             widgetId: this.id,
             siteKey: this.options.siteKey,
-            challengeNonce: this.powManager.challenge?.nonce || null,
+            challengeNonce: challenge.nonce || null,
             timestamp: Date.now(),
             userAgent: navigator.userAgent,
             screenSize: `${screen.width}x${screen.height}`,
@@ -3034,7 +3082,7 @@
         const signalsHash = await sha256(signalsJson);
 
         // Step 4: Solve PoW with signalsHash bound
-        const powSolution = await this.powManager.solveWithSignalsHash(this.options.siteKey, signalsHash);
+        const powSolution = await this.powManager.solveWithSignalsHash(this.options.siteKey, signalsHash, challenge);
 
         // Step 5: Build powTiming separately (not part of committed signals)
         const powTiming = {
@@ -3131,6 +3179,7 @@
     }
 
     _showSuccess(token) {
+      if (this.destroyed) return;
       this.verified = true;
       this.token = token;
       this.checkbox.classList.remove('loading');
@@ -3168,6 +3217,7 @@
     }
 
     _showFailure(message) {
+      if (this.destroyed) return;
       this.checkbox.classList.remove('loading');
       this.checkbox.classList.add('failed');
       this.spinner.style.display = 'none';
@@ -3188,15 +3238,29 @@
       this.powManager.reset();
       this._fetchChallenge();
 
-      setTimeout(() => {
+      clearTimeout(this._failureTimer);
+      this._failureTimer = setTimeout(() => {
         this.checkbox.classList.remove('failed');
         this.label.textContent = this.strings.label;
       }, 3000);
     }
 
+    destroy() {
+      this.destroyed = true;
+      this._listenerController.abort();
+      this.sensor.detach();
+      this.powManager.reset();
+      this._clearTokenExpiry();
+      clearTimeout(this._failureTimer);
+      FCaptcha.widgets.delete(this.id);
+      this.container.innerHTML = '';
+    }
+
     getToken() { return this.token; }
 
     reset() {
+      if (this.destroyed) return;
+      clearTimeout(this._failureTimer);
       this._clearTokenExpiry();
       this.verified = false;
       this.token = null;
@@ -3235,11 +3299,13 @@
       this.environmental = new EnvironmentalCollector();
       this.temporal = new TemporalCollector();
       this.sensor = new SensorCollector();
-      this.powManager = new PoWManager();
+      this.powManager = new PoWManager(this.options.serverUrl);
       this.startTime = Date.now();
       this.lastScore = null;
       this.listeners = [];
 
+      this.destroyed = false;
+      this._listenerController = new AbortController();
       this._init();
     }
 
@@ -3247,10 +3313,10 @@
       this._attachListeners();
 
       const recordFirst = () => this.temporal.recordFirstInteraction();
-      document.addEventListener('mousemove', recordFirst, { once: true });
-      document.addEventListener('touchstart', recordFirst, { once: true });
-      document.addEventListener('keydown', recordFirst, { once: true });
-      document.addEventListener('scroll', recordFirst, { once: true });
+      document.addEventListener('mousemove', recordFirst, { once: true, signal: this._listenerController.signal });
+      document.addEventListener('touchstart', recordFirst, { once: true, signal: this._listenerController.signal });
+      document.addEventListener('keydown', recordFirst, { once: true, signal: this._listenerController.signal });
+      document.addEventListener('scroll', recordFirst, { once: true, signal: this._listenerController.signal });
 
       if (this.options.autoScore) this._attachToForms();
 
@@ -3285,7 +3351,7 @@
 
       for (const [event, handler] of Object.entries(handlers)) {
         const opts = event === 'focus' || event === 'blur' ?
-          { passive: true, capture: true } : { passive: true };
+          { passive: true, capture: true, signal: this._listenerController.signal } : { passive: true, signal: this._listenerController.signal };
         document.addEventListener(event, handler, opts);
         this.listeners.push({ event, handler, opts });
       }
@@ -3307,90 +3373,107 @@
           form.appendChild(tokenField);
         }
 
-        if (!this.lastScore || Date.now() - this.lastScore.timestamp > 60000) {
-          e.preventDefault();
+        e.preventDefault();
 
-          try {
-            const result = await this.execute(form.dataset.fcaptchaAction || 'form_submit');
-            tokenField.value = result.token || '';
+        try {
+          const result = await this.execute(form.dataset.fcaptchaAction || 'form_submit');
+          if (this.destroyed) return;
+          tokenField.value = result.token || '';
 
-            if (result.success) {
-              form.submit();
-            } else {
-              document.dispatchEvent(new CustomEvent('fcaptcha:blocked', {
-                detail: { score: result.score, form }
-              }));
-            }
-          } catch (error) {
-            console.error('FCaptcha error:', error);
-            form.submit(); // Fail open
+          if (result.success) {
+            form.submit();
+          } else {
+            document.dispatchEvent(new CustomEvent('fcaptcha:blocked', {
+              detail: { score: result.score, form }
+            }));
           }
-        } else {
-          tokenField.value = this.lastScore.token || '';
+        } catch (error) {
+          if (this.destroyed) return;
+          console.error('FCaptcha error:', error);
+          form.submit(); // Fail open
         }
-      });
+      }, { signal: this._listenerController.signal });
     }
 
-    async execute(action = '', cdata = '') {
-      const elapsed = Date.now() - this.startTime;
-      if (elapsed < this.options.minCollectionTime) {
-        await new Promise(r => setTimeout(r, this.options.minCollectionTime - elapsed));
-      }
+    execute(action = '', cdata = '') {
+      const run = () => {
+        if (this.destroyed) throw new Error('Session destroyed');
+        return this._execute(action, cdata);
+      };
+      const next = (this._executeQueue || Promise.resolve()).then(run, run);
+      this._executeQueue = next.catch(() => {});
+      return next;
+    }
 
-      // Step 1: Collect all signals
-      const behavioralData = this.behavioral.analyze();
-      const envData = this.environmental.collect();
-
-      // Collect temporal data WITHOUT pow timing (not yet solved)
-      const temporalData = this.temporal.collect(Date.now());
-
-      const [rafData, asyncEnvData] = await Promise.all([
-        this.environmental.measureRAFConsistency(),
-        this.environmental.collectAsync()
-      ]);
-
-      const formAnalysis = getFormAnalyzer().analyze();
-
-      // Step 2: Build signals object (without pow timing)
-      const sensorData = this.sensor.analyze();
-      const signals = {
-        behavioral: behavioralData,
-        environmental: { ...envData, rafConsistency: rafData, ...asyncEnvData, sensor: sensorData },
-        temporal: temporalData,
-        formAnalysis: formAnalysis,
-        meta: {
-          sessionId: this.id,
-          siteKey: this.options.siteKey,
-          action,
-          challengeNonce: this.powManager.challenge?.nonce || null,
-          timestamp: Date.now(),
-          userAgent: navigator.userAgent,
-          screenSize: `${screen.width}x${screen.height}`,
-          viewportSize: `${window.innerWidth}x${window.innerHeight}`,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          sessionDuration: Date.now() - this.startTime,
-          invisible: true
+    async _execute(action, cdata) {
+      try {
+        const elapsed = Date.now() - this.startTime;
+        if (elapsed < this.options.minCollectionTime) {
+          await new Promise(r => setTimeout(r, this.options.minCollectionTime - elapsed));
         }
-      };
 
-      // Step 3: Serialize and hash signals for PoW binding
-      const signalsJson = JSON.stringify(signals);
-      const signalsHash = await sha256(signalsJson);
+        // Step 1: Collect all signals
+        const behavioralData = this.behavioral.analyze();
+        const envData = this.environmental.collect();
 
-      // Step 4: Solve PoW with signalsHash bound
-      const powSolution = await this.powManager.solveWithSignalsHash(this.options.siteKey, signalsHash);
+        // Collect temporal data WITHOUT pow timing (not yet solved)
+        const temporalData = this.temporal.collect(Date.now());
 
-      // Step 5: Build powTiming separately
-      const powTiming = {
-        duration: powSolution.duration,
-        iterations: powSolution.iterations,
-        difficulty: powSolution.difficulty
-      };
+        const [rafData, asyncEnvData] = await Promise.all([
+          this.environmental.measureRAFConsistency(),
+          this.environmental.collectAsync()
+        ]);
 
-      // Step 6: Submit
-      const result = await this._score(signals, action, powSolution, signalsJson, signalsHash, powTiming, cdata);
-      this.lastScore = { ...result, timestamp: Date.now() };
-      return result;
+        const formAnalysis = getFormAnalyzer().analyze();
+
+        if (this.destroyed) throw new Error('Session destroyed');
+        const challenge = await this.powManager.ensureChallenge(this.options.siteKey);
+        if (this.destroyed) throw new Error('Session destroyed');
+
+        // Step 2: Build signals object (without pow timing)
+        const sensorData = this.sensor.analyze();
+        const signals = {
+          behavioral: behavioralData,
+          environmental: { ...envData, rafConsistency: rafData, ...asyncEnvData, sensor: sensorData },
+          temporal: temporalData,
+          formAnalysis: formAnalysis,
+          meta: {
+            sessionId: this.id,
+            siteKey: this.options.siteKey,
+            action,
+            challengeNonce: challenge.nonce || null,
+            timestamp: Date.now(),
+            userAgent: navigator.userAgent,
+            screenSize: `${screen.width}x${screen.height}`,
+            viewportSize: `${window.innerWidth}x${window.innerHeight}`,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            sessionDuration: Date.now() - this.startTime,
+            invisible: true
+          }
+        };
+
+        // Step 3: Serialize and hash signals for PoW binding
+        const signalsJson = JSON.stringify(signals);
+        const signalsHash = await sha256(signalsJson);
+
+        // Step 4: Solve PoW with signalsHash bound
+        const powSolution = await this.powManager.solveWithSignalsHash(this.options.siteKey, signalsHash, challenge);
+
+        // Step 5: Build powTiming separately
+        const powTiming = {
+          duration: powSolution.duration,
+          iterations: powSolution.iterations,
+          difficulty: powSolution.difficulty
+        };
+
+        // Step 6: Submit
+        const result = await this._score(signals, action, powSolution, signalsJson, signalsHash, powTiming, cdata);
+        if (this.destroyed) throw new Error('Session destroyed');
+        this.lastScore = { ...result, timestamp: Date.now() };
+        return result;
+      } finally {
+        this.powManager.reset();
+      }
     }
 
     async _score(signals, action, powSolution = null, signalsJson = null, signalsHash = null, powTiming = null, cdata = '') {
@@ -3475,6 +3558,10 @@
     getScore() { return this.lastScore; }
 
     destroy() {
+      this.destroyed = true;
+      this._listenerController.abort();
+      this.sensor.detach();
+      FCaptcha.widgets.delete(this.id);
       for (const { event, handler, opts } of this.listeners) {
         document.removeEventListener(event, handler, opts);
       }
@@ -3504,9 +3591,11 @@
       powDifficulty: options.powDifficulty || 3
     });
 
-    const result = await session.execute(options.action || '', options.cdata || '');
-    session.destroy();
-    return result;
+    try {
+      return await session.execute(options.action || '', options.cdata || '');
+    } finally {
+      session.destroy();
+    }
   };
 
   FCaptcha.render = function(container, options) {
@@ -3518,6 +3607,11 @@
   FCaptcha.getResponse = function(widgetId) {
     const widget = this.widgets.get(widgetId);
     return widget ? widget.getToken() : null;
+  };
+
+  FCaptcha.destroy = function(widgetId) {
+    const widget = this.widgets.get(widgetId);
+    if (widget && widget.destroy) widget.destroy();
   };
 
   FCaptcha.reset = function(widgetId) {

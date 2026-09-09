@@ -69,8 +69,9 @@ data from other sites.
 
 ## What is retained, and for how long
 
-All of it is in process memory. **There is no database and nothing is written to
-disk.** Restart the server and every value below is gone.
+By default, security state is in process memory and disappears on restart.
+When `REDIS_URL` is configured, it lives in Redis with expiry; operators control
+Redis persistence and backups. FCaptcha itself does not write state to disk.
 
 | State | Keyed on | Lifetime |
 |---|---|---|
@@ -78,6 +79,7 @@ disk.** Restart the server and every value below is gone.
 | Spent PoW solutions (replay guard) | solution hash | 10 minutes |
 | Spent tokens (replay guard) | token signature | 10 minutes |
 | Suspicion ledger (adaptive cost) | site key + IP | 15 minutes |
+| Fingerprint cardinality | site + fingerprint / IP | 15-minute fixed windows; at most 16 members per bucket |
 | Rate-limit counters | site key + IP | 60-second windows |
 | Site-key state bounds | IP | 1 hour |
 | Siteverify idempotency cache | caller-supplied key | 5 minutes |
@@ -95,7 +97,11 @@ hostname, action and customer data your integration supplied. Tokens are valid f
 
 ## Logging
 
-Off by default. A self-hosted FCaptcha emits **no per-request logs** unless you
+Off by default. Go and Python access logging can be enabled separately with
+`FCAPTCHA_LOG_ACCESS=1`; it includes client addresses and request URLs, so its
+retention and access controls are the operator’s responsibility.
+
+A self-hosted FCaptcha emits **no verdict logs** unless you
 turn them on.
 
 `FCAPTCHA_LOG_VERDICTS=1` emits one JSON line per verification: score,
@@ -253,7 +259,7 @@ false-positive cost is measured in CI. Weigh that against your own requirement.
 
 If your assessment says the fingerprinting is more than you want:
 
-- `FCAPTCHA_LOG_VERDICTS` unset (the default) means no per-request logging.
+- Leave `FCAPTCHA_LOG_VERDICTS` and `FCAPTCHA_LOG_ACCESS` unset to keep request logging off.
 - Serve the widget from your own origin, which is the default, so no third-party
   request is made at all.
 - The signal collectors in `client/fcaptcha.js` are individually removable. Doing

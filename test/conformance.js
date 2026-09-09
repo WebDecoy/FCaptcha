@@ -153,7 +153,10 @@ async function run() {
     'X-Real-IP': '203.0.113.40',
   };
   const committed = await buildVerifyBody(SERVER, 'commitment-test', {}, committedHeaders);
-  committed.body.signalsJson = JSON.stringify({ meta: { challengeNonce: 'tampered' } });
+  // Keep the real challenge nonce: this must fail solely on commitment integrity.
+  const changed = JSON.parse(committed.body.signalsJson);
+  changed.uncommittedField = true;
+  committed.body.signalsJson = JSON.stringify(changed);
   const tampered = await request('/api/verify', { headers: committedHeaders, body: committed.body });
   ok(
     tampered.json?.success === false && !tampered.json?.token &&
