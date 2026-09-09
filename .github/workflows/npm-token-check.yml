@@ -1,0 +1,33 @@
+name: npm token check
+
+# Manual diagnostic for the NPM_TOKEN secret. A lapsed or under-scoped token
+# fails `npm publish` with a 404 on PUT, which reads like a missing package.
+# This prints who the token authenticates as and what it can reach, never the
+# value itself.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Token shape (no value)
+        run: node -e "const t=process.env.T||''; console.log('length', t.length, '| granular prefix', t.startsWith('npm_'), '| set', t.length>0)"
+        env:
+          T: ${{ secrets.NPM_TOKEN }}
+
+      - name: whoami
+        run: npm whoami || echo "WHOAMI_FAILED: token rejected by the registry"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Package access
+        run: |
+          npm access list packages 2>&1 | grep -i webdecoy || echo "NO_ACCESS: no @webdecoy packages visible to this token"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
