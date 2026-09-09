@@ -51,6 +51,12 @@ type DetectionResult struct {
 	// automated, as opposed to one that merely correlates with automation.
 	// It triggers dispositiveFloor. See applyDispositiveFloor.
 	Dispositive bool
+
+	// NonCorroborating marks a signal that ordinary developer tooling also
+	// produces — DevTools open trips the console-attach probe — so it cannot
+	// stand as an independent behavioural view of the visitor. It still
+	// scores; it does not count towards applyCorroborationFloor's agreement.
+	NonCorroborating bool
 }
 
 // VerificationResult is the final result
@@ -663,7 +669,7 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	// Calculate scores
 	categoryScores := e.calculateCategoryScores(detections)
 	finalScore := applyDispositiveFloor(e.calculateFinalScore(categoryScores), detections)
-	finalScore = applyCorroborationFloor(finalScore, categoryScores)
+	finalScore = applyCorroborationFloor(finalScore, detections)
 
 	// Determine recommendation
 	var recommendation string
@@ -1539,6 +1545,9 @@ func (e *ScoringEngine) detectCDP(signals map[string]interface{}) []DetectionRes
 			Score:      0.6,
 			Confidence: 0.5,
 			Reason:     "CDP/DevTools console consumer attached (automation protocol or open DevTools)",
+			// A developer with DevTools open produces exactly this signal, so it
+			// cannot be one of the independent views the corroboration floor counts.
+			NonCorroborating: true,
 		})
 	}
 
@@ -2265,27 +2274,45 @@ func applyDispositiveFloor(score float64, detections []DetectionResult) float64 
 //
 // # The rule
 //
-// When two or more behavioural categories independently reach 0.5, floor the
+// When two or more behavioural categories independently reach 0.4, floor the
 // score at 0.6. Corroboration across independent views is itself evidence,
 // distinct from any one of them being strong.
+//
+// # What does not count
+//
+// A signal that a developer's own tooling produces is not an independent view.
+// The DevTools console-attach probe fires for anyone with the console open, so
+// a detection marked NonCorroborating still scores its category but cannot be
+// one of the two that agree. Without that exclusion, lowering the bar would
+// have turned "developer with DevTools open and a quick click" into a block:
+// the human-looking sessions measured beside the adversary below sat at
+// behavioral 0.37 with cdp 0.30 from the probe alone.
 //
 // # Why these numbers
 //
 // Swept over a 40-point grid against the labelled corpus
 // (bench/tools/sweep-corroboration.js), not chosen by reasoning. The measurement
-// that decides it:
+// that decides it (2026-09-09, with the exclusion above applied):
 //
 //	threshold   humans reaching 2+     agents reaching 2+
-//	0.30         0 of 126               75 of 75
+//	0.30         0 of 126               66 of 75
 //	0.40         0 of 126               66 of 75
 //	0.50         0 of 126               66 of 75
-//	0.60         0 of 126               62 of 75
+//	0.60         0 of 126               56 of 75
 //	0.70         0 of 126               47 of 75
 //
 // No human in the panel reaches two agreeing behavioural categories at any
-// threshold tested. 0.5 sits mid-region — 0.3, 0.4 and 0.5 behave identically
-// and it falls off at 0.6 — so a real captured trace scoring somewhat lower than
-// the synthetic one still fires the rule.
+// threshold tested, and 0.3, 0.4 and 0.5 catch the same agents. What moved the
+// bar from 0.5 to 0.4 is a live measurement the corpus cannot make: an
+// extension-driven click in a real Chrome (chrome.debugger input, real
+// fingerprint, residential address) on the public demo scored vision_ai 0.40
+// and behavioral 0.44 with every environmental category clean — weighted sum
+// 0.189, allowed. At 0.5 the rule missed it in both views; at 0.4 it floors.
+// The panel's personas all carry twenty approach points, so the human this bar
+// could hit — fast hardware, cursor already near the target, short straight
+// click — is not in the corpus. TestCorroborationSparesADeveloperWithDevToolsOpen
+// pins the closest measured human shape; bench/README.md says what the panel
+// can and cannot support.
 //
 // Requiring three categories fails outright: all sixteen such combinations leave
 // the adversary at 0.234 or 0.423, still allowed. An earlier 3-of-4 rule chosen
@@ -2305,12 +2332,16 @@ func applyDispositiveFloor(score float64, detections []DetectionResult) float64 
 const (
 	// corroborationAgreeAt is the category score counting as one behavioural
 	// category agreeing.
-	corroborationAgreeAt = 0.5
+	corroborationAgreeAt = 0.4
 	// corroborationMinAgree is how many must agree. Two; three never fires.
 	corroborationMinAgree = 2
 	// corroborationFloor is where an agreeing verdict lands: a block, not the
 	// 0.9 reserved for self-declared automation.
 	corroborationFloor = 0.6
+	// corroborationEpsilon absorbs the few ulps a noisy-OR product lands from a
+	// round number (0.75×0.8 is 0.3999999999999999, not 0.4), so agreement does
+	// not depend on the order the arithmetic happened to run in.
+	corroborationEpsilon = 1e-9
 )
 
 // behaviouralCategories are the categories a browser trips by how it moves
@@ -2323,10 +2354,19 @@ var behaviouralCategories = []ThreatCategory{
 	CategoryCDP,
 }
 
-func applyCorroborationFloor(score float64, categoryScores map[string]float64) float64 {
+func applyCorroborationFloor(score float64, detections []DetectionResult) float64 {
+	// Only independent views count. A signal that a developer's own tooling
+	// produces (NonCorroborating) still scores, but cannot be one of the two.
+	corroborating := make([]DetectionResult, 0, len(detections))
+	for _, d := range detections {
+		if !d.NonCorroborating {
+			corroborating = append(corroborating, d)
+		}
+	}
+	categoryScores := noisyOrByCategory(corroborating)
 	agreeing := 0
 	for _, cat := range behaviouralCategories {
-		if categoryScores[string(cat)] >= corroborationAgreeAt {
+		if categoryScores[string(cat)] >= corroborationAgreeAt-corroborationEpsilon {
 			agreeing++
 		}
 	}
@@ -2336,7 +2376,11 @@ func applyCorroborationFloor(score float64, categoryScores map[string]float64) f
 	return score
 }
 
-func (e *ScoringEngine) calculateCategoryScores(detections []DetectionResult) map[string]float64 {
+// noisyOrByCategory combines the detections within each category: each is
+// independent evidence of strength score×confidence, and the category is the
+// probability that at least one is right. Categories with no detections are
+// absent from the result.
+func noisyOrByCategory(detections []DetectionResult) map[string]float64 {
 	// Probability that every detection in a category is wrong; the category
 	// score is one minus that.
 	survives := make(map[ThreatCategory]float64)
@@ -2353,6 +2397,11 @@ func (e *ScoringEngine) calculateCategoryScores(detections []DetectionResult) ma
 	for cat, s := range survives {
 		result[string(cat)] = math.Min(1.0, 1-s)
 	}
+	return result
+}
+
+func (e *ScoringEngine) calculateCategoryScores(detections []DetectionResult) map[string]float64 {
+	result := noisyOrByCategory(detections)
 
 	// Fill missing categories
 	for cat := range e.weights {

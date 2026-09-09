@@ -176,6 +176,25 @@ const SCHEMES = {
     return agreeing >= 2 ? Math.max(base, 0.6) : base;
   },
 
+  /**
+   * The shipped rule since the agreement bar moved to 0.4: two behavioural
+   * categories at 0.4 floor at 0.6, and the DevTools console-attach probe does
+   * not count as a view — a developer with the console open produces it, so it
+   * must not be the second half of a corroboration.
+   */
+  corroborationFloor2AgreeAt04: (dets) => {
+    const cats = {};
+    for (const [c, ds] of Object.entries(byCategory(dets))) cats[c] = categoryNoisyOr(ds);
+    const base = finalScore(cats);
+    if (dets.some(isSelfDeclared)) return Math.max(base, 0.9);
+    const views = {};
+    const corroborating = dets.filter((d) => !/console consumer attached/.test(d.reason || ''));
+    for (const [c, ds] of Object.entries(byCategory(corroborating))) views[c] = categoryNoisyOr(ds);
+    const BEHAV = ['vision_ai', 'behavioral', 'automation', 'cdp'];
+    const agreeing = BEHAV.filter((c) => (views[c] || 0) >= 0.4).length;
+    return agreeing >= 2 ? Math.max(base, 0.6) : base;
+  },
+
   /** Rebalanced weights plus the 2-of-4 corroboration floor. */
   rebalancedPlusCorroboration2: (dets) => {
     const W = { ...WEIGHTS,

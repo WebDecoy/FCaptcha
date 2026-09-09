@@ -728,7 +728,7 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
   const categoryScores = calculateCategoryScores(detections);
   const finalScore = applyCorroborationFloor(
     applyDispositiveFloor(calculateFinalScore(categoryScores), detections),
-    categoryScores
+    detections
   );
 
   let recommendation;
