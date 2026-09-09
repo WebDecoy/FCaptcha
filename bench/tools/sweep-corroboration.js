@@ -38,6 +38,13 @@ const BEHAVIOURAL = ['vision_ai', 'behavioral', 'automation', 'cdp'];
 
 const SELF_DECLARED = [/^WebDriver detected$/, /^CDP automation detected/];
 const isSelfDeclared = (d) => SELF_DECLARED.some((re) => re.test(d.reason || ''));
+// Signals a developer's own tooling produces (DevTools open trips the
+// console-attach probe). They score, but cannot be one of the agreeing views —
+// the engine marks them nonCorroborating; the pattern covers older servers.
+const NON_CORROBORATING = [/console consumer attached/];
+const isNonCorroborating = (d) =>
+  d.nonCorroborating === true || NON_CORROBORATING.some((re) => re.test(d.reason || ''));
+const corroboratingOnly = (detections) => detections.filter((d) => !isNonCorroborating(d));
 
 function categoryNoisyOr(dets) {
   let survive = 1;
@@ -61,13 +68,14 @@ function score(detections, agreeAt, minAgree, floor) {
     Object.entries(WEIGHTS).reduce((t, [c, w]) => t + (cats[c] || 0) * w, 0)
   );
   if (detections.some(isSelfDeclared)) return Math.max(base, 0.9);
-  const agreeing = BEHAVIOURAL.filter((c) => (cats[c] || 0) >= agreeAt).length;
+  const views = categoriesOf(corroboratingOnly(detections));
+  const agreeing = BEHAVIOURAL.filter((c) => (views[c] || 0) >= agreeAt).length;
   return agreeing >= minAgree ? Math.max(base, floor) : base;
 }
 
 /** How many behavioural categories agree, for diagnosing where a rule fires. */
 const agreementCount = (detections, agreeAt) =>
-  BEHAVIOURAL.filter((c) => (categoriesOf(detections)[c] || 0) >= agreeAt).length;
+  BEHAVIOURAL.filter((c) => (categoriesOf(corroboratingOnly(detections))[c] || 0) >= agreeAt).length;
 
 async function main() {
   const i = process.argv.indexOf('--derive');

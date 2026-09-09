@@ -13,6 +13,17 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [Unreleased]
+
+### Detection
+- Lower the behavioural corroboration bar from 0.5 to 0.4. Two independent
+  behavioural categories at 0.4 now floor the score at 0.6 and withhold the
+  token. The DevTools console-attach probe no longer counts as one of the
+  agreeing views, so a developer with the console open contributes that one
+  signal and nothing more. On the bench corpus no human sample reaches two
+  agreeing categories at 0.4, the agent catch rate is unchanged from 0.5, and
+  the false-positive gate passes. Applied to Go, Node, and Python.
+
 ## [1.35.0] — 2026-09-09
 
 ### Security and fixes

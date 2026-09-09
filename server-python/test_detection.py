@@ -23,6 +23,11 @@ from server import (
     run_verification,
     set_interaction_mode,
     DISPOSITIVE_FLOOR,
+    apply_corroboration_floor,
+    detect_cdp,
+    BEHAVIOURAL_CATEGORIES,
+    CORROBORATION_AGREE_AT,
+    CORROBORATION_FLOOR,
 )
 
 test = TestRegistry()
@@ -235,6 +240,97 @@ def client_cannot_claim_invisible_mode():
     spoofed["serverContext"] = {"widgetInteraction": False}
     set_interaction_mode(spoofed, True)
     assert has_widget_interaction(spoofed) is True
+
+
+# ---------------------------------------------------------------------------
+# Behavioural corroboration floor. Mirrors server-go/corroboration_test.go.
+# ---------------------------------------------------------------------------
+
+def views(cats):
+    """One detection per category at exactly the given strength, so each
+    category's noisy-OR score is the number written here."""
+    return [Detection(ThreatCategory(c), s, 1.0, c) for c, s in cats.items()]
+
+
+@test
+def two_agreeing_behavioural_categories_floor_the_score():
+    got = apply_corroboration_floor(0.234, views({"vision_ai": 0.652, "behavioral": 0.597, "automation": 0.36}))
+    assert got == CORROBORATION_FLOOR, got
+
+
+@test
+def one_category_alone_never_floors_however_strong():
+    for c in BEHAVIOURAL_CATEGORIES:
+        assert apply_corroboration_floor(0.2, views({c: 1.0})) == 0.2, c
+
+
+@test
+def non_behavioural_categories_do_not_corroborate():
+    assert apply_corroboration_floor(0.3, views({"headless": 1.0, "fingerprint": 1.0, "bot": 1.0})) == 0.3
+
+
+@test
+def the_floor_never_lowers_a_score():
+    assert apply_corroboration_floor(0.95, views({"vision_ai": 0.9, "behavioral": 0.9})) == 0.95
+
+
+@test
+def agreement_starts_exactly_at_the_threshold():
+    under = CORROBORATION_AGREE_AT - 0.01
+    assert apply_corroboration_floor(0.2, views({"vision_ai": under, "behavioral": under})) == 0.2
+    at = CORROBORATION_AGREE_AT
+    assert apply_corroboration_floor(0.2, views({"vision_ai": at, "behavioral": at})) == CORROBORATION_FLOOR
+
+
+@test
+def a_non_corroborating_detection_cannot_be_the_second_view():
+    console = Detection(ThreatCategory.CDP, 0.6, 1.0, "console attached", non_corroborating=True)
+    movement = Detection(ThreatCategory.BEHAVIORAL, CORROBORATION_AGREE_AT, 1.0, "movement")
+    assert apply_corroboration_floor(0.2, [console, movement]) == 0.2
+    # Same evidence from an independent view does floor: provenance, not strength.
+    independent = Detection(ThreatCategory.CDP, 0.6, 1.0, "independent view")
+    assert apply_corroboration_floor(0.2, [independent, movement]) == CORROBORATION_FLOOR
+
+
+@test
+def a_non_corroborating_detection_still_scores_its_category():
+    scores = calculate_category_scores([Detection(ThreatCategory.CDP, 0.6, 0.5, "console", non_corroborating=True)])
+    assert abs(scores["cdp"] - 0.3) < 1e-9, scores
+
+
+@test
+def the_console_attach_probe_carries_the_mark_and_only_it():
+    dets = detect_cdp({"behavioral": {"touchEvents": 0}, "environmental": {"cdpRuntime": {"consoleAttached": True}}})
+    probe = [d for d in dets if "console consumer attached" in d.reason]
+    assert probe and probe[0].non_corroborating, dets
+    assert sum(1 for d in dets if d.non_corroborating) == 1, dets
+
+
+@test
+def the_extension_driven_click_that_passed_at_0_5_is_floored_at_0_4():
+    # Live measurement, webdecoy.com demo 2026-09-09, v1.35.0: vision_ai 0.40
+    # (0.3999999999999999 in floating point), behavioral 0.44, cdp 0.30 from the
+    # console probe alone, weighted sum 0.189, allowed.
+    dets = [
+        Detection(ThreatCategory.VISION_AI, 0.5, 0.5, "path unnaturally direct"),
+        Detection(ThreatCategory.VISION_AI, 0.4, 0.5, "click precision"),
+        Detection(ThreatCategory.BEHAVIORAL, 0.6, 0.7, "insufficient movement"),
+        Detection(ThreatCategory.BEHAVIORAL, 0.2, 0.2, "no scroll or keyboard"),
+        Detection(ThreatCategory.CDP, 0.6, 0.5, "console attached", non_corroborating=True),
+        Detection(ThreatCategory.FINGERPRINT, 0.4, 0.4, "canvas blocked"),
+    ]
+    assert apply_corroboration_floor(0.189, dets) >= 0.5
+
+
+@test
+def a_developer_with_devtools_open_and_a_quick_click_is_not_floored():
+    dets = [
+        Detection(ThreatCategory.BEHAVIORAL, 0.5, 0.5, "first interaction too soon"),
+        Detection(ThreatCategory.BEHAVIORAL, 0.4, 0.4, "no overshoot corrections"),
+        Detection(ThreatCategory.CDP, 0.6, 0.5, "console attached", non_corroborating=True),
+        Detection(ThreatCategory.FINGERPRINT, 0.4, 0.4, "canvas blocked"),
+    ]
+    assert apply_corroboration_floor(0.115, dets) == 0.115
 
 
 DetectionTests = test.testcase("DetectionTests")

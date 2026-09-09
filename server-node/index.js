@@ -345,7 +345,7 @@ class ScoringEngine {
     const categoryScores = calculateCategoryScores(detections, this.weights);
     const finalScore = applyCorroborationFloor(
       applyDispositiveFloor(calculateFinalScore(categoryScores, this.weights), detections),
-      categoryScores
+      detections
     );
 
     let recommendation;

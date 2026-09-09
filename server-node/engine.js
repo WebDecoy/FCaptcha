@@ -495,7 +495,10 @@ function detectCDP(signals) {
   if (env.cdpRuntime && env.cdpRuntime.consoleAttached) {
     detections.push({
       category: 'cdp', score: 0.6, confidence: 0.5,
-      reason: 'CDP/DevTools console consumer attached (automation protocol or open DevTools)'
+      reason: 'CDP/DevTools console consumer attached (automation protocol or open DevTools)',
+      // A developer with DevTools open produces exactly this signal, so it
+      // cannot be one of the independent views the corroboration floor counts.
+      nonCorroborating: true
     });
   }
 
@@ -912,33 +915,47 @@ function applyDispositiveFloor(score, detections) {
  * product. It treats absence of environmental evidence as evidence of absence — but
  * on this adversary a clean environment is the attack working, not innocence.
  *
- * The rule: when two or more behavioural categories independently reach 0.5, floor
- * the score at 0.6.
+ * The rule: when two or more behavioural categories independently reach 0.4, floor
+ * the score at 0.6. A signal a developer's own tooling produces is not an
+ * independent view: the DevTools console-attach probe is marked nonCorroborating,
+ * so it still scores but cannot be one of the two that agree.
  *
  * Constants swept over a 40-point grid against the labelled corpus
  * (bench/tools/sweep-corroboration.js), not reasoned about. No human in the
  * 126-sample panel reaches two agreeing behavioural categories at any threshold
- * tested, while 66 of 75 agents do at 0.5. Requiring three fails outright — all
- * sixteen such combinations leave the adversary allowed. The floor value does not
- * affect separation, so 0.6 is a policy choice: the block boundary, kept distinct
- * from the 0.9 reserved for a browser that declares its own automation.
+ * tested, and 0.3, 0.4 and 0.5 catch the same 66 of 75 agents. The bar moved from
+ * 0.5 to 0.4 on a live measurement the corpus cannot make (2026-09-09): an
+ * extension-driven click in a real Chrome on the public demo scored vision_ai 0.40
+ * and behavioral 0.44 with every environmental category clean — weighted sum
+ * 0.189, allowed at 0.5, floored at 0.4. The exclusion is what keeps the lower
+ * bar honest: the human-looking sessions beside it sat at behavioral 0.37 with cdp
+ * 0.30 from the console probe alone. Requiring three fails outright — all sixteen
+ * such combinations leave the adversary allowed. The floor value does not affect
+ * separation, so 0.6 is a policy choice: the block boundary, kept distinct from
+ * the 0.9 reserved for a browser that declares its own automation.
  *
  * Caveat: the adversary is one synthetic, hand-authored sample. This shows the
  * arithmetic works on the shape the corpus describes, not that it works on a real
  * source-patched browser.
  */
-const CORROBORATION_AGREE_AT = 0.5;
+const CORROBORATION_AGREE_AT = 0.4;
 const CORROBORATION_MIN_AGREE = 2;
 const CORROBORATION_FLOOR = 0.6;
+// Absorbs the few ulps a noisy-OR product lands from a round number (0.75×0.8 is
+// 0.3999999999999999, not 0.4), so agreement does not depend on arithmetic order.
+const CORROBORATION_EPSILON = 1e-9;
 
 // Categories a browser trips by how it moves rather than by what it is. A
 // patched binary can hide what it is; it cannot hide that nothing is moving the
 // pointer like a hand.
 const BEHAVIOURAL_CATEGORIES = ['vision_ai', 'behavioral', 'automation', 'cdp'];
 
-function applyCorroborationFloor(score, categoryScores) {
+function applyCorroborationFloor(score, detections) {
+  // Only independent views count. A signal that a developer's own tooling
+  // produces (nonCorroborating) still scores, but cannot be one of the two.
+  const categoryScores = calculateCategoryScores(detections.filter((d) => !d.nonCorroborating));
   const agreeing = BEHAVIOURAL_CATEGORIES
-    .filter((c) => (categoryScores[c] || 0) >= CORROBORATION_AGREE_AT).length;
+    .filter((c) => (categoryScores[c] || 0) >= CORROBORATION_AGREE_AT - CORROBORATION_EPSILON).length;
   return agreeing >= CORROBORATION_MIN_AGREE ? Math.max(score, CORROBORATION_FLOOR) : score;
 }
 
