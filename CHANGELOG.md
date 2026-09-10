@@ -13,6 +13,21 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [Unreleased]
+
+### Security and fixes
+- Withhold the token when one page instance on one device at one address
+  verifies more than 10 times in a minute (`reason: rate_limited`). The
+  per-address rate detection stays as it was; it carries almost no weight, so
+  it could not stop an automated client verifying every few seconds. Keyed on
+  the widget instance as well, so identical machines behind one address do not
+  share a budget.
+- The keyboard-only accessibility exemption now checks that key holds look
+  like fingers when hold data is present. A keyboard-driven agent releases keys
+  in a millisecond or two and no longer passes as a keyboard user; a visitor
+  with no hold data, including one on an older widget, keeps the exemption.
+  The widget reports an average key hold alongside its key count.
+
 ## [1.36.0] — 2026-09-09
 
 ### Detection

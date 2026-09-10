@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('crypto');
+
 /**
  * Shared detection and scoring core.
  *
@@ -130,6 +132,90 @@ function setInteractionMode(signals, widget) {
  * Whether click-derived behavioural fields carry meaning for this request.
  * Absent context means widget mode — the long-standing behaviour.
  */
+// Caps how many tokens one page instance on one device at one address can be
+// issued per minute. A person verifies a form once and retries a handful of
+// times; the automated client observed on the public demo (2026-09-09) verified
+// fourteen times in fifty-two seconds. Same limit as the per-address detection
+// so the two read consistently in logs.
+const DEVICE_VERIFICATIONS_PER_MINUTE = 10;
+
+const nested = (o, ...keys) => keys.reduce((v, k) => (v && typeof v === 'object') ? v[k] : undefined, o);
+
+// Coarse device identity used for cardinality checks and the per-device rate
+// gate: canvas hash, WebGL renderer, platform and core count. Identical
+// hardware produces identical values, which is why the rate gate also keys on
+// the widget instance.
+function deviceFingerprint(signals) {
+  const env = (signals && signals.environmental) || {};
+  const automation = env.automationFlags || {};
+  const components = [
+    String(nested(env, 'canvasHash', 'hash') || ''),
+    String(nested(env, 'webglInfo', 'renderer') || ''),
+    String(automation.platform || ''),
+    String(automation.hardwareConcurrency || '')
+  ];
+  return crypto.createHash('sha256').update(components.join('|')).digest('hex').slice(0, 16);
+}
+
+// The per-page-load id the widget or invisible session reports about itself.
+// Bounded, because it is client-supplied and becomes part of a rate-limiter key.
+function widgetInstance(signals) {
+  const meta = (signals && signals.meta) || {};
+  const id = typeof meta.sessionId === 'string' && meta.sessionId ? meta.sessionId
+    : typeof meta.widgetId === 'string' ? meta.widgetId : '';
+  return id.slice(0, 64);
+}
+
+// The rate gate as one function so server.js and index.js cannot drift.
+// Returns the detection to record when the budget is exhausted, else null.
+function deviceRateDetection(exceeded, count) {
+  if (!exceeded) return null;
+  return { category: 'rate_limit', score: 0.8, confidence: 0.9,
+    reason: 'Verification rate exceeded for this device (per-minute)', details: { count, window: 60 } };
+}
+const deviceRateKey = (siteKey, ip, signals, instance) => `device:${siteKey}:${ip}:${deviceFingerprint(signals)}:${instance}`;
+
+/**
+ * Keyboard-only accessibility exemption.
+ *
+ * A visitor who works the page from the keyboard — a screen-reader user, a
+ * switch-access user, anyone who never touches a pointer — produces key events
+ * and no pointer samples, and must not be scored as "no mouse movement". An
+ * agent typing through an automation protocol produces exactly the same counts,
+ * which is how a keyboard-driven form filler claimed the exemption on the public
+ * demo (2026-09-09) and was scored as a person.
+ *
+ * The counts cannot tell them apart; the key holds can. A finger on a key holds
+ * it for tens of milliseconds (the bench's keyboard personas never drop below
+ * 41ms); an automation protocol releases it in one or two. So the exemption
+ * asks, when hold data exists, that it look like fingers. With no hold data at
+ * all — a widget older than this check, or a visitor who only tabbed to the
+ * checkbox and never typed into a field — the exemption stands, because refusing
+ * it would score exactly the people it protects.
+ */
+// Average keydown→keyup hold below which the keys were not pressed by a hand:
+// well under the 41ms bench floor, well over the 1–8ms an automation protocol
+// produces. A real-human capture should confirm it before it is tightened.
+const MACHINE_KEY_HOLD_MS = 20;
+// How many holds the average has to rest on.
+const MIN_KEY_HOLD_SAMPLES = 3;
+
+function mechanicalKeyHold(signals, b) {
+  let n = Number(b.keyHoldSamples) || 0;
+  let sum = n * (Number(b.keyHoldAvg) || 0);
+  const fields = nested(signals, 'formAnalysis', 'textareaKeyboard') || {};
+  for (const stats of Object.values(fields)) {
+    const dwells = stats && Array.isArray(stats.dwellTimes) ? stats.dwellTimes : [];
+    for (const d of dwells) { if (typeof d === 'number') { n++; sum += d; } }
+  }
+  return n >= MIN_KEY_HOLD_SAMPLES && sum / n < MACHINE_KEY_HOLD_MS;
+}
+
+function keyboardOnlyUser(signals, b) {
+  if ((b.keyEvents ?? 0) < 2 || (b.totalPoints ?? 0) !== 0) return false;
+  return !mechanicalKeyHold(signals, b);
+}
+
 function hasWidgetInteraction(signals) {
   const ctx = signals && signals[SERVER_CONTEXT_KEY];
   if (!ctx || typeof ctx.widgetInteraction !== 'boolean') return true;
@@ -149,7 +235,7 @@ function detectVisionAI(signals) {
   const touchEvents = b.touchEvents ?? 0;
   const keyEvents = b.keyEvents ?? 0;
   const isTouchUser = isTouchModality(b);
-  const isKeyboardUser = keyEvents >= 2 && totalPoints === 0;
+  const isKeyboardUser = keyboardOnlyUser(signals, b);
   // Click-derived fields only exist when a widget was there to click.
   const isWidget = hasWidgetInteraction(signals);
 
@@ -550,7 +636,7 @@ function detectBehavioral(signals) {
   const touchEvts = b.touchEvents ?? 0;
   const keyEvts = b.keyEvents ?? 0;
   const isTouchUsr = isTouchModality(b);
-  const isKbdUser = keyEvts >= 2 && totalPoints === 0;
+  const isKbdUser = keyboardOnlyUser(signals, b);
 
   if (totalPoints === 0 && !isTouchUsr && !isKbdUser) {
     detections.push({
@@ -961,6 +1047,15 @@ function applyCorroborationFloor(score, detections) {
 
 module.exports = {
   // Constants
+  DEVICE_VERIFICATIONS_PER_MINUTE,
+  MACHINE_KEY_HOLD_MS,
+  MIN_KEY_HOLD_SAMPLES,
+  deviceFingerprint,
+  widgetInstance,
+  deviceRateKey,
+  deviceRateDetection,
+  keyboardOnlyUser,
+  mechanicalKeyHold,
   AUTOMATION_UA_PATTERNS,
   WEIGHTS,
   DISPOSITIVE_FLOOR,

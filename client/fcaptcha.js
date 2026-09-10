@@ -199,6 +199,9 @@
   // Behavioral Signal Collector
   // ============================================================
 
+  // Keys whose hold says nothing about typing: held across other presses.
+  const KEY_HOLD_EXCLUDED = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'NumLock', 'ScrollLock']);
+
   class BehavioralCollector {
     constructor() {
       this.mousePositions = [];
@@ -222,6 +225,13 @@
       // Cross-input activity timeline for think-time cadence.
       this._lastActivityT = null;
       this._cadenceGaps = [];
+      // Key hold (keydown→keyup) per physical key. Only durations are kept —
+      // never which key — and modifiers and auto-repeat are excluded. A hand
+      // on a key holds it for tens of milliseconds; an automation protocol
+      // releases it in one or two. The server reads the summary before it
+      // grants the keyboard-only accessibility exemption.
+      this._keyDownAt = new Map();
+      this.keyHolds = [];
       this._teleportClicks = 0;
       // Coalesced pointermove batches: real mice coalesce multiple hardware
       // samples per frame; CDP-injected moves produce single-entry batches.
@@ -328,6 +338,17 @@
         keyLength: e.key ? e.key.length : 0, // Don't store actual keys
         t: now
       });
+      const keyId = e.code || e.key;
+      if (!keyId || KEY_HOLD_EXCLUDED.has(e.key)) return;
+      if (e.type === 'keydown') {
+        if (!e.repeat) this._keyDownAt.set(keyId, now);
+      } else if (e.type === 'keyup') {
+        const downAt = this._keyDownAt.get(keyId);
+        if (downAt === undefined) return;
+        this._keyDownAt.delete(keyId);
+        const hold = now - downAt;
+        if (hold > 0 && hold < 2000 && this.keyHolds.length < 200) this.keyHolds.push(hold);
+      }
     }
 
     recordTouch(e) {
@@ -626,6 +647,7 @@
         scrollEvents: this.scrollEvents.length,
         scrollMorphology: this._analyzeScrollMorphology(),
         keyEvents: this.keyEvents.length,
+        ...this._keyHoldSummary(),
         touchEvents: this.touchEvents.length,
         focusEvents: this.focusEvents.length,
         clickData: this.clickData,
@@ -898,6 +920,15 @@
       return arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length;
     }
 
+    // Average keydown→keyup hold and how many presses it rests on.
+    _keyHoldSummary() {
+      const n = this.keyHolds.length;
+      return {
+        keyHoldSamples: n,
+        keyHoldAvg: n ? this.keyHolds.reduce((a, b) => a + b, 0) / n : 0
+      };
+    }
+
     _getEmptyAnalysis(totalPoints = 0) {
       return {
         // A short trace is insufficient for stable trajectory statistics, but
@@ -910,6 +941,7 @@
         scrollEvents: this.scrollEvents.length,
         scrollMorphology: this._analyzeScrollMorphology(),
         keyEvents: this.keyEvents.length,
+        ...this._keyHoldSummary(),
         touchEvents: this.touchEvents.length, focusEvents: this.focusEvents.length,
         clickData: this.clickData, interactionDuration: Date.now() - this.startTime,
         inputForensics: this._analyzeInputForensics(),

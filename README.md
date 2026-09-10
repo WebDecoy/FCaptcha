@@ -602,6 +602,7 @@ challenge:
 | The score is below the success threshold (0.5) | (score speaks for itself) |
 | A **valid proof of work** for a challenge this server issued, with the signals bound to it | `pow_not_satisfied` |
 | The minting origin is permitted, if `FCAPTCHA_ALLOWED_HOSTNAMES` is set | `hostname_not_allowed` |
+| Fewer than 10 verifications in the last minute from this page instance, device and address | `rate_limited` |
 
 The widget solves a proof of work on every path and aborts rather than submit
 without one, so a request that arrives without a valid solution did not come from

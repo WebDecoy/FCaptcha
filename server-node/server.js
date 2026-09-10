@@ -369,6 +369,7 @@ const {
   calculateFinalScore,
   applyDispositiveFloor,
   applyCorroborationFloor,
+  widgetInstance, deviceRateKey, deviceRateDetection, DEVICE_VERIFICATIONS_PER_MINUTE
 } = require('./engine');
 
 // Stateful detectors stay here: they read the module-level stores below.
@@ -675,6 +676,18 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
   detections.push(...await detectFingerprint(signals, ip, siteKey));
   detections.push(...await detectRateAbuse(ip, siteKey));
 
+  // Per-device verification rate — a precondition, not evidence: rate_limit
+  // weighs 0.01, so the per-address detection above can never move a verdict.
+  // Keyed on the widget instance too, so identical machines behind one NAT do
+  // not share a budget. See DEVICE_VERIFICATIONS_PER_MINUTE in engine.js.
+  let deviceRateExceeded = false;
+  const instance = widgetInstance(signals);
+  if (instance) {
+    const [exceeded, count] = await rateLimiter.check(deviceRateKey(siteKey, ip, signals, instance), 60, DEVICE_VERIFICATIONS_PER_MINUTE);
+    const hit = deviceRateDetection(exceeded, count);
+    if (hit) { deviceRateExceeded = true; detections.push(hit); }
+  }
+
   // Add IP reputation check (async but we'll use sync version for simplicity)
   if (detection.isDatacenterIP(ip)) {
     detections.push({
@@ -754,7 +767,7 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
   // who never completed the challenge. Gating here means no future reweighting
   // can reopen the bypass, and it holds even if the dispositive floor is
   // lowered or removed.
-  const success = finalScore < 0.5 && hostnameAllowed && powSatisfied;
+  const success = finalScore < 0.5 && hostnameAllowed && powSatisfied && !deviceRateExceeded;
 
   // Name the failed precondition whenever one fails, not only when the score
   // would otherwise have allowed. Gating it on the score made the PoW case
@@ -762,7 +775,9 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
   // and the branch never fired — which is exactly the case a caller most needs
   // explained.
   let withheldReason = '';
-  if (!powSatisfied) withheldReason = 'pow_not_satisfied';
+  // Rate first because it is the one the caller can act on: back off.
+  if (deviceRateExceeded) withheldReason = 'rate_limited';
+  else if (!powSatisfied) withheldReason = 'pow_not_satisfied';
   else if (!hostnameAllowed) withheldReason = 'hostname_not_allowed';
 
   const token = success

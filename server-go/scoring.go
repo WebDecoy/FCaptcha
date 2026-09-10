@@ -69,7 +69,8 @@ type VerificationResult struct {
 	CategoryScores map[string]float64
 	Recommendation string
 	// Reason explains a token withheld for something other than the score:
-	// "pow_not_satisfied" or "hostname_not_allowed". Empty otherwise. Without it
+	// "rate_limited", "pow_not_satisfied" or "hostname_not_allowed". Empty
+	// otherwise. Without it
 	// an integrator whose score is comfortably under the threshold has no way to
 	// tell why no token came back.
 	Reason string
@@ -627,6 +628,27 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	detections = append(detections, e.detectFingerprint(signals, ip, siteKey)...)
 	detections = append(detections, e.detectRateAbuse(ip, siteKey)...)
 
+	// Per-device verification rate. A precondition, not evidence: the
+	// rate_limit category weighs 0.01, so the per-address detection above can
+	// never move a verdict, and an automated client that verifies once every
+	// few seconds from one page instance is refused a token here instead. Keyed
+	// on the widget instance as well as address and fingerprint so identical
+	// machines behind one NAT — a lab, an office — do not share a budget.
+	deviceRateExceeded := false
+	if instance := widgetInstance(signals); instance != "" {
+		deviceKey := "device:" + siteKey + ":" + ip + ":" + deviceFingerprint(signals) + ":" + instance
+		if exceeded, count := e.rateLimiter.Check(deviceKey, 60, deviceVerificationsPerMinute); exceeded {
+			deviceRateExceeded = true
+			detections = append(detections, DetectionResult{
+				Category:   CategoryRateLimit,
+				Score:      0.8,
+				Confidence: 0.9,
+				Reason:     "Verification rate exceeded for this device (per-minute)",
+				Details:    map[string]interface{}{"count": count, "window": 60},
+			})
+		}
+	}
+
 	// Network/infrastructure detectors
 	detections = append(detections, e.CheckIPReputation(ip)...)
 	detections = append(detections, e.CheckBrowserConsistency(userAgent, signals)...)
@@ -701,7 +723,7 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	// who never completed the challenge. Gating here means no future reweighting
 	// can reopen the bypass, and it holds even if the dispositive floor is
 	// lowered or removed.
-	success := finalScore < 0.5 && hostnameAllowed && powSatisfied
+	success := finalScore < 0.5 && hostnameAllowed && powSatisfied && !deviceRateExceeded
 
 	// Name the failed precondition whenever one fails, not only when the score
 	// would otherwise have allowed. Gating it on the score made the PoW case
@@ -710,6 +732,9 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	// explained.
 	withheldReason := ""
 	switch {
+	case deviceRateExceeded:
+		// First because it is the one the caller can act on: back off.
+		withheldReason = "rate_limited"
 	case !powSatisfied:
 		withheldReason = "pow_not_satisfied"
 	case !hostnameAllowed:
@@ -1078,9 +1103,8 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 	totalPoints := getFloat(behavioral, "totalPoints")
 	trajectoryLen := getFloat(behavioral, "trajectoryLength")
 	approachPts := getFloat(behavioral, "approachPoints")
-	keyEventsAI := getFloat(behavioral, "keyEvents")
 	isTouchUser := isTouchModality(behavioral)
-	isKeyboardUser := keyEventsAI >= 2 && totalPoints == 0
+	isKeyboardUser := keyboardOnlyUser(signals, behavioral)
 	// Click-derived fields only exist when a widget was there to click.
 	isWidget := hasWidgetInteraction(signals)
 
@@ -1636,7 +1660,7 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 	trajectoryLength := getFloat(behavioral, "trajectoryLength")
 	keyEvents := getFloat(behavioral, "keyEvents")
 	isTouchUsr := isTouchModality(behavioral)
-	isKbdUsr := keyEvents >= 2 && totalPoints == 0
+	isKbdUsr := keyboardOnlyUser(signals, behavioral)
 	isWidget := hasWidgetInteraction(signals)
 
 	if totalPoints == 0 && !isTouchUsr && !isKbdUsr {
@@ -1925,17 +1949,7 @@ func (e *ScoringEngine) detectFingerprint(signals map[string]interface{}, ip, si
 	results := make([]DetectionResult, 0)
 
 	env := getMap(signals, "environmental")
-	automation := getMap(env, "automationFlags")
-
-	// Generate fingerprint
-	components := []string{
-		getString(env, "canvasHash"),
-		getString(getMap(env, "webglInfo"), "renderer"),
-		getString(automation, "platform"),
-		getString(automation, "hardwareConcurrency"),
-	}
-	fpHash := sha256.Sum256([]byte(strings.Join(components, "|")))
-	fingerprint := hex.EncodeToString(fpHash[:8])
+	fingerprint := deviceFingerprint(signals)
 
 	// Record fingerprint
 	e.fingerprintStore.Record(fingerprint, ip, siteKey)
@@ -1987,6 +2001,97 @@ func (e *ScoringEngine) detectFingerprint(signals map[string]interface{}, ip, si
 	}
 
 	return results
+}
+
+// deviceVerificationsPerMinute caps how many tokens one page instance on one
+// device at one address can be issued per minute. A person verifies a form
+// once and retries a handful of times; the automated client observed on the
+// public demo (2026-09-09) verified fourteen times in fifty-two seconds. Same
+// limit as the per-address detection so the two read consistently in logs.
+const deviceVerificationsPerMinute = 10
+
+// deviceFingerprint is the coarse device identity used for cardinality checks
+// and the per-device rate gate: canvas hash, WebGL renderer, platform and core
+// count. Identical hardware produces identical values, which is why the rate
+// gate also keys on the widget instance.
+func deviceFingerprint(signals map[string]interface{}) string {
+	env := getMap(signals, "environmental")
+	automation := getMap(env, "automationFlags")
+	components := []string{
+		getString(env, "canvasHash"),
+		getString(getMap(env, "webglInfo"), "renderer"),
+		getString(automation, "platform"),
+		getString(automation, "hardwareConcurrency"),
+	}
+	fpHash := sha256.Sum256([]byte(strings.Join(components, "|")))
+	return hex.EncodeToString(fpHash[:8])
+}
+
+// widgetInstance is the per-page-load id the widget or invisible session
+// reports about itself. Bounded, because it is client-supplied and becomes
+// part of a rate-limiter key.
+func widgetInstance(signals map[string]interface{}) string {
+	meta := getMap(signals, "meta")
+	id := getString(meta, "sessionId")
+	if id == "" {
+		id = getString(meta, "widgetId")
+	}
+	if len(id) > 64 {
+		id = id[:64]
+	}
+	return id
+}
+
+// Keyboard-only accessibility exemption.
+//
+// A visitor who works the page from the keyboard — a screen-reader user, a
+// switch-access user, anyone who never touches a pointer — produces key events
+// and no pointer samples, and must not be scored as "no mouse movement". An
+// agent typing through an automation protocol produces exactly the same
+// counts, which is how a keyboard-driven form filler claimed the exemption on
+// the public demo (2026-09-09) and was scored as a person.
+//
+// The counts cannot tell them apart; the key holds can. A finger on a key
+// holds it for tens of milliseconds (the bench's keyboard personas never drop
+// below 41ms); an automation protocol releases it in one or two. So the
+// exemption asks, when hold data exists, that it look like fingers. With no
+// hold data at all — a widget older than this check, or a visitor who only
+// tabbed to the checkbox and never typed into a field — the exemption stands,
+// because refusing it would score exactly the people it protects.
+const (
+	// machineKeyHoldMS is the average keydown→keyup hold below which the keys
+	// were not pressed by a hand: well under the 41ms bench floor, well over
+	// the 1–8ms an automation protocol produces. A real-human capture should
+	// confirm it before it is tightened.
+	machineKeyHoldMS = 20.0
+	// minKeyHoldSamples is how many holds the average has to rest on.
+	minKeyHoldSamples = 3.0
+)
+
+func keyboardOnlyUser(signals, behavioral map[string]interface{}) bool {
+	if getFloat(behavioral, "keyEvents") < 2 || getFloat(behavioral, "totalPoints") != 0 {
+		return false
+	}
+	return !mechanicalKeyHold(signals, behavioral)
+}
+
+// mechanicalKeyHold pools every key hold the client reported — the
+// session-level summary and the per-field dwell times from the form analyser
+// — and reports whether their average is too short for a hand.
+func mechanicalKeyHold(signals, behavioral map[string]interface{}) bool {
+	n := getFloat(behavioral, "keyHoldSamples")
+	sum := n * getFloat(behavioral, "keyHoldAvg")
+	for _, raw := range getMap(getMap(signals, "formAnalysis"), "textareaKeyboard") {
+		stats, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for _, d := range getFloatSlice(stats, "dwellTimes") {
+			n++
+			sum += d
+		}
+	}
+	return n >= minKeyHoldSamples && sum/n < machineKeyHoldMS
 }
 
 func (e *ScoringEngine) detectRateAbuse(ip, siteKey string) []DetectionResult {

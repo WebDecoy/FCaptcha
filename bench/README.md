@@ -19,6 +19,12 @@ node capture/record.js
 node run-bench.js                     # human FPR, agent TPR, per-signal budgets
 node run-bench.js --gate              # non-zero exit when a signal is over budget
 node run-bench.js --json out.json     # machine-readable
+
+On macOS, run the server and the harness under `caffeinate -i -s` for anything
+unattended. Maintenance Sleep pauses both processes together; a challenge
+fetched just before a pause is past its five-minute lifetime when the solve
+resumes, and the gate reports it as `PoW verification failed: challenge_expired`
+on whichever personas were in flight.
 ```
 
 ---
