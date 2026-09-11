@@ -13,7 +13,7 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
-## [Unreleased]
+## [1.37.0] — 2026-09-10
 
 ### Security and fixes
 - Withhold the token when one page instance on one device at one address

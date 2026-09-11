@@ -81,8 +81,8 @@ is, older lines are not maintained — upgrade rather than expect a backport.
 
 | Version | Supported |
 |---------|-----------|
-| 1.36.x  | Yes       |
-| < 1.36  | No        |
+| 1.37.x  | Yes       |
+| < 1.37  | No        |
 
 ## Deployment notes that are security-relevant
 
