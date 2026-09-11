@@ -81,6 +81,7 @@ Redis persistence and backups. FCaptcha itself does not write state to disk.
 | Suspicion ledger (adaptive cost) | site key + IP | 15 minutes |
 | Fingerprint cardinality | site + fingerprint / IP | 15-minute fixed windows; at most 16 members per bucket |
 | Rate-limit counters | site key + IP | 60-second windows |
+| Per-device verification counters | site key + IP + device fingerprint + widget instance | 60-second windows |
 | Site-key state bounds | IP | 1 hour |
 | Siteverify idempotency cache | caller-supplied key | 5 minutes |
 | TLS fingerprints, when terminating TLS | connection | 5 minutes |

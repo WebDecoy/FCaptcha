@@ -28,6 +28,9 @@ from server import (
     BEHAVIOURAL_CATEGORIES,
     CORROBORATION_AGREE_AT,
     CORROBORATION_FLOOR,
+    keyboard_only_user,
+    widget_instance,
+    DEVICE_VERIFICATIONS_PER_MINUTE,
 )
 
 test = TestRegistry()
@@ -331,6 +334,108 @@ def a_developer_with_devtools_open_and_a_quick_click_is_not_floored():
         Detection(ThreatCategory.FINGERPRINT, 0.4, 0.4, "canvas blocked"),
     ]
     assert apply_corroboration_floor(0.115, dets) == 0.115
+
+
+# ---------------------------------------------------------------------------
+# Keyboard-only exemption and the per-device rate gate. Mirror the Go tests.
+# ---------------------------------------------------------------------------
+
+def kb(key_events, **extra):
+    b = {"totalPoints": 0, "trajectoryLength": 0, "keyEvents": key_events, "touchEvents": 0}
+    b.update(extra)
+    return {"behavioral": b, "environmental": {"automationFlags": {}}}
+
+
+def reasons(dets):
+    return " | ".join(d.reason for d in dets)
+
+
+@test
+def keyboard_exemption_stands_without_hold_data():
+    s = kb(8)
+    assert keyboard_only_user(s, s["behavioral"]) is True
+
+
+@test
+def keyboard_exemption_stands_for_fingers():
+    s = kb(12, keyHoldSamples=6, keyHoldAvg=85)
+    assert keyboard_only_user(s, s["behavioral"]) is True
+
+
+@test
+def keyboard_exemption_denied_for_mechanical_holds():
+    s = kb(12, keyHoldSamples=6, keyHoldAvg=4)
+    assert keyboard_only_user(s, s["behavioral"]) is False
+
+
+@test
+def keyboard_exemption_pools_form_field_dwell():
+    mechanical = dict(kb(9), formAnalysis={"textareaKeyboard": {"message": {"dwellTimes": [2, 3, 1, 2]}}})
+    assert keyboard_only_user(mechanical, mechanical["behavioral"]) is False
+    human = dict(kb(9), formAnalysis={"textareaKeyboard": {"message": {"dwellTimes": [60, 75, 90]}}})
+    assert keyboard_only_user(human, human["behavioral"]) is True
+
+
+@test
+def keyboard_exemption_needs_enough_holds_to_judge():
+    s = kb(4, keyHoldSamples=2, keyHoldAvg=3)
+    assert keyboard_only_user(s, s["behavioral"]) is True
+
+
+@test
+def keyboard_exemption_requires_keys_and_no_pointer():
+    one = kb(1)
+    assert keyboard_only_user(one, one["behavioral"]) is False
+    moved = kb(8, totalPoints=3)
+    assert keyboard_only_user(moved, moved["behavioral"]) is False
+
+
+@test
+def keyboard_agent_is_scored_as_pointerless_and_corroborates():
+    agent = kb(14, keyHoldSamples=14, keyHoldAvg=2)
+    dets = detect_vision_ai(agent) + detect_behavioral(agent)
+    assert "Zero mouse, touch, or keyboard events" in reasons(dets), reasons(dets)
+    assert "No mouse movement detected before click" in reasons(dets), reasons(dets)
+    assert apply_corroboration_floor(0.1, dets) >= CORROBORATION_FLOOR
+    person = kb(14, keyHoldSamples=14, keyHoldAvg=80)
+    dets = detect_vision_ai(person) + detect_behavioral(person)
+    assert "Zero mouse" not in reasons(dets) and "No mouse movement" not in reasons(dets), reasons(dets)
+
+
+def device_signals(instance):
+    s = {"behavioral": {"totalPoints": 60, "trajectoryLength": 400, "approachPoints": 12,
+                        "approachDirectness": 0.4, "microTremorScore": 0.5, "velocityVariance": 0.5},
+         "environmental": {"automationFlags": {}}}
+    if instance:
+        s["meta"] = {"sessionId": instance}
+    return s
+
+
+@test
+def the_eleventh_verification_from_one_page_instance_is_withheld():
+    ip = "198.51.100.77"
+    for i in range(DEVICE_VERIFICATIONS_PER_MINUTE):
+        r = run_verification(device_signals("page-a"), ip, "site", "ua")
+        assert r.get("reason") != "rate_limited", f"verification {i + 1} rate limited early"
+    r = run_verification(device_signals("page-a"), ip, "site", "ua")
+    assert r["success"] is False and r.get("reason") == "rate_limited", r
+    assert any("for this device" in d["reason"] for d in r["detections"]), r["detections"]
+    other = run_verification(device_signals("page-b"), ip, "site", "ua")
+    assert other.get("reason") != "rate_limited", "a different widget instance must not inherit the budget"
+
+
+@test
+def no_widget_instance_means_no_device_gate():
+    for _ in range(DEVICE_VERIFICATIONS_PER_MINUTE + 3):
+        r = run_verification(device_signals(""), "198.51.100.78", "site", "ua")
+        assert r.get("reason") != "rate_limited"
+
+
+@test
+def the_instance_id_is_bounded_before_it_becomes_a_key():
+    assert len(widget_instance({"meta": {"widgetId": "x" * 500}})) == 64
+    assert widget_instance({}) == ""
+    assert widget_instance({"meta": {"sessionId": 42}}) == ""
 
 
 DetectionTests = test.testcase("DetectionTests")

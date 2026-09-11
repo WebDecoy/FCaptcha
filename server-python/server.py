@@ -770,6 +770,87 @@ def has_widget_interaction(signals: Dict) -> bool:
     return True
 
 
+# Caps how many tokens one page instance on one device at one address can be
+# issued per minute. A person verifies a form once and retries a handful of
+# times; the automated client observed on the public demo (2026-09-09) verified
+# fourteen times in fifty-two seconds. Same limit as the per-address detection
+# so the two read consistently in logs.
+DEVICE_VERIFICATIONS_PER_MINUTE = 10
+
+
+def device_fingerprint(signals: Dict) -> str:
+    """Coarse device identity used for cardinality checks and the per-device
+    rate gate: canvas hash, WebGL renderer, platform and core count. Identical
+    hardware produces identical values, which is why the rate gate also keys on
+    the widget instance."""
+    env = signals.get("environmental") or {}
+    automation = env.get("automationFlags") or {}
+    components = [
+        str(get_nested(env, "canvasHash", "hash", default="")),
+        str(get_nested(env, "webglInfo", "renderer", default="")),
+        str(automation.get("platform", "")),
+        str(automation.get("hardwareConcurrency", "")),
+    ]
+    return hashlib.sha256("|".join(components).encode()).hexdigest()[:16]
+
+
+def widget_instance(signals: Dict) -> str:
+    """The per-page-load id the widget or invisible session reports about
+    itself. Bounded, because it is client-supplied and becomes part of a
+    rate-limiter key."""
+    meta = signals.get("meta") or {}
+    ident = meta.get("sessionId") or meta.get("widgetId") or ""
+    return ident[:64] if isinstance(ident, str) else ""
+
+
+def device_rate_key(site_key: str, ip: str, signals: Dict, instance: str) -> str:
+    return f"device:{site_key}:{ip}:{device_fingerprint(signals)}:{instance}"
+
+
+# Keyboard-only accessibility exemption.
+#
+# A visitor who works the page from the keyboard - a screen-reader user, a
+# switch-access user, anyone who never touches a pointer - produces key events
+# and no pointer samples, and must not be scored as "no mouse movement". An
+# agent typing through an automation protocol produces exactly the same counts,
+# which is how a keyboard-driven form filler claimed the exemption on the public
+# demo (2026-09-09) and was scored as a person.
+#
+# The counts cannot tell them apart; the key holds can. A finger on a key holds
+# it for tens of milliseconds (the bench's keyboard personas never drop below
+# 41ms); an automation protocol releases it in one or two. So the exemption
+# asks, when hold data exists, that it look like fingers. With no hold data at
+# all - a widget older than this check, or a visitor who only tabbed to the
+# checkbox and never typed into a field - the exemption stands, because refusing
+# it would score exactly the people it protects.
+#
+# Average keydown->keyup hold below which the keys were not pressed by a hand:
+# well under the 41ms bench floor, well over the 1-8ms an automation protocol
+# produces. A real-human capture should confirm it before it is tightened.
+MACHINE_KEY_HOLD_MS = 20.0
+# How many holds the average has to rest on.
+MIN_KEY_HOLD_SAMPLES = 3
+
+
+def mechanical_key_hold(signals: Dict, b: Dict) -> bool:
+    n = float(b.get("keyHoldSamples") or 0)
+    total = n * float(b.get("keyHoldAvg") or 0)
+    fields = get_nested(signals, "formAnalysis", "textareaKeyboard", default=None) or {}
+    for stats in fields.values() if isinstance(fields, dict) else []:
+        dwells = stats.get("dwellTimes") if isinstance(stats, dict) else None
+        for d in dwells or []:
+            if isinstance(d, (int, float)):
+                n += 1
+                total += d
+    return n >= MIN_KEY_HOLD_SAMPLES and total / n < MACHINE_KEY_HOLD_MS
+
+
+def keyboard_only_user(signals: Dict, b: Dict) -> bool:
+    if b.get("keyEvents", 0) < 2 or b.get("totalPoints", 0) != 0:
+        return False
+    return not mechanical_key_hold(signals, b)
+
+
 def detect_vision_ai(signals: Dict) -> List[Detection]:
     detections = []
     b = signals.get("behavioral", {})
@@ -783,7 +864,7 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
     touch_events = b.get("touchEvents", 0)
     key_events = b.get("keyEvents", 0)
     is_touch_user = _is_touch_modality(b)
-    is_keyboard_user = key_events >= 2 and total_points == 0
+    is_keyboard_user = keyboard_only_user(signals, b)
     # Click-derived fields only exist when a widget was there to click.
     is_widget = has_widget_interaction(signals)
 
@@ -1157,7 +1238,7 @@ def detect_behavioral(signals: Dict) -> List[Detection]:
     touch_events = b.get("touchEvents", 0)
     key_events = b.get("keyEvents", 0)
     is_touch_user = _is_touch_modality(b)
-    is_keyboard_user = key_events >= 2 and total_points == 0
+    is_keyboard_user = keyboard_only_user(signals, b)
 
     if total_points == 0 and not is_touch_user and not is_keyboard_user:
         detections.append(Detection(
@@ -1868,6 +1949,23 @@ def run_verification(
     detections.extend(detect_fingerprint(signals, ip, site_key))
     detections.extend(detect_rate_abuse(ip, site_key))
 
+    # Per-device verification rate - a precondition, not evidence: rate_limit
+    # weighs 0.01, so the per-address detection above can never move a verdict.
+    # Keyed on the widget instance too, so identical machines behind one NAT do
+    # not share a budget. See DEVICE_VERIFICATIONS_PER_MINUTE.
+    device_rate_exceeded = False
+    instance = widget_instance(signals)
+    if instance:
+        exceeded, count = rate_limiter.check(
+            device_rate_key(site_key, ip, signals, instance), 60, DEVICE_VERIFICATIONS_PER_MINUTE)
+        if exceeded:
+            device_rate_exceeded = True
+            detections.append(Detection(
+                ThreatCategory.RATE_LIMIT, 0.8, 0.9,
+                "Verification rate exceeded for this device (per-minute)",
+                {"count": count, "window": 60},
+            ))
+
     # Network/infrastructure detectors
     for d in check_ip_reputation(ip):
         detections.append(Detection(
@@ -1961,7 +2059,7 @@ def run_verification(
     # who never completed the challenge. Gating here means no future reweighting
     # can reopen the bypass, and it holds even if the dispositive floor is
     # lowered or removed.
-    success = final_score < 0.5 and hostname_allowed and pow_satisfied
+    success = final_score < 0.5 and hostname_allowed and pow_satisfied and not device_rate_exceeded
 
     # Name the failed precondition whenever one fails, not only when the score
     # would otherwise have allowed. Gating it on the score made the PoW case
@@ -1969,7 +2067,10 @@ def run_verification(
     # and the branch never fired - which is exactly the case a caller most needs
     # explained.
     withheld_reason = ""
-    if not pow_satisfied:
+    # Rate first because it is the one the caller can act on: back off.
+    if device_rate_exceeded:
+        withheld_reason = "rate_limited"
+    elif not pow_satisfied:
         withheld_reason = "pow_not_satisfied"
     elif not hostname_allowed:
         withheld_reason = "hostname_not_allowed"

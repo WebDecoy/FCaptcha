@@ -187,6 +187,7 @@ const {
   calculateFinalScore,
   applyDispositiveFloor,
   applyCorroborationFloor,
+  widgetInstance, deviceRateKey, deviceRateDetection, DEVICE_VERIFICATIONS_PER_MINUTE
 } = require('./engine');
 const { detectInputForensics } = require('./inputforensics');
 
@@ -342,6 +343,17 @@ class ScoringEngine {
     // Calculate scores
     // Same aggregation as server.js: noisy-OR within a category, weighted sum
     // across them, then the dispositive and corroboration floors.
+    // Per-device verification rate — a precondition, not evidence. Keyed on the
+    // widget instance too, so identical machines behind one NAT do not share a
+    // budget. See DEVICE_VERIFICATIONS_PER_MINUTE in engine.js.
+    let deviceRateExceeded = false;
+    const instance = widgetInstance(signals);
+    if (instance) {
+      const [exceeded, count] = this.rateLimiter.check(deviceRateKey(siteKey, ip, signals, instance), 60, DEVICE_VERIFICATIONS_PER_MINUTE);
+      const hit = deviceRateDetection(exceeded, count);
+      if (hit) { deviceRateExceeded = true; detections.push(hit); }
+    }
+
     const categoryScores = calculateCategoryScores(detections, this.weights);
     const finalScore = applyCorroborationFloor(
       applyDispositiveFloor(calculateFinalScore(categoryScores, this.weights), detections),
@@ -358,7 +370,7 @@ class ScoringEngine {
     // dilute it below the allow threshold and used to mint a token for an empty
     // request. Keep this gate independent of scoring so weight changes cannot
     // reopen the bypass.
-    const success = finalScore < 0.5 && powSatisfied;
+    const success = finalScore < 0.5 && powSatisfied && !deviceRateExceeded;
     const token = success ? this._generateToken(ip, siteKey, finalScore) : null;
 
     // Feed the ledger so the next challenge this source asks for is priced on
@@ -373,7 +385,7 @@ class ScoringEngine {
       recommendation,
       categoryScores,
       detections,
-      ...(!powSatisfied ? { reason: 'pow_not_satisfied' } : {})
+      ...(deviceRateExceeded ? { reason: 'rate_limited' } : !powSatisfied ? { reason: 'pow_not_satisfied' } : {})
     };
   }
 

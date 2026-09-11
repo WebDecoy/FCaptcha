@@ -231,15 +231,20 @@ const HUMAN_PERSONAS = {
       'keyboard-only: zero pointer events, Tab to focus, Space to activate. ' +
       'Directly exercises the accessibility exemption (keyEvents >= 2 && totalPoints === 0).',
     async run({ page, target, rng }) {
-      await page.keyboard.press('Tab');
+      // Hold each key the way a finger does. Playwright's default press has a
+      // hold of a millisecond or two, which is what an automation protocol
+      // produces and what the server's key-hold check exists to catch; a human
+      // persona that pressed keys that way would be measuring the harness.
+      const hold = () => ({ delay: Math.max(30, rng.gaussian(80, 25)) });
+      await page.keyboard.press('Tab', hold());
       await sleep(rng.range(300, 900));
       for (let i = 0; i < 3 && !(await target.evaluate((el) => el === document.activeElement)); i++) {
-        await page.keyboard.press('Tab');
+        await page.keyboard.press('Tab', hold());
         await sleep(rng.range(200, 700));
       }
       await target.focus();
       await sleep(rng.range(400, 1200));
-      await page.keyboard.press('Space');
+      await page.keyboard.press('Space', hold());
     },
   },
 
@@ -249,13 +254,14 @@ const HUMAN_PERSONAS = {
       'is announced, no pointer. Dwell times are a plausible range, not measured ' +
       'against a real AT user.',
     async run({ page, target, rng }) {
+      const hold = () => ({ delay: Math.max(30, rng.gaussian(80, 25)) }); // see keyboard-only
       for (let i = 0; i < 6; i++) {
-        await page.keyboard.press('Tab');
+        await page.keyboard.press('Tab', hold());
         await sleep(rng.range(900, 2400)); // announcement time
       }
       await target.focus();
       await sleep(rng.range(1200, 2600));
-      await page.keyboard.press('Space');
+      await page.keyboard.press('Space', hold());
     },
   },
 
