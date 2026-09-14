@@ -90,7 +90,7 @@ Two honest details:
 
 **The client IP is held in memory in raw form**, as the key of those short-lived
 maps. It is not hashed there, and it is not written anywhere. (The IP *inside an
-issued token* is hashed — a truncated SHA-256 — because that value travels.)
+issued token* uses a full-length HMAC-SHA-256 with a domain-separated key derived from the signing secret. This prevents an unkeyed IPv4 lookup table from identifying the address.)
 
 **Issued tokens carry** the site key, a timestamp, the score, a hashed IP, and the
 hostname, action and customer data your integration supplied. Tokens are valid for

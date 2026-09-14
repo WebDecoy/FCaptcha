@@ -24,11 +24,6 @@
       "removable_by": "capture on a host with a real network interface, or a more complete RTCPeerConnection shim"
     },
     {
-      "signal": "JS execution unusually fast",
-      "reason": "Measures how quickly a timing loop completes. An M-series laptop and a CI runner are both genuinely fast, so this fires on the panel. Notably this is NOT purely an artifact — it is a real false-positive risk for anyone on quick hardware, and is tracked as such rather than treated as solved.",
-      "removable_by": "nothing in the harness — this one is a real finding awaiting a decision"
-    },
-    {
       "signal": "RequestAnimationFrame timing too consistent",
       "reason": "Headless Chromium drives rAF from a metronomic timer rather than a display vsync, so frame deltas are more regular than on a real compositor.",
       "removable_by": "headed capture with GPU compositing"

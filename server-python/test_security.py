@@ -8,7 +8,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
-os.environ.setdefault("FCAPTCHA_SECRET", "security-test-secret")
+os.environ.setdefault("FCAPTCHA_SECRET", "security-test-secret-0123456789abcdef0123456789abcdef")
 import server
 
 

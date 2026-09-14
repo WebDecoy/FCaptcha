@@ -8,6 +8,23 @@ const POW_TTL_MS = 5 * 60 * 1000;
 const SPENT_TTL_MS = 10 * 60 * 1000;
 const IDEMPOTENCY_TTL_MS = 5 * 60 * 1000;
 const DETECTION_TTL_MS = 15 * 60 * 1000;
+const ADMIT = `
+local count = tonumber(redis.call('GET', KEYS[1]) or '0')
+if count >= tonumber(ARGV[1]) then return 0 end
+redis.call('INCR', KEYS[1])
+if count == 0 then redis.call('PEXPIRE', KEYS[1], ARGV[2]) end
+return 1
+`;
+const PUT_CHALLENGE = `
+for i = 2, 3 do redis.call('ZREMRANGEBYSCORE', KEYS[i], '-inf', ARGV[1]) end
+if redis.call('ZCARD', KEYS[2]) >= 100000 or redis.call('ZCARD', KEYS[3]) >= 128 then return 0 end
+if not redis.call('SET', KEYS[1], ARGV[4], 'NX', 'PX', ARGV[3]) then return 0 end
+for i = 2, 3 do
+ redis.call('ZADD', KEYS[i], ARGV[2], KEYS[1])
+ redis.call('PEXPIRE', KEYS[i], ARGV[3])
+end
+return 1
+`;
 
 const CLAIM_CHALLENGE = `
 if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
@@ -50,13 +67,46 @@ return 1
 
 class RedisState {
   constructor(url, client = null) {
-    this.client = client || createClient({ url });
+    this.client = client || createClient({ url, disableOfflineQueue: true, commandsQueueMaxLength: 1024, socket: { connectTimeout: 2000 } });
     this.client.on?.('error', (err) => console.error('[redis]', err.message));
+    this.commandTimeoutMs = 2000;
+  }
+
+  async deadline(promise) {
+    let timer;
+    try {
+      return await Promise.race([promise, new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('state_unavailable')), this.commandTimeoutMs);
+      })]);
+    } finally { clearTimeout(timer); }
+  }
+
+  execute(method, ...args) {
+    return this.deadline(Promise.resolve().then(() => this.client[method](...args)));
   }
 
   async connect() {
     if (!this.client.isOpen) await this.client.connect();
     await this.client.ping();
+  }
+
+  async ready(timeoutMs = 2000) {
+    if (this.readinessPending) return this.readinessPending;
+    // node-redis 4's abort signal only handles queued commands and may outlive
+    // their queue nodes. Bound the probe externally instead. Retain a timed-out
+    // probe until it settles so repeated health checks cannot fill the queue.
+    let timer;
+    const ping = Promise.resolve().then(() => this.client.ping());
+    const pending = Promise.race([ping, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('state_unavailable')), timeoutMs);
+    })]);
+    this.readinessPending = pending;
+    const settled = () => {
+      clearTimeout(timer);
+      if (this.readinessPending === pending) this.readinessPending = null;
+    };
+    ping.then(settled, settled);
+    return pending;
   }
 
   challengeKey(id) {
@@ -74,18 +124,28 @@ class RedisState {
     // challengeId is the canonical cross-runtime field used by Go and Node.
     const stored = { ...challenge, challengeId: challenge.id };
     delete stored.id;
-    await this.client.set(this.challengeKey(challenge.id), JSON.stringify(stored), { PX: ttl });
+    const added = await this.execute('eval', PUT_CHALLENGE, {
+      keys: [this.challengeKey(challenge.id), `${PREFIX}pow:quota:global`, this.opaqueKey('pow:quota:source', challenge.ip)],
+      arguments: [String(Date.now()), String(challenge.expiresAt), String(ttl), JSON.stringify(stored)]
+    });
+    if (Number(added) !== 1) throw new Error('challenge_quota_exceeded');
+  }
+
+  async admit(key, maximum, seconds = 60) {
+    return Number(await this.execute('eval', ADMIT, {
+      keys: [this.opaqueKey('admission', key)], arguments: [String(maximum), String(seconds * 1000)]
+    })) === 1;
   }
 
   async getChallenge(id) {
-    const payload = await this.client.get(this.challengeKey(id));
+    const payload = await this.execute('get', this.challengeKey(id));
     if (!payload) return null;
     const challenge = JSON.parse(payload);
     return { ...challenge, id: challenge.challengeId };
   }
 
   async claimChallenge(challengeId, solutionKey) {
-    const result = Number(await this.client.eval(CLAIM_CHALLENGE, {
+    const result = Number(await this.execute('eval', CLAIM_CHALLENGE, {
       keys: [this.challengeKey(challengeId), `${PREFIX}pow:spent:${solutionKey}`],
       arguments: [String(SPENT_TTL_MS)]
     }));
@@ -97,7 +157,7 @@ class RedisState {
   }
 
   async claimToken(signature) {
-    return Boolean(await this.client.set(
+    return Boolean(await this.execute('set',
       `${PREFIX}token:spent:${signature}`,
       '1',
       { NX: true, PX: SPENT_TTL_MS }
@@ -113,13 +173,13 @@ class RedisState {
 
   async getIdempotency(idempotencyKey, token) {
     if (!idempotencyKey) return null;
-    const payload = await this.client.get(this.idempotencyKey(idempotencyKey, token));
+    const payload = await this.execute('get', this.idempotencyKey(idempotencyKey, token));
     return payload ? JSON.parse(payload) : null;
   }
 
   async setIdempotency(idempotencyKey, token, response) {
     if (!idempotencyKey) return;
-    await this.client.set(
+    await this.execute('set',
       this.idempotencyKey(idempotencyKey, token),
       JSON.stringify(response),
       { PX: IDEMPOTENCY_TTL_MS }
@@ -128,7 +188,7 @@ class RedisState {
 
   async rateCheck(key, windowSeconds, maxRequests) {
     const now = Date.now();
-    const result = await this.client.eval(RATE_CHECK, {
+    const result = await this.execute('eval', RATE_CHECK, {
       keys: [this.opaqueKey('rate', key)],
       arguments: [
         String(now - windowSeconds * 1000), String(now), String(maxRequests),
@@ -141,39 +201,39 @@ class RedisState {
   async recordSuspicion(siteKey, ip) {
     const now = Date.now();
     const key = this.opaqueKey('suspicion', `${siteKey}|${ip}`);
-    await this.client.multi()
+    await this.deadline(this.client.multi()
       .zRemRangeByScore(key, '-inf', now - DETECTION_TTL_MS)
       .zAdd(key, { score: now, value: `${now}:${crypto.randomBytes(8).toString('hex')}` })
       .zRemRangeByRank(key, 0, -17)
       .pExpire(key, DETECTION_TTL_MS)
-      .exec();
+      .exec());
   }
 
   async suspicionCount(siteKey, ip) {
     const key = this.opaqueKey('suspicion', `${siteKey}|${ip}`);
-    await this.client.zRemRangeByScore(key, '-inf', Date.now() - DETECTION_TTL_MS);
-    return Number(await this.client.zCard(key));
+    await this.execute('zRemRangeByScore', key, '-inf', Date.now() - DETECTION_TTL_MS);
+    return Number(await this.execute('zCard', key));
   }
 
   async recordFingerprint(fingerprint, ip, siteKey) {
     const fpKey = this.opaqueKey('fingerprint:ips', `${siteKey}|${fingerprint}`);
     const ipKey = this.opaqueKey('fingerprint:fps', ip);
-    await this.client.eval(RECORD_FINGERPRINT, {
+    await this.execute('eval', RECORD_FINGERPRINT, {
       keys: [fpKey, ipKey],
       arguments: [this.opaqueKey('value:ip', ip), this.opaqueKey('value:fp', fingerprint), String(DETECTION_TTL_MS)]
     });
   }
 
   async ipFingerprintCount(ip) {
-    return Number(await this.client.sCard(this.opaqueKey('fingerprint:fps', ip)));
+    return Number(await this.execute('sCard', this.opaqueKey('fingerprint:fps', ip)));
   }
 
   async fingerprintIpCount(fingerprint, siteKey) {
-    return Number(await this.client.sCard(this.opaqueKey('fingerprint:ips', `${siteKey}|${fingerprint}`)));
+    return Number(await this.execute('sCard', this.opaqueKey('fingerprint:ips', `${siteKey}|${fingerprint}`)));
   }
 
   async claimSiteKey(siteKey, ip, maxPerIp) {
-    return Number(await this.client.eval(SITEKEY_CLAIM, {
+    return Number(await this.execute('eval', SITEKEY_CLAIM, {
       keys: [this.opaqueKey('sitekeys', ip)],
       arguments: [this.opaqueKey('value:sitekey', siteKey), String(maxPerIp), String(60 * 60 * 1000)]
     })) === 1;

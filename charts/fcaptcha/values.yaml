@@ -14,10 +14,8 @@ replicaCount: 1
 
 ## The token signing key.
 ##
-## There is no default, and the chart refuses to render without one. The server's
-## own fallback is `dev-secret-change-in-production`, which is in the public
-## source — a deployment using it can have tokens minted by anyone. Failing to
-## render is the only way to make that impossible to do by accident.
+## There is no default. Both the chart and server require a signing key.
+## Generate one with openssl rand -hex 32; short/repetitive keys fail startup.
 ##
 ## Either set `secret` and let the chart create a Secret, or point
 ## `existingSecret` at one you manage (sealed-secrets, External Secrets, SOPS).
@@ -108,7 +106,7 @@ livenessProbe:
   periodSeconds: 20
 readinessProbe:
   httpGet:
-    path: /health
+    path: /ready
     port: http
   periodSeconds: 10
 startupProbe:

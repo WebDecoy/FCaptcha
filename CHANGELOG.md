@@ -13,6 +13,44 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.38.0] — 2026-09-14
+
+Read [HARDENING.md](HARDENING.md) before upgrading. This release follows the
+project's pre-2.0 minor-version convention but includes breaking changes.
+
+### Breaking
+- Signing keys must contain at least 32 UTF-8 bytes and eight distinct
+  characters. Generate a random key; existing weak configurations fail startup.
+  The explicit public development key now binds launchers to loopback only.
+- IP-bound tokens use a domain-separated HMAC over the canonical address.
+  Older tokens fail `remoteip` checks with new validators: drain old instances
+  and their five-minute tokens before switching the validation pool.
+- Browser network failures now reject instead of creating local challenges or
+  unsigned tokens. An empty API URL means same origin. Manual integrations must
+  handle rejection; automatic forms remain on the page and report the error.
+- Node requires version 22 or later; Go builds require 1.26.8.
+- Public APIs enforce bounded admission: 20,000 requests globally and 600 per
+  source per minute, with 60 challenge requests per source per minute. Backend
+  verification requests also share their source's allowance. Check proxy trust
+  and shared-egress capacity before deployment. Security-state exhaustion denies
+  new work rather than evicting live challenges or replay protection.
+
+### Security and reliability
+- Bound challenge issuance/storage, spent-token retention, rate state, Web Bot
+  Auth discovery/cache/concurrency, response sizes, and outbound connections.
+  Redis admission and challenge quotas are atomic across replicas.
+- Add Redis-aware `/ready`, bounded Node command deadlines/queueing, and
+  coalesced readiness probes. `/health` remains independent process liveness.
+- Remove the fast-JavaScript detector from all runtimes: normal fast hardware
+  is not evidence of automation. Benchmark results are explicitly regression
+  evidence, not population-level accuracy measurements.
+- Release shared browser listeners on teardown, preserve form submission
+  semantics, and cap proof-of-work workers at four.
+- Update vulnerable dependencies; hash-lock Python dependencies; pin container
+  bases and run as non-root; add dependency automation and image provenance/SBOMs.
+- Extend admission, outage, lifecycle, cross-runtime, and browser regression
+  checks. Correct the npm diagnostic workflow and browser CI server ownership.
+
 ## [1.37.0] — 2026-09-10
 
 ### Security and fixes

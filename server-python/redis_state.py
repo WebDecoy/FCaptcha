@@ -14,6 +14,23 @@ POW_TTL_MS = 300_000
 SPENT_TTL_MS = 600_000
 IDEMPOTENCY_TTL_MS = 300_000
 DETECTION_TTL_MS = 900_000
+ADMIT = """
+local count = tonumber(redis.call('GET', KEYS[1]) or '0')
+if count >= tonumber(ARGV[1]) then return 0 end
+redis.call('INCR', KEYS[1])
+if count == 0 then redis.call('PEXPIRE', KEYS[1], ARGV[2]) end
+return 1
+"""
+PUT_CHALLENGE = """
+for i = 2, 3 do redis.call('ZREMRANGEBYSCORE', KEYS[i], '-inf', ARGV[1]) end
+if redis.call('ZCARD', KEYS[2]) >= 100000 or redis.call('ZCARD', KEYS[3]) >= 128 then return 0 end
+if not redis.call('SET', KEYS[1], ARGV[4], 'NX', 'PX', ARGV[3]) then return 0 end
+for i = 2, 3 do
+ redis.call('ZADD', KEYS[i], ARGV[2], KEYS[1])
+ redis.call('PEXPIRE', KEYS[i], ARGV[3])
+end
+return 1
+"""
 
 CLAIM = """
 if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
@@ -69,7 +86,14 @@ class RedisState:
             raise RuntimeError("challenge already expired")
         stored = {**challenge, "challengeId": challenge["id"]}
         stored.pop("id", None)
-        self.client.set(self.challenge_key(challenge["id"]), json.dumps(stored), px=ttl)
+        added = self.client.eval(PUT_CHALLENGE, 3, self.challenge_key(challenge["id"]),
+            f"{PREFIX}pow:quota:global", self.opaque("pow:quota:source", challenge["ip"]),
+            int(time.time() * 1000), challenge["expiresAt"], ttl, json.dumps(stored))
+        if int(added) != 1:
+            raise RuntimeError("challenge_quota_exceeded")
+
+    def admit(self, key, maximum, seconds=60):
+        return int(self.client.eval(ADMIT, 1, self.opaque("admission", key), maximum, seconds * 1000)) == 1
 
     def get_challenge(self, challenge_id: str):
         payload = self.client.get(self.challenge_key(challenge_id))

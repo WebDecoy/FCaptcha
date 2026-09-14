@@ -513,12 +513,8 @@ function detectAutomation(signals) {
   // JS execution timing
   const jsTime = getNestedValue(env, 'jsExecutionTime', 'mathOps') || 0;
   if (jsTime > 0) {
-    if (jsTime < 0.1) {
-      detections.push({
-        category: 'automation', score: 0.4, confidence: 0.3,
-        reason: 'JS execution unusually fast'
-      });
-    } else if (jsTime > 50) {
+    // Fast execution is common on real hardware and is not evidence of automation.
+    if (jsTime > 50) {
       detections.push({
         category: 'automation', score: 0.3, confidence: 0.3,
         reason: 'JS execution unusually slow'

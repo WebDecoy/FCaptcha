@@ -22,11 +22,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install server dependencies
         working-directory: server-node
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Unit tests
         working-directory: server-node
@@ -35,7 +35,7 @@ jobs:
       - name: Start server
         working-directory: server-node
         env:
-          FCAPTCHA_SECRET: benchmark-test-secret
+          FCAPTCHA_SECRET: benchmark-test-secret-0123456789abcdef0123456789abcdef
         run: |
           node server.js &
           for _ in $(seq 1 40); do
@@ -46,7 +46,7 @@ jobs:
 
       - name: End-to-end detection suite
         env:
-          FCAPTCHA_SECRET: benchmark-test-secret
+          FCAPTCHA_SECRET: benchmark-test-secret-0123456789abcdef0123456789abcdef
         run: node test/test-detection.js
 
       # The widget in a real browser: the proof-of-work solver, and everything
@@ -79,6 +79,8 @@ jobs:
       # assumed: the palette failed on seven counts before these existed.
       - name: Browser suite
         working-directory: test/browser
+        env:
+          FCAPTCHA_REUSE_SERVER: '1'
         run: npm test
 
       # The harness itself, before it is trusted to measure anything. Sample

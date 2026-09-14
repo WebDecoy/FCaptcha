@@ -49,6 +49,8 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: true
+          provenance: mode=max
+          sbom: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.version.outputs.tags }}
           cache-from: type=gha

@@ -12,11 +12,14 @@ import base64
 import json
 import re
 import secrets
+import ipaddress
+import threading
 from functools import wraps
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 from enum import Enum
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
+from admission import AdmissionLimiter
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,7 +49,7 @@ from config import signing_secret_from_env
 
 # Keep in sync with server-node/package.json on release. Enforced by
 # server-node/version.test.js, which lists every file carrying the version.
-app = FastAPI(title="FCaptcha", version="1.37.0")
+app = FastAPI(title="FCaptcha", version="1.38.0")
 
 MAX_REQUEST_BODY_BYTES = 64 * 1024
 
@@ -340,6 +343,7 @@ class Detection:
 class RateLimiter:
     def __init__(self):
         self.requests: Dict[str, List[float]] = defaultdict(list)
+        self.next_cleanup = 0
 
     def check(self, key: str, window: int = 60, max_requests: int = 10) -> tuple[bool, int]:
         if SHARED_STATE:
@@ -349,6 +353,12 @@ class RateLimiter:
                 return True, max_requests
         now = time.time()
         cutoff = now - window
+
+        if now >= self.next_cleanup:
+            self.requests = defaultdict(list, {k: v for k, v in self.requests.items() if v and v[-1] > now - 3600})
+            self.next_cleanup = now + 60
+        if key not in self.requests and len(self.requests) >= 100000:
+            return True, max_requests
 
         self.requests[key] = [t for t in self.requests[key] if t > cutoff]
         count = len(self.requests[key])
@@ -418,10 +428,15 @@ class FingerprintStore:
 class PoWChallengeStore:
     """Manages PoW challenges and verifies solutions."""
     def __init__(self):
-        self.challenges: Dict[str, Dict] = {}
+        self.challenges: Dict[str, Dict] = OrderedDict()
         self.used_solutions: set = set()
+        self.issuance = AdmissionLimiter()
 
     def generate(self, site_key: str, ip: str, is_datacenter: bool = False) -> Dict:
+        if not SHARED_STATE:
+            self._cleanup()
+            if len(self.challenges) >= 100000 or not self.issuance.allow(ip, 128, 300):
+                raise RuntimeError("challenge_quota_exceeded")
         import secrets
         challenge_id = secrets.token_hex(16)
         nonce = secrets.token_hex(16)
@@ -469,10 +484,6 @@ class PoWChallengeStore:
             SHARED_STATE.put_challenge(challenge)
         else:
             self.challenges[challenge_id] = challenge
-
-        # Cleanup old challenges periodically
-        if len(self.challenges) % 10 == 0:
-            self._cleanup()
 
         return {
             "challengeId": challenge_id,
@@ -540,7 +551,7 @@ class PoWChallengeStore:
         else:
             if solution_key in self.used_solutions:
                 return {"valid": False, "reason": "solution_already_used"}
-            self.used_solutions.add(solution_key)
+            # Deleting the challenge below is the local atomic replay guard.
 
         # Calculate server-side elapsed time (un-spoofable)
         server_elapsed = now - challenge["timestamp"]
@@ -560,19 +571,20 @@ class PoWChallengeStore:
 
     def _cleanup(self):
         now = int(time.time() * 1000)
-        expired = [cid for cid, c in self.challenges.items() if now > c["expiresAt"]]
-        for cid in expired:
+        while self.challenges:
+            cid = next(iter(self.challenges))
+            if self.challenges[cid]["expiresAt"] > now:
+                break
             del self.challenges[cid]
-
-        # Clear used solutions if too many
-        if len(self.used_solutions) > 10000:
-            self.used_solutions.clear()
 
 
 class TokenStore:
     """Prevents token replay attacks by tracking used tokens."""
-    def __init__(self):
+    def __init__(self, max_entries=100000):
         self.used_tokens: Dict[str, float] = {}  # sig -> timestamp when used
+        self.max_entries = max_entries
+        self.next_cleanup = 0
+        self.lock = threading.Lock()
 
     def is_used(self, sig: str) -> bool:
         return sig in self.used_tokens
@@ -580,16 +592,17 @@ class TokenStore:
     def mark_used(self, sig: str) -> bool:
         if SHARED_STATE:
             return SHARED_STATE.claim_token(sig)
-        if sig in self.used_tokens:
-            return False  # Already used
-        self.used_tokens[sig] = time.time()
-
-        # Cleanup old tokens periodically (tokens expire in 5 min anyway)
-        if len(self.used_tokens) > 1000 and len(self.used_tokens) % 100 == 0:
-            cutoff = time.time() - 600  # 10 minutes
-            self.used_tokens = {s: t for s, t in self.used_tokens.items() if t > cutoff}
-
-        return True
+        with self.lock:
+            now = time.time()
+            if now >= self.next_cleanup:
+                self.used_tokens = {s: t for s, t in self.used_tokens.items() if t > now - 600}
+                self.next_cleanup = now + 60
+            if sig in self.used_tokens:
+                return False
+            if len(self.used_tokens) >= self.max_entries:
+                raise RuntimeError("token_store_full")
+            self.used_tokens[sig] = now
+            return True
 
 
 rate_limiter = RateLimiter()
@@ -1123,12 +1136,8 @@ def detect_automation(signals: Dict) -> List[Detection]:
     # JS execution timing
     js_time = get_nested(env, "jsExecutionTime", "mathOps", default=0)
     if js_time > 0:
-        if js_time < 0.1:
-            detections.append(Detection(
-                ThreatCategory.AUTOMATION, 0.4, 0.3,
-                "JS execution unusually fast"
-            ))
-        elif js_time > 50:
+        # Fast execution is common on real hardware, not evidence of automation.
+        if js_time > 50:
             detections.append(Detection(
                 ThreatCategory.AUTOMATION, 0.3, 0.3,
                 "JS execution unusually slow"
@@ -1733,7 +1742,7 @@ def generate_token(
     languages. Fixed shape, empty when unknown.
     """
     binding = binding or {}
-    ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:8]
+    ip_hash = ip_binding(ip)
     data = {
         "site_key": site_key,
         "jti": secrets.token_hex(16),
@@ -1781,7 +1790,7 @@ def verify_token(token: str, ip: str = None) -> Dict:
 
         # Verify IP matches (if provided)
         if ip:
-            expected_ip_hash = hashlib.sha256(ip.encode()).hexdigest()[:8]
+            expected_ip_hash = ip_binding(ip)
             if ip_hash != expected_ip_hash:
                 return {"valid": False, "reason": "ip_mismatch"}
 
@@ -2115,6 +2124,46 @@ async def health():
     return {"status": "ok"}
 
 
+@app.api_route("/ready", methods=["GET", "HEAD"])
+async def ready():
+    try:
+        if SHARED_STATE:
+            await run_in_threadpool(SHARED_STATE.client.ping)
+        return {"status": "ok"}
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "unavailable"})
+
+
+admission = AdmissionLimiter()
+
+
+@app.middleware("http")
+async def admission_gate(request, call_next):
+    if request.url.path.startswith(("/api/", "/siteverify", "/turnstile/", "/recaptcha/")):
+        ip = PROXY_TRUST.client_ip(request)
+        def admit():
+            allow = SHARED_STATE.admit if SHARED_STATE else admission.allow
+            return (allow("global", 20000) and allow(f"source:{ip}", 600) and
+                    (request.url.path != "/api/pow/challenge" or allow(f"challenge:{ip}", 60)))
+        try:
+            allowed = await run_stateful(admit)
+        except Exception:
+            return JSONResponse(status_code=503, content={"error": "state_unavailable"})
+        if not allowed:
+            return JSONResponse(status_code=429, content={"error": "rate_limited"}, headers={"Retry-After": "60"})
+    return await call_next(request)
+
+
+def ip_binding(ip):
+    try:
+        address = ipaddress.ip_address(ip)
+        ip = str(address.ipv4_mapped or address) if isinstance(address, ipaddress.IPv6Address) else str(address)
+    except ValueError:
+        pass
+    key = hmac.new(SECRET_KEY.encode(), b"fcaptcha:ip-binding:v2", hashlib.sha256).digest()
+    return hmac.new(key, ip.encode(), hashlib.sha256).hexdigest()
+
+
 def collect_headers(request: Request) -> Dict[str, str]:
     """Lowercase the request headers for the detectors, dropping the
     TLS-fingerprint headers when the peer is not a proxy we trust.
@@ -2308,5 +2357,5 @@ if __name__ == "__main__":
     #
     # Running uvicorn directly? Pass --no-proxy-headers. Under gunicorn, set
     # forwarded_allow_ips to nothing. See INSTALLATION.md.
-    uvicorn.run(app, host="0.0.0.0", port=port, proxy_headers=False,
+    uvicorn.run(app, host="127.0.0.1" if SECRET_KEY == "dev-secret-change-in-production" else "0.0.0.0", port=port, proxy_headers=False,
         access_log=_env_flag("FCAPTCHA_LOG_ACCESS"))

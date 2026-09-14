@@ -13,6 +13,8 @@ const webbotauth = require('./webbotauth');
 const { ProxyTrust, networkIdentity } = require('./clientip');
 const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
 const { signingSecretFromEnv } = require('./config');
+const { AdmissionLimiter, ChallengeMap } = require('./admission');
+const { ipBinding } = require('./ip-binding');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 const { detectInputForensics } = require('./inputforensics');
 const { RedisState } = require('./redis-state');
@@ -172,11 +174,13 @@ if (process.env.FCAPTCHA_SERVE_CLIENT !== 'false') {
 
 // PoW Challenge Store
 const powChallengeStore = {
-  challenges: new BoundedMap(),
+  challenges: new ChallengeMap(),
+  issuance: new AdmissionLimiter(),
   usedSolutions: new BoundedSet(),
 
   // Generate a new challenge
   async generate(siteKey, ip, difficulty = 4, minAgeMs = BASE_MIN_AGE_MS) {
+    if (!SHARED_STATE && !this.issuance.allow(ip, 128, 300)) throw new Error('challenge_quota_exceeded');
     const challengeId = crypto.randomBytes(16).toString('hex');
     const nonce = crypto.randomBytes(16).toString('hex');
     const timestamp = Date.now();
@@ -451,7 +455,7 @@ async function detectRateAbuse(ip, siteKey) {
 // happened to send would be a second payload shape to keep in sync across three
 // languages. Fixed shape, empty when unknown.
 function generateToken(ip, siteKey, score, binding = {}) {
-  const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8);
+  const ipHash = ipBinding(SECRET_KEY, ip);
   const data = {
     site_key: siteKey,
     jti: crypto.randomBytes(16).toString('hex'),
@@ -490,7 +494,7 @@ async function verifyToken(token, ip = null) {
 
     // Verify IP matches (if provided)
     if (ip) {
-      const expectedIpHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8);
+      const expectedIpHash = ipBinding(SECRET_KEY, ip);
       if (decoded.ip_hash !== expectedIpHash) {
         return { valid: false, reason: 'ip_mismatch' };
       }
@@ -828,7 +832,27 @@ function collectHeaders(req) {
   return headers;
 }
 
-const asyncRoute = (handler) => (req, res, next) => Promise.resolve().then(() => handler(req, res)).catch(next);
+const asyncRoute = (handler) => (req, res, next) => Promise.resolve().then(() => handler(req, res, next)).catch(next);
+
+const admission = new AdmissionLimiter();
+app.use(['/api', '/siteverify', '/turnstile', '/recaptcha'], asyncRoute(async (req, res, next) => {
+  const ip = PROXY_TRUST.clientIP(req);
+  const allow = (key, max) => SHARED_STATE ? SHARED_STATE.admit(key, max) : admission.allow(key, max);
+  try {
+    if (!await allow('global', 20000) || !await allow(`source:${ip}`, 600) ||
+        (req.originalUrl.split('?')[0].replace(/\/+$/, '').toLowerCase() === '/api/pow/challenge' && !await allow(`challenge:${ip}`, 60))) {
+      return res.status(429).set('Retry-After', '60').json({ error: 'rate_limited' });
+    }
+  } catch (_) { return res.status(503).json({ error: 'state_unavailable' }); }
+  next();
+}));
+
+app.get('/ready', asyncRoute(async (req, res) => {
+  try {
+    if (SHARED_STATE) await SHARED_STATE.ready();
+    res.json({ status: 'ok' });
+  } catch (_) { res.status(503).json({ status: 'unavailable' }); }
+}));
 
 function validateScoringRequest(req, res, next) {
   const body = req.body;
@@ -1006,7 +1030,8 @@ app.use((err, req, res, next) => {
 
 async function start() {
   if (SHARED_STATE) await SHARED_STATE.connect();
-  const server = app.listen(PORT, () => {
+  const host = SECRET_KEY === require('./config').INSECURE_DEFAULT_SECRET ? '127.0.0.1' : '0.0.0.0';
+  const server = app.listen(PORT, host, () => {
     console.log(`FCaptcha server running on port ${server.address().port}`);
     console.log(`Trusted proxies: ${PROXY_TRUST.describe()}`);
     console.log(`Site keys: ${SITE_KEYS.describe()}`);

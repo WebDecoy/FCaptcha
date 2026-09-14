@@ -22,6 +22,23 @@ on:
   pull_request:
 
 jobs:
+  browser:
+    name: Browser lifecycle and dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci && npm audit --omit=dev
+        working-directory: server-node
+      - run: npm ci && npm audit && npm run build
+        working-directory: client
+      - run: npm ci && npx playwright install --with-deps chromium
+        working-directory: test/browser
+      - run: npm test
+        working-directory: test/browser
+
   go:
     name: Go
     runs-on: ubuntu-latest
@@ -32,7 +49,7 @@ jobs:
         with:
           # crypto/tls only exposes ClientHelloInfo.Extensions from 1.24, which
           # native JA4 needs. go.mod says so; keep this in step with it.
-          go-version: '1.24'
+          go-version: '1.26.8'
           cache-dependency-path: server-go/go.sum
 
       - name: Vet
@@ -43,6 +60,12 @@ jobs:
         working-directory: server-go
         run: go test -race ./...
 
+      - name: Check reachable vulnerabilities
+        working-directory: server-go
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          govulncheck ./...
+
   python:
     name: Python
     runs-on: ubuntu-latest
@@ -51,13 +74,13 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: pip
-          cache-dependency-path: server-python/requirements.txt
+          cache-dependency-path: server-python/requirements.lock
 
       - name: Install dependencies
         working-directory: server-python
-        run: pip install -r requirements.txt
+        run: pip install --require-hashes -r requirements.lock
 
       # Discovery, not a loop over files: a file that stops being discoverable
       # should show up as a drop in the count rather than as silence. It used to
@@ -65,5 +88,5 @@ jobs:
       - name: Test
         working-directory: server-python
         env:
-          FCAPTCHA_SECRET: python-unit-test-secret
+          FCAPTCHA_SECRET: python-unit-test-secret-0123456789abcdef0123456789abcdef
         run: python -m unittest discover -p "test_*.py" -v

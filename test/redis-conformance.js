@@ -8,7 +8,7 @@ const A = process.argv[2] || 'http://localhost:3101';
 const B = process.argv[3] || 'http://localhost:3102';
 const SECRET = process.env.FCAPTCHA_SECRET;
 if (!SECRET) throw new Error('FCAPTCHA_SECRET is required');
-const VISITOR = '203.0.113.25';
+const VISITOR = process.env.FCAPTCHA_TEST_VISITOR || '203.0.113.25';
 const HEADERS = {
   'content-type': 'application/json', 'x-real-ip': VISITOR,
   origin: 'https://example.com', 'user-agent': 'Mozilla/5.0 Chrome/120.0.0.0',
@@ -38,7 +38,7 @@ async function mintAcrossInstances(siteKey) {
 
 (async () => {
   const token = await mintAcrossInstances('redis-cross-instance-token');
-  const first = await post(A, '/api/token/verify', { token, secret: SECRET });
+  const first = await post(A, '/api/token/verify', { token, secret: SECRET, remoteip: VISITOR });
   assert.strictEqual(first.body.valid, true, JSON.stringify(first.body));
   const replay = await post(B, '/api/token/verify', { token, secret: SECRET });
   assert.strictEqual(replay.body.valid, false);

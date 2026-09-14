@@ -17,7 +17,7 @@ const signals = (instance) => ({
 const headers = { accept: 'text/html', 'accept-language': 'en-US' };
 
 test('the eleventh verification from one page instance is withheld as rate_limited', () => {
-  const engine = createScoringEngine({ secret: 'test-secret' });
+  const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
   for (let i = 0; i < DEVICE_VERIFICATIONS_PER_MINUTE; i++) {
     const r = engine.verify(signals('page-a'), '203.0.113.77', 'site', 'ua', headers);
     assert.notEqual(r.reason, 'rate_limited', `verification ${i + 1} was rate limited early`);
@@ -33,7 +33,7 @@ test('the eleventh verification from one page instance is withheld as rate_limit
 });
 
 test('no widget instance means no device gate', () => {
-  const engine = createScoringEngine({ secret: 'test-secret' });
+  const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
   for (let i = 0; i <= DEVICE_VERIFICATIONS_PER_MINUTE + 2; i++) {
     const r = engine.verify(signals(''), '203.0.113.78', 'site', 'ua', headers);
     assert.notEqual(r.reason, 'rate_limited');

@@ -32,7 +32,7 @@ Other open areas:
 - An escalation path for a flagged visitor. Today a false positive is a dead end
   with no recourse, which is the largest product gap.
 - `/metrics`, and the score histogram an operator needs to tune their threshold.
-- Redis-backed distributed state (currently in-memory).
+- Distributed-state load tests and capacity tuning for the existing Redis backend.
 - WebAssembly proof of work for better low-end mobile performance.
 
 ## Before you open a pull request

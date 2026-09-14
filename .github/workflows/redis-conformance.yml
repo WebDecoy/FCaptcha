@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
       - name: Build production image
         run: docker build -f ${{ matrix.dockerfile }} -t fcaptcha-redis-test .
       - name: Build peer image
@@ -53,7 +53,7 @@ jobs:
           fi
       - name: Start two replicas
         env:
-          FCAPTCHA_SECRET: redis-conformance-secret
+          FCAPTCHA_SECRET: redis-conformance-secret-0123456789abcdef0123456789abcdef
         run: |
           docker run -d --name fcaptcha-a --network host -e PORT=3101 -e REDIS_URL=redis://127.0.0.1:6379 -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" fcaptcha-redis-test
           docker run -d --name fcaptcha-b --network host -e PORT=3102 -e REDIS_URL=redis://127.0.0.1:6379 -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" fcaptcha-redis-peer
@@ -66,5 +66,5 @@ jobs:
           done
       - name: Verify cross-instance security state
         env:
-          FCAPTCHA_SECRET: redis-conformance-secret
+          FCAPTCHA_SECRET: redis-conformance-secret-0123456789abcdef0123456789abcdef
         run: node test/redis-conformance.js http://127.0.0.1:3101 http://127.0.0.1:3102

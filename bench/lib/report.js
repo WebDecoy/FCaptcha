@@ -61,6 +61,7 @@ function renderReport(metrics, corpus, gate) {
   const cfg = metrics.config;
 
   out.push(`${C.bold}FCaptcha detection benchmark${C.reset}`);
+  out.push('Regression corpus only: derived samples are correlated, not independent people or hardware. A passing gate is not a population accuracy estimate.');
   out.push(
     `${C.dim}${metrics.counts.humans} human / ${metrics.counts.agents} agent samples, ` +
       `${metrics.counts.errors} error(s). ` +

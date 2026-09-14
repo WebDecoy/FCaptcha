@@ -169,6 +169,21 @@ async function run() {
   });
   ok(oversized.status === 413 && oversized.json?.error === 'request_too_large', 'oversized body returns the shared 413 contract');
 
+  const ready = await request('/ready', { method: 'GET' });
+  ok(ready.status === 200 && ready.json?.status === 'ok', 'configured state is ready');
+
+  // A distinct source for each run keeps the production quota enabled even
+  // when the same Redis database is shared by every runtime under test.
+  const source = `2001:db8:${crypto.randomBytes(12).toString('hex').match(/.{4}/g).join(':')}`;
+  const quotaHeaders = { 'x-real-ip': source };
+  for (let i = 0; i < 60; i++) {
+    const challenge = await request(`/api/pow/challenge?siteKey=rotate-${i}`, { method: 'GET', headers: quotaHeaders });
+    assert.strictEqual(challenge.status, 200, challenge.text);
+  }
+  const limited = await request('/api/pow/challenge?siteKey=rotated-again', { method: 'GET', headers: quotaHeaders });
+  ok(limited.status === 429 && limited.json?.error === 'rate_limited' && limited.headers.get('retry-after') === '60',
+    'challenge admission rejects floods despite site-key rotation');
+
   console.log(`${passed} conformance checks passed`);
 }
 
