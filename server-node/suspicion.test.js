@@ -128,7 +128,7 @@ test('retained hits are bounded and still reach the top tier', () => {
 
 test('the engine prices a challenge from the ledger, and the sig covers minAgeMs', () => {
   const fcaptcha = require('./index');
-  const engine = fcaptcha.createScoringEngine({ secret: 'test-secret' });
+  const engine = fcaptcha.createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
 
   const clean = engine.generateChallenge('site', '203.0.113.20');
   assert.strictEqual(clean.difficulty, BASE_DIFFICULTY);
@@ -145,7 +145,7 @@ test('the engine prices a challenge from the ledger, and the sig covers minAgeMs
   const sign = (minAgeMs) => {
     const { sig, ...rest } = suspicious;
     return crypto
-      .createHmac('sha256', 'test-secret')
+      .createHmac('sha256', 'test-secret-0123456789abcdef0123456789abcdef')
       .update(JSON.stringify({ ...rest, minAgeMs }))
       .digest('hex');
   };
@@ -166,7 +166,7 @@ test('the engine prices a challenge from the ledger, and the sig covers minAgeMs
 // server all used the full digest.
 test('token signatures are full-length', () => {
   const fcaptcha = require('./index');
-  const engine = fcaptcha.createScoringEngine({ secret: 'test-secret' });
+  const engine = fcaptcha.createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
 
   const token = engine._generateToken('203.0.113.40', 'site', 0.1);
   const decoded = JSON.parse(Buffer.from(token, 'base64url').toString());

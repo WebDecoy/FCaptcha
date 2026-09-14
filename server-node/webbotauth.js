@@ -65,7 +65,8 @@ const {
 const { verifierFromJWK } = require('web-bot-auth/crypto');
 
 const VERIFY_TIMEOUT_MS = 3000;
-const MAX_DIRECTORY_BYTES = 1 << 20; // 1 MiB, matches the Go client's cap
+const directoryAgent = new https.Agent({ keepAlive: true, maxTotalSockets: 16, maxSockets: 2, maxFreeSockets: 2, timeout: VERIFY_TIMEOUT_MS });
+const MAX_DIRECTORY_BYTES = 256 * 1024;
 const DIRECTORY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 // The exact message web-bot-auth/crypto throws when crypto.subtle.verify()
@@ -91,7 +92,11 @@ const REQUIRED_TAG = 'web-bot-auth';
 const MAX_SIGNATURE_LIFETIME_S = 24 * 60 * 60;
 
 // origin (https://host[:port]) → { keys: JsonWebKey[], fetchedAt: number }
-const directoryCache = new Map();
+const { BoundedMap } = require('./limits');
+// Each response is at most 256 KiB. Sixteen entries bound retained payload bytes;
+// limiting parsed keys also bounds key-import work per verification.
+const directoryCache = new BoundedMap(16);
+const directoryInflight = new Map();
 
 // FetchFailure marks failures that are NOT cryptographic — the caller treats
 // them as "could not verify" (fail open), never as a forged-signature signal.
@@ -159,6 +164,7 @@ function fetchJSON(documentUrl) {
       documentUrl,
       {
         lookup: guardedLookup,
+        agent: directoryAgent,
         timeout: VERIFY_TIMEOUT_MS,
         headers: {
           accept: 'application/http-message-signatures-directory+json, application/json',
@@ -191,6 +197,8 @@ function fetchJSON(documentUrl) {
       },
     );
 
+    const deadline = setTimeout(() => req.destroy(new FetchFailure('directory fetch deadline exceeded')), VERIFY_TIMEOUT_MS);
+    req.on('close', () => clearTimeout(deadline));
     req.on('timeout', () => {
       req.destroy(new FetchFailure('directory fetch timed out'));
     });
@@ -236,11 +244,38 @@ async function getKeys(url, type) {
   const now = Date.now();
   const cached = directoryCache.get(url);
   if (cached && now - cached.fetchedAt < DIRECTORY_CACHE_TTL_MS) {
+    if (cached.error) {
+      if (now - cached.fetchedAt < 30000) throw new FetchFailure('directory temporarily unavailable');
+    } else {
     return cached.keys;
+    }
   }
-  const keys = type === DISCOVERY_CIMD ? await fetchViaCIMD(url) : await fetchKeySet(url);
-  directoryCache.set(url, { keys, fetchedAt: now });
-  return keys;
+  if (directoryInflight.has(url)) return directoryInflight.get(url);
+  if (directoryInflight.size >= 8) throw new FetchFailure('directory fetch capacity reached');
+  const pending = (async () => {
+    try {
+      const rawKeys = type === DISCOVERY_CIMD ? await fetchViaCIMD(url) : await fetchKeySet(url);
+      if (rawKeys.length > 64) throw new FetchFailure('too many directory keys');
+      // Cache only public JWK fields, not arbitrary nested directory metadata.
+      const keys = rawKeys.map(raw => {
+        if (!raw || typeof raw !== 'object') throw new FetchFailure('invalid directory key');
+        const key = {};
+        for (const field of ['kty', 'kid', 'alg', 'crv', 'x', 'y', 'n', 'e', 'use']) {
+          if (raw[field] == null) continue;
+          if (typeof raw[field] !== 'string' || raw[field].length > 4096) throw new FetchFailure('invalid key field');
+          key[field] = raw[field];
+        }
+        return key;
+      });
+      directoryCache.set(url, { keys, fetchedAt: Date.now() });
+      return keys;
+    } catch (error) {
+      directoryCache.set(url, { error: true, fetchedAt: Date.now() });
+      throw error;
+    } finally { directoryInflight.delete(url); }
+  })();
+  directoryInflight.set(url, pending);
+  return pending;
 }
 
 // resolveKey fetches the directory named by the Signature-Agent header and

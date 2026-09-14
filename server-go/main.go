@@ -139,7 +139,11 @@ const insecureDefaultSecret = "dev-secret-change-in-production"
 
 func signingSecretFromEnv(getenv func(string) string) (string, error) {
 	secret := strings.TrimSpace(getenv("FCAPTCHA_SECRET"))
-	if secret != "" && secret != insecureDefaultSecret {
+	characters := make(map[rune]bool)
+	for _, char := range secret {
+		characters[char] = true
+	}
+	if len(secret) >= 32 && len(characters) >= 8 && secret != insecureDefaultSecret {
 		return secret, nil
 	}
 	switch strings.ToLower(strings.TrimSpace(getenv("FCAPTCHA_INSECURE_DEV_MODE"))) {
@@ -147,7 +151,7 @@ func signingSecretFromEnv(getenv func(string) string) (string, error) {
 		log.Printf("WARNING: FCAPTCHA_INSECURE_DEV_MODE enabled; tokens use a public signing key. Never expose this server to a network.")
 		return insecureDefaultSecret, nil
 	}
-	return "", fmt.Errorf("FCAPTCHA_SECRET is required and must not be the public development key; for local-only development, explicitly set FCAPTCHA_INSECURE_DEV_MODE=1")
+	return "", fmt.Errorf("FCAPTCHA_SECRET is required: use at least 32 random bytes (openssl rand -hex 32), not a short or repetitive password; for local-only development, explicitly set FCAPTCHA_INSECURE_DEV_MODE=1")
 }
 
 // logVerdict emits one privacy-safe JSON line describing a scoring outcome.
@@ -275,6 +279,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(limitRequestBody)
+	r.Use(admissionMiddleware(engine, proxyTrust))
 
 	// CORS for widget
 	r.Use(cors.Handler(cors.Options{
@@ -317,6 +322,17 @@ func main() {
 	// Routes
 	r.Get("/health", healthHandler)
 	r.Head("/health", healthHandler)
+	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+		if engine.redisClient != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+			defer cancel()
+			if err := engine.redisClient.Ping(ctx).Err(); err != nil {
+				http.Error(w, `{"status":"unavailable"}`, 503)
+				return
+			}
+		}
+		healthHandler(w, r)
+	})
 	r.Post("/api/verify", verifyHandler(engine, proxyTrust, siteKeys, ja4s))
 	r.Post("/api/score", invisibleScoreHandler(engine, proxyTrust, siteKeys, ja4s))
 	r.Post("/api/token/verify", tokenVerifyHandler(engine, proxyTrust, verifySecret, requireVerifySecret))
@@ -340,12 +356,17 @@ func main() {
 	r.Post("/siteverify", compat)
 
 	// Server
+	bindHost := ""
+	if secretKey == insecureDefaultSecret {
+		bindHost = "127.0.0.1"
+	}
 	srv := &http.Server{
-		Addr:         ":" + port,
-		Handler:      r,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:           bindHost + ":" + port,
+		Handler:        r,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		IdleTimeout:    60 * time.Second,
+		MaxHeaderBytes: 16 * 1024,
 	}
 
 	// Optional pprof debug server, off by default. Enable with FCAPTCHA_PPROF=1

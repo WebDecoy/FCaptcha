@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from '../fixtures';
 
 test.setTimeout(60_000);
 
@@ -113,7 +113,7 @@ test.describe('parallel PoW solver', () => {
 
     const stats = await page.evaluate(() => (window as any).__workerStats);
     const cores = await page.evaluate(() => navigator.hardwareConcurrency);
-    const expectedThreads = Math.max(1, Math.floor(cores / 2));
+    const expectedThreads = Math.min(4, Math.max(1, Math.floor(cores / 2)));
 
     // PoW spawns one worker per thread. There may be other workers in the
     // widget too (e.g. fingerprint consistency check), so use >=.

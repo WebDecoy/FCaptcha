@@ -14,6 +14,8 @@ const detection = require('./detection');
 const { ProxyTrust, networkIdentity } = require('./clientip');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
 const { signingSecret } = require('./config');
+const { AdmissionLimiter, ChallengeMap } = require('./admission');
+const { ipBinding } = require('./ip-binding');
 const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
 const { FingerprintStore } = require('./fingerprint-store');
 const { TokenStore } = require('./token-store');
@@ -26,12 +28,14 @@ const { resolveSignals } = require('./protocol');
 class PoWChallengeStore {
   constructor(options = {}) {
     this.secret = signingSecret(options.secret);
-    this.challenges = new BoundedMap();
+    this.challenges = new ChallengeMap();
+    this.issuance = new AdmissionLimiter();
     this.usedSolutions = new BoundedSet();
     this.expirationMs = options.expirationMs || 5 * 60 * 1000; // 5 minutes
   }
 
   generate(siteKey, ip, difficulty = 4, minAgeMs = BASE_MIN_AGE_MS) {
+    if (!this.issuance.allow(ip, 128, Math.ceil(this.expirationMs / 1000))) throw new Error('challenge_quota_exceeded');
     const challengeId = crypto.randomBytes(16).toString('hex');
     const timestamp = Date.now();
     const expiresAt = timestamp + this.expirationMs;
@@ -408,7 +412,7 @@ class ScoringEngine {
         return { valid: false, reason: 'invalid_signature' };
       }
 
-      if (ip && decoded.ip_hash !== crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8)) {
+      if (ip && decoded.ip_hash !== ipBinding(this.secret, ip)) {
         return { valid: false, reason: 'ip_mismatch' };
       }
       const claim = this.tokenStore.claim(sig);
@@ -495,7 +499,7 @@ class ScoringEngine {
   }
 
   _generateToken(ip, siteKey, score) {
-    const ipHash = crypto.createHash('sha256').update(ip).digest('hex').slice(0, 8);
+    const ipHash = ipBinding(this.secret, ip);
     const data = {
       site_key: siteKey,
       jti: crypto.randomBytes(16).toString('hex'),

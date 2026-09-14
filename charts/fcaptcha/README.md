@@ -21,10 +21,10 @@ helm test fcaptcha -n fcaptcha
 
 ## The chart will not install without a signing key
 
-Deliberately. The server falls back to `dev-secret-change-in-production`, which
-is published in its own source, so a deployment that forgets to set one does not
-fail — it quietly accepts tokens that anyone can mint. A template error is the
-only way to make that impossible to do by accident.
+Both the chart and the server require a signing key. Generate one with
+`openssl rand -hex 32`; short and repetitive keys are rejected at server startup.
+The public development key is available only with explicit insecure development
+mode, whose bundled launcher binds to loopback.
 
 Set `secret`, or point `existingSecret` at a Secret you manage with
 sealed-secrets, External Secrets or SOPS.

@@ -3,9 +3,9 @@
 **Open source CAPTCHA that blocks bots, vision AI agents, and automation - with a single click or less.**
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)
+![Go](https://img.shields.io/badge/Go-1.26.8+-00ADD8?logo=go)
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python)
-![Node](https://img.shields.io/badge/Node-20+-339933?logo=node.js)
+![Node](https://img.shields.io/badge/Node-22+-339933?logo=node.js)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker)](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha)
 
 **[Try the Live Demo](https://webdecoy.com/product/fcaptcha-demo/)**
@@ -42,7 +42,7 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 One command to deploy:
 
 ```bash
-docker run -d -p 3000:3000 -e FCAPTCHA_SECRET=my-secret ghcr.io/webdecoy/fcaptcha
+docker run -d -p 3000:3000 -e FCAPTCHA_SECRET="$(openssl rand -hex 32)" ghcr.io/webdecoy/fcaptcha
 ```
 
 This gives you:
@@ -53,7 +53,7 @@ This gives you:
 Docker Compose (single instance):
 
 ```bash
-FCAPTCHA_SECRET=my-secret docker compose -f docker/docker-compose.yml up -d
+FCAPTCHA_SECRET="$(openssl rand -hex 32)" docker compose -f docker/docker-compose.yml up -d
 ```
 
 FCaptcha state is process-local by default. Setting `REDIS_URL` shares PoW
@@ -85,14 +85,14 @@ Deploy to Fly.io:
 
 ```bash
 fly launch --copy-config
-fly secrets set FCAPTCHA_SECRET=my-secret
+fly secrets set FCAPTCHA_SECRET="$(openssl rand -hex 32)"
 ```
 
 Build from source:
 
 ```bash
 docker build -f docker/Dockerfile -t fcaptcha .
-docker run -d -p 3000:3000 -e FCAPTCHA_SECRET=my-secret fcaptcha
+docker run -d -p 3000:3000 -e FCAPTCHA_SECRET="$(openssl rand -hex 32)" fcaptcha
 ```
 
 ### Run from Source
@@ -103,24 +103,27 @@ Pick your language:
 ```bash
 cd server-go
 go build -o fcaptcha-server
-FCAPTCHA_SECRET=your-secret ./fcaptcha-server
+FCAPTCHA_SECRET="$(openssl rand -hex 32)" ./fcaptcha-server
 ```
 
 **Python (FastAPI)**
 ```bash
 cd server-python
-pip install -r requirements.txt
-FCAPTCHA_SECRET=your-secret python server.py
+pip install --require-hashes -r requirements.lock
+FCAPTCHA_SECRET="$(openssl rand -hex 32)" python server.py
 ```
 
 **Node.js (Express)**
 ```bash
 cd server-node
 npm install
-FCAPTCHA_SECRET=your-secret node server.js
+FCAPTCHA_SECRET="$(openssl rand -hex 32)" node server.js
 ```
 
 ### 2. Add to Your Site
+
+Existing deployments: read the [hardening and upgrade notes](HARDENING.md) before
+upgrading signing keys, IP-bound tokens, or browser error handling.
 
 **Where the widget comes from**
 
@@ -130,17 +133,17 @@ Two options, and the tradeoff is real:
 <!-- Self-hosted: served by your FCaptcha server, same-origin. -->
 <script src="https://your-server.com/fcaptcha.js"></script>
 
-<!-- CDN: no server needed to try it, pinned and integrity-checked. -->
+<!-- CDN widget: still requires a running FCaptcha API. -->
 <script
-  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.37.0/dist/fcaptcha.min.js"
+  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.38.0/dist/fcaptcha.min.js"
   integrity="sha384-…"
   crossorigin="anonymous"></script>
 ```
 
 Self-hosting stays the default and is what every server does out of the box: no
 third party sees your visitors, and there is no external dependency to fail. The
-CDN build exists because "add one script tag" is the first thing anyone tries,
-and requiring a running server before that is a poor first five minutes.
+CDN build simplifies serving the widget; it does not replace the API. Configure
+`FCaptcha.serverUrl` for your running server when it is on a different origin.
 
 If you use the CDN, **pin the version and use the integrity hash**. The digest
 for each release is published in that release's notes and in
@@ -148,7 +151,7 @@ for each release is published in that release's notes and in
 it for any local build. Without `integrity`, a compromised CDN can replace your
 captcha with anything it likes.
 
-The minified bundle is 67 KB, 18 KB over the wire with Brotli.
+The minified bundle is approximately 74 KB, 19 KB over the wire with Brotli. Run `npm run build` in `client/` for exact sizes and integrity hashes.
 
 **Checkbox Mode (Interactive)**
 
@@ -314,7 +317,7 @@ function FCaptchaCheckbox({ siteKey, serverUrl, onVerify }) {
   useEffect(() => {
     if (!ready || !ref.current) return;
     const widgetId = window.FCaptcha.render(ref.current, { siteKey, callback: onVerify });
-    return () => window.FCaptcha.reset(widgetId);
+    return () => window.FCaptcha.destroy(widgetId);
   }, [ready, siteKey, onVerify]);
 
   return <div ref={ref} />;
@@ -933,13 +936,13 @@ fcaptcha/
 
 ```bash
 # Run Go server
-cd server-go && FCAPTCHA_SECRET=local-development-secret go run .
+cd server-go && FCAPTCHA_SECRET="$(openssl rand -hex 32)" go run .
 
 # Run Python server
-cd server-python && FCAPTCHA_SECRET=local-development-secret python server.py
+cd server-python && FCAPTCHA_SECRET="$(openssl rand -hex 32)" python server.py
 
 # Run Node server
-cd server-node && FCAPTCHA_SECRET=local-development-secret node server.js
+cd server-node && FCAPTCHA_SECRET="$(openssl rand -hex 32)" node server.js
 
 # Open demo
 open demo/index.html
@@ -971,7 +974,7 @@ End-to-end detection suite (runs against a live server):
 
 ```bash
 # Start a server first (any language)
-cd server-node && FCAPTCHA_SECRET=fcaptcha-test-suite-secret node server.js &
+cd server-node && FCAPTCHA_SECRET=fcaptcha-test-suite-0123456789abcdef0123456789abcdef node server.js &
 
 # Run the suite
 node test/test-detection.js

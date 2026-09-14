@@ -7,14 +7,14 @@ set -e
 cd "$(dirname "$0")"
 
 SERVER=${1:-node}  # Default to node, can pass 'go' or 'python'
-export FCAPTCHA_SECRET=${FCAPTCHA_SECRET:-fcaptcha-test-suite-secret}
+export FCAPTCHA_SECRET=${FCAPTCHA_SECRET:-fcaptcha-test-suite-0123456789abcdef0123456789abcdef}
 
 echo "Starting $SERVER server..."
 
 case $SERVER in
   node)
     cd server-node
-    npm install --silent 2>/dev/null || npm install
+    npm ci --silent
     node server.js &
     ;;
   go)
@@ -23,7 +23,7 @@ case $SERVER in
     ;;
   python)
     cd server-python
-    pip install -r requirements.txt -q 2>/dev/null || pip install -r requirements.txt
+    pip install --require-hashes -r requirements.lock
     python server.py &
     ;;
   *)
@@ -34,6 +34,7 @@ case $SERVER in
 esac
 
 SERVER_PID=$!
+trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 cd ..
 
 # Wait for server to start
@@ -44,6 +45,7 @@ for i in {1..10}; do
   fi
   sleep 0.5
 done
+curl --fail --silent http://localhost:3000/ready >/dev/null
 
 # Run tests
 echo ""

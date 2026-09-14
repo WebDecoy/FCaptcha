@@ -122,6 +122,7 @@ type PoWChallengeStore struct {
 	challenges    map[string]*PoWChallenge
 	usedSolutions *expirable.LRU[string, struct{}]
 	redis         *redis.Client
+	issuance      *AdmissionLimiter
 }
 
 const (
@@ -132,6 +133,7 @@ const (
 func newPoWChallengeStore() *PoWChallengeStore {
 	store := &PoWChallengeStore{
 		challenges:    make(map[string]*PoWChallenge),
+		issuance:      newAdmissionLimiter(nil),
 		usedSolutions: expirable.NewLRU[string, struct{}](usedSolutionsCap, nil, usedSolutionsTTL),
 	}
 	// Start cleanup goroutine
@@ -145,11 +147,28 @@ func newRedisPoWChallengeStore(client *redis.Client) *PoWChallengeStore {
 
 const redisStatePrefix = "fcaptcha:v1:"
 
+var putChallengeScript = redis.NewScript(`
+for i = 2, 3 do redis.call('ZREMRANGEBYSCORE', KEYS[i], '-inf', ARGV[1]) end
+if redis.call('ZCARD', KEYS[2]) >= 100000 or redis.call('ZCARD', KEYS[3]) >= 128 then return 0 end
+if not redis.call('SET', KEYS[1], ARGV[4], 'NX', 'PX', ARGV[3]) then return 0 end
+for i = 2, 3 do
+ redis.call('ZADD', KEYS[i], ARGV[2], KEYS[1])
+ redis.call('PEXPIRE', KEYS[i], ARGV[3])
+end
+return 1
+`)
+
 func (s *PoWChallengeStore) putChallenge(challenge *PoWChallenge) error {
 	if s.redis == nil {
 		s.mu.Lock()
+		defer s.mu.Unlock()
+		if len(s.challenges) >= 100000 {
+			return fmt.Errorf("challenge_store_full")
+		}
+		if allowed, _ := s.issuance.Allow(challenge.IP, 128, 300); !allowed {
+			return fmt.Errorf("challenge_quota_exceeded")
+		}
 		s.challenges[challenge.ID] = challenge
-		s.mu.Unlock()
 		return nil
 	}
 	payload, err := json.Marshal(challenge)
@@ -160,7 +179,16 @@ func (s *PoWChallengeStore) putChallenge(challenge *PoWChallenge) error {
 	if ttl <= 0 {
 		return fmt.Errorf("challenge already expired")
 	}
-	return s.redis.Set(context.Background(), redisStatePrefix+"pow:challenge:"+challenge.ID, payload, ttl).Err()
+	added, err := putChallengeScript.Run(context.Background(), s.redis, []string{
+		redisStatePrefix + "pow:challenge:" + challenge.ID, redisStatePrefix + "pow:quota:global", redisOpaqueKey("pow:quota:source", challenge.IP),
+	}, time.Now().UnixMilli(), challenge.ExpiresAt, ttl.Milliseconds(), payload).Int()
+	if err != nil {
+		return err
+	}
+	if added != 1 {
+		return fmt.Errorf("challenge_quota_exceeded")
+	}
+	return nil
 }
 
 func (s *PoWChallengeStore) getChallenge(id string) (*PoWChallenge, error) {
@@ -298,6 +326,7 @@ type ScoringEngine struct {
 	weights          map[ThreatCategory]float64
 	uaPatterns       []*regexp.Regexp
 	webBotAuth       *webbotauth.Verifier
+	botDirectories   *boundedBotAuth
 	// Which page origins may mint tokens. Unrestricted unless the operator sets
 	// FCAPTCHA_ALLOWED_HOSTNAMES; see siteverify.go.
 	allowedHostnames *HostnameAllowlist
@@ -312,9 +341,10 @@ const webBotAuthTimeout = 3 * time.Second
 
 // RateLimiter tracks request rates
 type RateLimiter struct {
-	mu       sync.RWMutex
-	requests map[string][]int64
-	redis    *redis.Client
+	mu          sync.RWMutex
+	requests    map[string][]int64
+	redis       *redis.Client
+	nextCleanup int64
 }
 
 // FingerprintStore tracks fingerprint patterns
@@ -329,10 +359,8 @@ const fingerprintMembersCap = 16
 const fingerprintEntriesCap = 100000
 const fingerprintTTL = 15 * time.Minute
 
-// TokenStore prevents token replay attacks. Backed by a bounded LRU with TTL
-// so the store size is capped under sustained load and the previous O(n)
-// inline cleanup (which scanned the whole map under the write lock on every
-// 100th insert past 1000) is gone.
+// TokenStore prevents replay. Claims reject at capacity before the TTL cache
+// can evict any live marker; expiration is the only way to free a slot.
 type TokenStore struct {
 	mu    sync.Mutex
 	cache *expirable.LRU[string, struct{}]
@@ -378,6 +406,9 @@ func (t *TokenStore) Claim(sig string) (bool, error) {
 	if t.cache.Contains(sig) {
 		return false, nil
 	}
+	if t.cache.Len() >= usedTokensCap {
+		return false, fmt.Errorf("token_store_full")
+	}
 	t.cache.Add(sig, struct{}{})
 	return true, nil
 }
@@ -412,7 +443,8 @@ func NewScoringEngine(secretKey string) *ScoringEngine {
 		// skip unknown spoofers. The default fetch client is SSRF-guarded
 		// (https-only, refuses loopback/private/link-local, size-capped,
 		// re-validated per redirect hop) and caches directories.
-		webBotAuth: webbotauth.NewVerifier(webbotauth.WithOpenDirectories()),
+		webBotAuth:     webbotauth.NewVerifier(),
+		botDirectories: newBoundedBotAuth(),
 	}
 }
 
@@ -991,8 +1023,7 @@ func (e *ScoringEngine) VerifyTokenWithIP(token, ip string) map[string]interface
 	// Verify IP matches (if provided)
 	if ip != "" {
 		ipHash, _ := data["ip_hash"].(string)
-		h := sha256.Sum256([]byte(ip))
-		expectedIPHash := hex.EncodeToString(h[:])[:8]
+		expectedIPHash := e.ipBinding(ip)
 		if ipHash != expectedIPHash {
 			result["valid"] = false
 			result["reason"] = "ip_mismatch"
@@ -1476,17 +1507,10 @@ func (e *ScoringEngine) detectAutomation(signals map[string]interface{}) []Detec
 	behavioral := getMap(signals, "behavioral")
 
 	// JS execution timing
-	jsTime := getFloat(env, "jsExecutionTime")
+	jsTime := getFloat(getMap(env, "jsExecutionTime"), "mathOps")
 	if jsTime > 0 {
-		if jsTime < 0.5 {
-			results = append(results, DetectionResult{
-				Category:   CategoryAutomation,
-				Score:      0.4,
-				Confidence: 0.3,
-				Reason:     "JS execution unusually fast (possibly VM)",
-				Details:    map[string]interface{}{"jsExecutionTime": jsTime},
-			})
-		} else if jsTime > 50 {
+		// Fast execution is common on real hardware, not evidence of automation.
+		if jsTime > 50 {
 			results = append(results, DetectionResult{
 				Category:   CategoryAutomation,
 				Score:      0.3,
@@ -2153,6 +2177,11 @@ func (e *ScoringEngine) CheckWebBotAuth(ctx context.Context, req *httpsig.Reques
 	}
 
 	res := e.webBotAuth.Verify(ctx, req)
+	if res.Status != webbotauth.StatusVerified && !webBotAuthForged(res.Errors) && e.botDirectories != nil {
+		if discovered := e.botDirectories.Verify(ctx, req); discovered != nil {
+			res = discovered
+		}
+	}
 	if res.Agent != "" {
 		agent = res.Agent
 	}
@@ -2544,14 +2573,14 @@ func (e *ScoringEngine) calculateFinalScore(categoryScores map[string]float64) f
 // happened to send would be a second payload shape to keep in sync across three
 // languages. Fixed shape, empty when unknown.
 func (e *ScoringEngine) generateToken(ip, siteKey string, score float64, binding TokenBinding) string {
-	ipHash := sha256.Sum256([]byte(ip))
+	ipHash := e.ipBinding(ip)
 
 	data := map[string]interface{}{
 		"site_key":  siteKey,
 		"jti":       newTokenID(),
 		"timestamp": time.Now().Unix(),
 		"score":     math.Round(score*1000) / 1000,
-		"ip_hash":   hex.EncodeToString(ipHash[:4]),
+		"ip_hash":   ipHash,
 		"hostname":  binding.Hostname,
 		"action":    binding.Action,
 		"cdata":     binding.CData,
@@ -2635,6 +2664,17 @@ func (rl *RateLimiter) Check(key string, windowSeconds int64, maxRequests int) (
 
 	now := time.Now().Unix()
 	cutoff := now - windowSeconds
+	if now >= rl.nextCleanup {
+		for key, timestamps := range rl.requests {
+			if len(timestamps) == 0 || timestamps[len(timestamps)-1] <= now-3600 {
+				delete(rl.requests, key)
+			}
+		}
+		rl.nextCleanup = now + 60
+	}
+	if _, exists := rl.requests[key]; !exists && len(rl.requests) >= 100000 {
+		return true, maxRequests
+	}
 
 	// Clean old entries
 	if timestamps, ok := rl.requests[key]; ok {

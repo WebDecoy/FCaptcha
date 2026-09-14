@@ -51,14 +51,12 @@ manages.
 {{/*
 Refuses to render without a signing key.
 
-The server falls back to `dev-secret-change-in-production`, which is published in
-the source, so a deployment that forgets this does not fail — it silently accepts
-tokens anyone can mint. A template error is the only way to make that impossible
-to do by accident, and it costs one line of setup to satisfy.
+Both the chart and server require a signing key. Catch missing values at render
+time so operators see the configuration error before scheduling a pod.
 */}}
 {{- define "fcaptcha.validateSecret" -}}
 {{- if and (not .Values.secret) (not .Values.existingSecret) -}}
-{{- fail "\n\nfcaptcha: a token signing key is required.\n\n  --set secret=$(openssl rand -hex 32)\n\nor point at one you already manage:\n\n  --set existingSecret=my-fcaptcha-secret\n\nWithout it the server falls back to a key published in its own source, and\nanyone can mint tokens your backend will accept.\n" -}}
+{{- fail "fcaptcha: a signing key is required. Use --set secret=$(openssl rand -hex 32) or --set existingSecret=my-fcaptcha-secret. The server rejects missing, short and repetitive keys." -}}
 {{- end -}}
 {{- end -}}
 

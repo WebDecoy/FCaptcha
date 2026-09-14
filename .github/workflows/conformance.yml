@@ -22,7 +22,7 @@ jobs:
             dockerfile: server-python/Dockerfile
     name: ${{ matrix.name }}
     env:
-      FCAPTCHA_SECRET: conformance-test-secret
+      FCAPTCHA_SECRET: conformance-test-secret-0123456789abcdef0123456789abcdef
     steps:
       - uses: actions/checkout@v4
 

@@ -49,7 +49,7 @@ cd fcaptcha
 # Start the Node.js server (easiest)
 cd server-node
 npm install
-FCAPTCHA_SECRET=local-development-secret node server.js
+FCAPTCHA_SECRET="$(openssl rand -hex 32)" node server.js
 
 # Server is now running at http://localhost:3000
 ```
@@ -87,14 +87,15 @@ npm install
 
 ```bash
 # Create .env file (optional)
-echo "FCAPTCHA_SECRET=your-secret-key-here" > .env
+echo "FCAPTCHA_SECRET=$(openssl rand -hex 32)" > .env
+chmod 600 .env
 echo "PORT=3000" >> .env
 ```
 
 Or set environment variables directly:
 
 ```bash
-export FCAPTCHA_SECRET=your-secret-key-here
+export FCAPTCHA_SECRET="$(openssl rand -hex 32)"
 export PORT=3000
 ```
 
@@ -133,13 +134,13 @@ source venv/bin/activate  # Linux/Mac
 **Step 2: Install dependencies**
 
 ```bash
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 ```
 
 **Step 3: Configure environment**
 
 ```bash
-export FCAPTCHA_SECRET=your-secret-key-here
+export FCAPTCHA_SECRET="$(openssl rand -hex 32)"
 export PORT=3000
 ```
 
@@ -194,7 +195,7 @@ go build -o fcaptcha-server .
 **Step 2: Configure environment**
 
 ```bash
-export FCAPTCHA_SECRET=your-secret-key-here
+export FCAPTCHA_SECRET="$(openssl rand -hex 32)"
 export PORT=3000
 ```
 
@@ -225,7 +226,7 @@ docker build -t fcaptcha-node .
 docker run -d \
   --name fcaptcha \
   -p 3000:3000 \
-  -e FCAPTCHA_SECRET=your-secret-key-here \
+  -e FCAPTCHA_SECRET="$(openssl rand -hex 32)" \
   fcaptcha-node
 ```
 
@@ -237,7 +238,7 @@ docker build -t fcaptcha-python .
 docker run -d \
   --name fcaptcha \
   -p 3000:3000 \
-  -e FCAPTCHA_SECRET=your-secret-key-here \
+  -e FCAPTCHA_SECRET="$(openssl rand -hex 32)" \
   fcaptcha-python
 ```
 
@@ -249,7 +250,7 @@ docker build -t fcaptcha-go .
 docker run -d \
   --name fcaptcha \
   -p 3000:3000 \
-  -e FCAPTCHA_SECRET=your-secret-key-here \
+  -e FCAPTCHA_SECRET="$(openssl rand -hex 32)" \
   fcaptcha-go
 ```
 
@@ -266,7 +267,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - FCAPTCHA_SECRET=your-secret-key-here
+      - FCAPTCHA_SECRET=${FCAPTCHA_SECRET:?Set a generated signing secret}
     restart: unless-stopped
 ```
 
@@ -382,7 +383,7 @@ Type=simple
 User=www-data
 WorkingDirectory=/opt/fcaptcha/server-node
 Environment=NODE_ENV=production
-Environment=FCAPTCHA_SECRET=your-secret-key-here
+EnvironmentFile=/etc/fcaptcha.env
 Environment=PORT=3000
 ExecStart=/usr/bin/node server.js
 Restart=on-failure
@@ -431,11 +432,16 @@ is process-local. Node and Python also support multiple instances with Redis.
 
 ## Configuration Reference
 
+Read [hardening and upgrade notes](HARDENING.md) for signing-key migration,
+request quotas, Redis readiness, and browser failure behavior. For the systemd
+example, create `/etc/fcaptcha.env` with a generated `FCAPTCHA_SECRET` and restrict
+the file to its owner (`chmod 600`); systemd loads it through `EnvironmentFile`.
+
 ### Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `FCAPTCHA_SECRET` | Yes | - | Secret key for signing tokens (min 16 chars) |
+| `FCAPTCHA_SECRET` | Yes | - | Random signing key: generate with `openssl rand -hex 32`; short/repetitive keys are rejected |
 | `FCAPTCHA_INSECURE_DEV_MODE` | No | off | Explicitly use the public development signing key for local-only development. Never expose a server with this enabled |
 | `REDIS_URL` | No | - | Redis URL for shared security state. Go, Node, and Python support multiple replicas. Configuration and runtime failures are fail-closed |
 | `FCAPTCHA_VERIFY_SECRET` | No | `FCAPTCHA_SECRET` | Credential your backend sends as `secret` when verifying a token. Split it from the signing key so a leaked verify credential cannot also mint tokens |
@@ -680,7 +686,7 @@ export PORT=3001
 rm -rf node_modules && npm install
 
 # Python
-pip install -r requirements.txt --force-reinstall
+pip install --require-hashes -r requirements.lock --force-reinstall
 
 # Go
 go mod tidy

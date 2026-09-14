@@ -1,7 +1,7 @@
 {
   "name": "@webdecoy/fcaptcha-client",
-  "version": "1.37.0",
-  "description": "Browser widget for FCaptcha \u2014 proof of work, behavioural signals, and AI-agent detection",
+  "version": "1.38.0",
+  "description": "Browser widget for FCaptcha — proof of work, behavioural signals, and AI-agent detection",
   "main": "fcaptcha.js",
   "browser": "fcaptcha.js",
   "unpkg": "dist/fcaptcha.min.js",
@@ -22,7 +22,7 @@
     "prepublishOnly": "node build.js"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.28.2"
   },
   "repository": {
     "type": "git",

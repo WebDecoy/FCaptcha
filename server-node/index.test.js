@@ -44,7 +44,7 @@ const cleanHeaders = {
 };
 
 {
-  const engine = createScoringEngine({ secret: 'test-secret' });
+  const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
   const result = engine.verify({}, '203.0.113.1', 'site', '', {}, null);
   assert.strictEqual(result.success, false, 'missing PoW must not succeed');
   assert.strictEqual(result.token, null, 'missing PoW must not mint a token');
@@ -52,7 +52,7 @@ const cleanHeaders = {
 }
 
 {
-  const engine = createScoringEngine({ secret: 'test-secret' });
+  const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
   const result = engine.verify(cleanSignals, '203.0.113.1', 'site', 'Mozilla/5.0', cleanHeaders, {
     challengeId: 'not-issued', nonce: 0, hash: '0'.repeat(64)
   });
@@ -61,7 +61,7 @@ const cleanHeaders = {
 }
 
 {
-  const engine = createScoringEngine({ secret: 'test-secret' });
+  const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
   const challenge = engine.generateChallenge('site', '203.0.113.1', {
     difficulty: 1,
     scaleByReputation: false
@@ -82,7 +82,7 @@ const cleanHeaders = {
 }
 
 {
-  const engine = createScoringEngine({ secret: 'test-secret' });
+  const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
   const challenge = engine.generateChallenge('site', '203.0.113.1', {
     difficulty: 1,
     scaleByReputation: false

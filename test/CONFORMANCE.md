@@ -16,7 +16,7 @@ invariants where a difference is a security or integration defect:
 Run a server with the same secret exported to the test process, then:
 
 ```bash
-FCAPTCHA_SECRET=conformance-test-secret node test/conformance.js http://localhost:3000
+FCAPTCHA_SECRET=conformance-test-secret-0123456789abcdef0123456789abcdef node test/conformance.js http://localhost:3000
 ```
 
 CI builds each production container and runs this exact file against it.

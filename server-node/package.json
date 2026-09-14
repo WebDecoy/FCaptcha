@@ -1,6 +1,6 @@
 {
   "name": "@webdecoy/fcaptcha",
-  "version": "1.37.0",
+  "version": "1.38.0",
   "description": "Open source CAPTCHA with PoW, bot detection, and Vision AI protection",
   "main": "index.js",
   "exports": {
@@ -15,14 +15,14 @@
     "test:clientip": "node clientip.test.js",
     "test:limits": "node limits.test.js",
     "test:detection": "node detection.test.js",
-    "test": "node version.test.js && node config.test.js && node clientip.test.js && node limits.test.js && node detection.test.js && node inputforensics.test.js && node interactionmode.test.js && node exemptions.test.js && node webbotauth.test.js && node siteverify.test.js && node redis-state.test.js && node index.test.js && node --test suspicion.test.js security.test.js corroboration.test.js device-rate.test.js keyboard-exemption.test.js",
+    "test": "node version.test.js && node config.test.js && node clientip.test.js && node limits.test.js && node detection.test.js && node inputforensics.test.js && node interactionmode.test.js && node exemptions.test.js && node webbotauth.test.js && node siteverify.test.js && node redis-state.test.js && node index.test.js && node --test admission.test.js suspicion.test.js security.test.js corroboration.test.js device-rate.test.js keyboard-exemption.test.js",
     "test:siteverify": "node siteverify.test.js",
     "test:forensics": "node inputforensics.test.js",
     "test:suspicion": "node --test suspicion.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.18.0",
+    "express": "^4.22.3",
     "ipaddr.js": "^2.4.0",
     "redis": "^4.6.12",
     "web-bot-auth": "^0.1.3"
@@ -36,7 +36,7 @@
     }
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "repository": {
     "type": "git",

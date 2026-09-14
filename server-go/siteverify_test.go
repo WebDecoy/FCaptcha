@@ -405,13 +405,15 @@ func TestTokenCarriesBinding(t *testing.T) {
 
 func TestLegacyFourKeyTokenStillVerifies(t *testing.T) {
 	// Tokens minted before hostname/action/cdata existed carry four keys. The
-	// signature covers whatever keys are present, so they must still validate —
-	// this change is additive, not a format break. A token in flight during a
-	// rolling deploy depends on it.
+	// Old signatures remain valid without remoteip, but the weak legacy IP
+	// binding must not be accepted when the caller explicitly requires binding.
 	e := NewScoringEngine(testSecret)
 	legacy := legacyToken(e, "203.0.113.9")
 
-	result := e.VerifyTokenWithIP(legacy, "203.0.113.9")
+	if result := e.VerifyTokenWithIP(legacy, "203.0.113.9"); result["reason"] != "ip_mismatch" {
+		t.Fatalf("legacy IP binding must be refused: %v", result)
+	}
+	result := e.VerifyToken(legacy)
 	if valid, _ := result["valid"].(bool); !valid {
 		t.Fatalf("a pre-binding token must still verify: %v", result)
 	}

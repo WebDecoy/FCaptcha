@@ -16,7 +16,12 @@ class FakeRedis {
     return 'OK';
   }
   async get(key) { return this.values.get(key) || null; }
-  async eval(_script, { keys }) {
+  async eval(_script, { keys, arguments: args }) {
+    if (_script.includes('pow') || keys.length === 3) {
+      if (this.values.has(keys[0])) return 0;
+      this.values.set(keys[0], args[3]);
+      return 1;
+    }
     if (!this.values.has(keys[0])) return 0;
     if (this.values.has(keys[1])) return -1;
     this.values.set(keys[1], '1');
@@ -54,6 +59,20 @@ class FakeRedis {
   await issuer.setIdempotency('retry-key', 'token', response);
   assert.deepStrictEqual(await verifier.getIdempotency('retry-key', 'token'), response);
   assert.strictEqual(await verifier.getIdempotency('retry-key', 'different-token'), null);
+
+  let resolvePing;
+  let pings = 0;
+  fake.ping = () => { pings++; return new Promise(resolve => { resolvePing = resolve; }); };
+  await assert.rejects(issuer.ready(10), /state_unavailable/);
+  await assert.rejects(issuer.ready(10), /state_unavailable/);
+  assert.strictEqual(pings, 1, 'timed-out probes must coalesce until the connection responds');
+  resolvePing('PONG');
+  await new Promise(resolve => setImmediate(resolve));
+  fake.ping = async () => 'PONG';
+  await issuer.ready(10);
+  issuer.commandTimeoutMs = 10;
+  fake.get = () => new Promise(() => {});
+  await assert.rejects(issuer.getChallenge('stalled'), /state_unavailable/);
   console.log('redis shared-state tests passed');
 })().catch((err) => {
   console.error(err);

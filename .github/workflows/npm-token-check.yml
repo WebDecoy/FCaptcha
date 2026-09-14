@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Token shape (no value)
@@ -22,7 +22,8 @@ jobs:
           T: ${{ secrets.NPM_TOKEN }}
 
       - name: whoami
-        run: npm whoami || echo "WHOAMI_FAILED: token rejected by the registry"
+        run: |
+          npm whoami
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

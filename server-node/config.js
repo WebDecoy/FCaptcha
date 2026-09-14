@@ -10,7 +10,7 @@ let devModeWarned = false;
 
 function signingSecretFromEnv(env = process.env) {
   const secret = String(env.FCAPTCHA_SECRET || '').trim();
-  if (secret && secret !== INSECURE_DEFAULT_SECRET) return secret;
+  if (Buffer.byteLength(secret) >= 32 && new Set(secret).size >= 8 && secret !== INSECURE_DEFAULT_SECRET) return secret;
   if (/^(1|true|yes|on)$/i.test(String(env.FCAPTCHA_INSECURE_DEV_MODE || '').trim())) {
     if (!devModeWarned) {
       devModeWarned = true;
@@ -18,7 +18,7 @@ function signingSecretFromEnv(env = process.env) {
     }
     return INSECURE_DEFAULT_SECRET;
   }
-  throw new Error('FCAPTCHA_SECRET is required and must not be the public development key. For local-only development, explicitly set FCAPTCHA_INSECURE_DEV_MODE=1.');
+  throw new Error('FCAPTCHA_SECRET is required: use at least 32 random bytes (openssl rand -hex 32), not a short or repetitive password. For local-only development, explicitly set FCAPTCHA_INSECURE_DEV_MODE=1.');
 }
 
 function signingSecret(explicit, env = process.env) {

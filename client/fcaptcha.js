@@ -14,9 +14,9 @@
     // Keep in sync with server-node/package.json when cutting a release; this
     // string ships to integrators. server-node/version.test.js enforces it
     // across every file that carries the version, and lists them.
-    version: '1.37.0',
+    version: '1.38.0',
     widgets: new Map(),
-    serverUrl: null,
+    serverUrl: '',
     // Site-wide language default. Per-widget `lang` still wins; leaving both
     // unset detects from the page and then the browser.
     lang: null,
@@ -1073,6 +1073,7 @@
         keydownsBeforeInput: 0     // running counter, reset on each input
       };
 
+      this._listenerController = new AbortController();
       this._setupListeners();
     }
 
@@ -1080,25 +1081,26 @@
       // Track first and ongoing interactions
       const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
       interactionEvents.forEach(eventType => {
-        document.addEventListener(eventType, (e) => this._recordInteraction(e), { passive: true });
+        document.addEventListener(eventType, (e) => this._recordInteraction(e), { passive: true, signal: this._listenerController.signal });
       });
 
       // Track textarea keyboard patterns (spam detection)
-      document.addEventListener('keydown', (e) => this._recordTextareaKey(e), { passive: true });
-      document.addEventListener('keyup', (e) => this._recordTextareaKey(e), { passive: true });
+      document.addEventListener('keydown', (e) => this._recordTextareaKey(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('keyup', (e) => this._recordTextareaKey(e), { passive: true, signal: this._listenerController.signal });
 
       // Typing modality (see _recordModality). Document-level and field-agnostic:
       // unlike the textarea keystroke stats, this records only *how* text arrived,
       // never what or where, so it is safe to run across every field including
       // password inputs a password manager fills.
-      document.addEventListener('keydown', (e) => this._recordModalityKey(e), { passive: true });
-      document.addEventListener('input', (e) => this._recordModalityInput(e), { passive: true });
+      document.addEventListener('keydown', (e) => this._recordModalityKey(e), { passive: true, signal: this._listenerController.signal });
+      document.addEventListener('input', (e) => this._recordModalityInput(e), { passive: true, signal: this._listenerController.signal });
 
       // Track form submissions
-      document.addEventListener('submit', (e) => this._recordSubmit(e), { capture: true });
+      document.addEventListener('submit', (e) => this._recordSubmit(e), { capture: true, signal: this._listenerController.signal });
 
       // Track programmatic submit detection
       this._interceptFormSubmit();
+      document.addEventListener('paste', (e) => this.recordPaste(e), { passive: true, signal: this._listenerController.signal });
     }
 
     _recordInteraction(e) {
@@ -1245,10 +1247,19 @@
       const self = this;
       const originalSubmit = HTMLFormElement.prototype.submit;
 
-      HTMLFormElement.prototype.submit = function() {
+      this._originalSubmit = originalSubmit;
+      this._submitWrapper = function() {
         self._recordProgrammaticSubmit(this);
         return originalSubmit.apply(this, arguments);
       };
+      HTMLFormElement.prototype.submit = this._submitWrapper;
+    }
+
+    destroy() {
+      this._listenerController.abort();
+      if (HTMLFormElement.prototype.submit === this._submitWrapper) {
+        HTMLFormElement.prototype.submit = this._originalSubmit;
+      }
     }
 
     _recordProgrammaticSubmit(_form) {
@@ -1408,23 +1419,21 @@
     }
   }
 
-  // Global form analyzer instance - initialize immediately to capture all events
+  // One analyzer per set of mounted widgets; release every listener on teardown.
   let globalFormAnalyzer = null;
+  let formAnalyzerUsers = 0;
   function getFormAnalyzer() {
-    if (!globalFormAnalyzer) {
-      globalFormAnalyzer = new FormAnalyzer();
-      // Also track paste events
-      document.addEventListener('paste', (e) => globalFormAnalyzer.recordPaste(e), { passive: true });
-    }
+    if (!globalFormAnalyzer) globalFormAnalyzer = new FormAnalyzer();
     return globalFormAnalyzer;
   }
-
-  // Initialize immediately when script loads
-  if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => getFormAnalyzer());
-    } else {
-      getFormAnalyzer();
+  function acquireFormAnalyzer() {
+    formAnalyzerUsers++;
+    return getFormAnalyzer();
+  }
+  function releaseFormAnalyzer() {
+    if (formAnalyzerUsers > 0 && --formAnalyzerUsers === 0) {
+      globalFormAnalyzer.destroy();
+      globalFormAnalyzer = null;
     }
   }
 
@@ -2519,7 +2528,7 @@
     // Half of hardwareConcurrency leaves headroom for the page itself.
     _threadCount() {
       const hc = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 1;
-      return Math.max(1, Math.floor(hc / 2));
+      return Math.min(4, Math.max(1, Math.floor(hc / 2)));
     }
 
     _terminateWorkers() {
@@ -2549,20 +2558,14 @@
 
     async _fetchChallenge(siteKey) {
       const generation = this.generation;
-      const serverUrl = this.serverUrl || FCaptcha.serverUrl;
-      if (!serverUrl) {
-        // Fallback to local challenge generation
-        return this._generateLocalChallenge();
-      }
-
+      const serverUrl = this.serverUrl ?? FCaptcha.serverUrl ?? '';
       try {
         this.fetchController = new AbortController();
         const response = await fetch(`${serverUrl}/api/pow/challenge?siteKey=${encodeURIComponent(siteKey || 'default')}`, {
           signal: this.fetchController.signal
         });
         if (!response.ok) {
-          console.warn('PoW challenge fetch failed (status ' + response.status + '), using local challenge');
-          return this._generateLocalChallenge();
+          throw new Error('FCaptcha challenge unavailable (HTTP ' + response.status + ')');
         }
         const challenge = await response.json();
         if (generation !== this.generation) throw new Error('Challenge fetch cancelled');
@@ -2576,8 +2579,9 @@
         return this.challenge;
       } catch (e) {
         if (generation !== this.generation || e.name === 'AbortError') throw e;
-        console.warn('PoW challenge fetch failed, using local challenge:', e);
-        return this._generateLocalChallenge();
+        this.challenge = null;
+        e.code = 'server_unavailable';
+        throw e;
       }
     }
 
@@ -2588,19 +2592,6 @@
       if (!expiresAt) return false;
 
       return Date.now() >= expiresAt - CHALLENGE_REFRESH_MARGIN_MS;
-    }
-
-    _generateLocalChallenge() {
-      const id = Math.random().toString(36).substr(2) + Date.now().toString(36);
-      this.challenge = {
-        challengeId: id,
-        prefix: `${id}:${Date.now()}:4`,
-        difficulty: 4,
-        expiresAt: Date.now() + 300000,
-        local: true // Flag that this is a local challenge
-      };
-      this.challengeReceivedAt = Date.now();
-      return this.challenge;
     }
 
     // Hold a solved challenge until it is old enough for the server to accept
@@ -2865,6 +2856,7 @@
 
       this.destroyed = false;
       this._listenerController = new AbortController();
+      this.formAnalyzer = acquireFormAnalyzer();
       this._init();
     }
 
@@ -3084,7 +3076,7 @@
         // Collect temporal data WITHOUT pow timing (not yet solved)
         const temporalData = this.temporal.collect(clickTime);
 
-        const formAnalysis = getFormAnalyzer().analyze();
+        const formAnalysis = this.formAnalyzer.analyze();
 
         if (this.destroyed) return;
         const challenge = await this.powManager.ensureChallenge(this.options.siteKey);
@@ -3138,10 +3130,6 @@
     }
 
     async _verify(signals, powSolution = null, signalsJson = null, signalsHash = null, powTiming = null) {
-      if (!FCaptcha.serverUrl) {
-        return this._clientSideVerify(signals);
-      }
-
       try {
         const response = await fetch(FCaptcha.serverUrl + '/api/verify', {
           method: 'POST',
@@ -3159,55 +3147,14 @@
             powTiming: powTiming || null
           })
         });
-        return await response.json();
+        if (!response.ok) throw new Error('FCaptcha verification unavailable (HTTP ' + response.status + ')');
+        const result = await response.json();
+        if (result.success && (typeof result.token !== 'string' || !result.token)) throw new Error('FCaptcha returned no token');
+        return result;
       } catch (error) {
-        console.warn('Server unavailable, using client-side verification');
-        return this._clientSideVerify(signals);
+        error.code = 'server_unavailable';
+        throw error;
       }
-    }
-
-    _clientSideVerify(signals) {
-      let score = 0;
-      const b = signals.behavioral;
-      const e = signals.environmental;
-      const t = signals.temporal;
-
-      // Zero mouse movement detection (AI agent / programmatic click)
-      // Exempt touch users (mobile) and keyboard-only users (accessibility)
-      const isTouchUser = (b.touchEvents || 0) >= 3;
-      const isKbdUser = (b.keyEvents || 0) > 0 && b.totalPoints === 0;
-      if (b.totalPoints < 5 && b.trajectoryLength < 10 && !isTouchUser && !isKbdUser) score += 0.35;
-      else if (b.totalPoints < 10 && !isTouchUser && !isKbdUser && b.trajectoryLength < 30) score += 0.15;
-
-      // Behavioral (40%)
-      if (b.microTremorScore < 0.2) score += 0.12;
-      if (b.velocityVariance < 0.03) score += 0.10;
-      if (b.explorationRatio < 0.05) score += 0.08;
-      if (b.overshootCorrections === 0 && b.trajectoryLength > 100) score += 0.05;
-      if (b.clickPrecision < 2) score += 0.05;
-      if (b.straightLineRatio > 0.8) score += 0.08;
-      if (b.microMovements < 5 && b.totalPoints > 50) score += 0.06;
-
-      // Environmental (35%)
-      if (e.webdriver) score += 0.25;
-      if (e.automationFlags && e.automationFlags.plugins === 0) score += 0.05;
-      if (e.webglInfo && e.webglInfo.suspiciousRenderer) score += 0.10;
-      if (e.headlessIndicators && !e.headlessIndicators.hasOuterDimensions) score += 0.12;
-      if (e.headlessIndicators && e.headlessIndicators.innerEqualsOuter) score += 0.05;
-
-      // Temporal (25%)
-      if (t.pow && t.pow.duration < 50) score += 0.10;
-      if (b.eventDeltaVariance < 3) score += 0.08;
-      if (b.interactionDuration < 300) score += 0.07;
-
-      const passed = score < 0.5;
-
-      return {
-        success: passed,
-        score,
-        token: passed ? btoa(JSON.stringify({ timestamp: Date.now(), score, id: this.id })) : null,
-        message: passed ? null : this.strings.failed
-      };
     }
 
     _showSuccess(token) {
@@ -3278,7 +3225,9 @@
     }
 
     destroy() {
+      if (this.destroyed) return;
       this.destroyed = true;
+      releaseFormAnalyzer();
       this._listenerController.abort();
       this.sensor.detach();
       this.powManager.reset();
@@ -3338,6 +3287,7 @@
 
       this.destroyed = false;
       this._listenerController = new AbortController();
+      this.formAnalyzer = acquireFormAnalyzer();
       this._init();
     }
 
@@ -3393,8 +3343,10 @@
     }
 
     _attachToForms() {
+      const approved = new WeakSet();
       document.addEventListener('submit', async (e) => {
         const form = e.target;
+        if (approved.has(form)) return;
         if (form.dataset.fcaptchaIgnore) return;
 
         let tokenField = form.querySelector('input[name="fcaptcha_token"]');
@@ -3406,14 +3358,17 @@
         }
 
         e.preventDefault();
+        tokenField.value = '';
 
         try {
           const result = await this.execute(form.dataset.fcaptchaAction || 'form_submit');
           if (this.destroyed) return;
           tokenField.value = result.token || '';
 
-          if (result.success) {
-            form.submit();
+          if (result.success && result.token) {
+            approved.add(form);
+            try { form.requestSubmit(e.submitter || undefined); }
+            finally { approved.delete(form); }
           } else {
             document.dispatchEvent(new CustomEvent('fcaptcha:blocked', {
               detail: { score: result.score, form }
@@ -3422,7 +3377,9 @@
         } catch (error) {
           if (this.destroyed) return;
           console.error('FCaptcha error:', error);
-          form.submit(); // Fail open
+          tokenField.value = '';
+          document.dispatchEvent(new CustomEvent('fcaptcha:error', { detail: { error, form } }));
+          if (this.options.errorCallback) this.options.errorCallback(error);
         }
       }, { signal: this._listenerController.signal });
     }
@@ -3456,7 +3413,7 @@
           this.environmental.collectAsync()
         ]);
 
-        const formAnalysis = getFormAnalyzer().analyze();
+        const formAnalysis = this.formAnalyzer.analyze();
 
         if (this.destroyed) throw new Error('Session destroyed');
         const challenge = await this.powManager.ensureChallenge(this.options.siteKey);
@@ -3509,9 +3466,7 @@
     }
 
     async _score(signals, action, powSolution = null, signalsJson = null, signalsHash = null, powTiming = null, cdata = '') {
-      const url = this.options.serverUrl || FCaptcha.serverUrl;
-
-      if (!url) return this._clientSideScore(signals);
+      const url = this.options.serverUrl ?? FCaptcha.serverUrl ?? '';
 
       try {
         const response = await fetch(url + '/api/score', {
@@ -3535,62 +3490,22 @@
             powTiming: powTiming || null
           })
         });
-        return await response.json();
+        if (!response.ok) throw new Error('FCaptcha scoring unavailable (HTTP ' + response.status + ')');
+        const result = await response.json();
+        if (result.success && (typeof result.token !== 'string' || !result.token)) throw new Error('FCaptcha returned no token');
+        return result;
       } catch (error) {
-        console.warn('FCaptcha server unavailable, using client-side scoring');
-        return this._clientSideScore(signals);
+        error.code = 'server_unavailable';
+        throw error;
       }
-    }
-
-    _clientSideScore(signals) {
-      let score = 0;
-      const b = signals.behavioral;
-      const e = signals.environmental;
-      const t = signals.temporal;
-      const m = signals.meta;
-
-      // Zero mouse movement detection (AI agent / programmatic click)
-      // Exempt touch users (mobile) and keyboard-only users (accessibility)
-      const isTouchUsr = (b.touchEvents || 0) >= 3;
-      const isKbdUsr = (b.keyEvents || 0) > 0 && b.totalPoints === 0;
-      if (b.totalPoints < 5 && b.trajectoryLength < 10 && !isTouchUsr && !isKbdUsr) score += 0.35;
-      else if (b.totalPoints < 10 && !isTouchUsr && !isKbdUsr && b.trajectoryLength < 30) score += 0.15;
-
-      // Behavioral
-      if (b.microTremorScore < 0.2) score += 0.12;
-      if (b.velocityVariance < 0.03) score += 0.10;
-      if (b.totalPoints < 10 && m.sessionDuration > 5000) score += 0.08;
-      if (b.scrollEvents === 0 && b.keyEvents === 0 && m.sessionDuration > 10000) score += 0.06;
-      if (b.eventDeltaVariance < 3) score += 0.08;
-      if (b.straightLineRatio > 0.8) score += 0.08;
-
-      // Environmental
-      if (e.webdriver) score += 0.25;
-      if (e.automationFlags && e.automationFlags.plugins === 0) score += 0.06;
-      if (e.headlessIndicators && !e.headlessIndicators.hasOuterDimensions) score += 0.12;
-      if (e.webglInfo && e.webglInfo.suspiciousRenderer) score += 0.10;
-
-      // Temporal
-      if (t.pow && t.pow.duration < 30) score += 0.10;
-      if (m.sessionDuration < 500) score += 0.12;
-      if (m.sessionDuration < 1000 && b.totalPoints < 5) score += 0.15;
-
-      const success = score < this.options.scoreThreshold;
-
-      return {
-        success,
-        score: Math.min(1, score),
-        action: m.action,
-        token: success ? btoa(JSON.stringify({
-          timestamp: Date.now(), score, action: m.action, id: this.id
-        })) : null
-      };
     }
 
     getScore() { return this.lastScore; }
 
     destroy() {
+      if (this.destroyed) return;
       this.destroyed = true;
+      releaseFormAnalyzer();
       this._listenerController.abort();
       this.sensor.detach();
       FCaptcha.widgets.delete(this.id);
@@ -3652,7 +3567,7 @@
   };
 
   FCaptcha.configure = function(options) {
-    if (options.serverUrl) this.serverUrl = options.serverUrl;
+    if (Object.prototype.hasOwnProperty.call(options, 'serverUrl')) this.serverUrl = options.serverUrl;
     if (options.lang) this.lang = options.lang;
   };
 

@@ -17,7 +17,7 @@ const headers = { accept: 'text/html', 'accept-language': 'en-US',
 const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 test('independent tokens are unique and each can only be spent once', () => {
-  const engine = createScoringEngine({ secret: 'test-secret' });
+  const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
   const first = engine._generateToken('203.0.113.1', 'site', 0.1);
   const second = engine._generateToken('203.0.113.1', 'site', 0.1);
   assert.notEqual(first, second);
@@ -37,7 +37,7 @@ test('full replay store fails closed and recovers after retention expires', () =
 });
 
 test('capacity errors are distinct from replays in token verification', () => {
-  const engine = createScoringEngine({ secret: 'test-secret', tokenStore: new TokenStore({ maxEntries: 1 }) });
+  const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef', tokenStore: new TokenStore({ maxEntries: 1 }) });
   const first = engine._generateToken('ip', 'site', 0.1);
   const second = engine._generateToken('ip', 'site', 0.1);
   assert.equal(engine.verifyToken(first).valid, true);
@@ -49,7 +49,7 @@ test('capacity errors are distinct from replays in token verification', () => {
 test('issued nonces are required for both committed and legacy proofs', () => {
   for (const committed of [false, true]) {
     for (const nonceMode of ['correct', 'missing', 'wrong']) {
-      const engine = createScoringEngine({ secret: 'test-secret' });
+      const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
       const challenge = engine.generateChallenge('site', '203.0.113.1', { difficulty: 1, scaleByReputation: false });
       engine.powStore.challenges.get(challenge.id).timestamp -= 2000;
       const body = signals();
@@ -69,7 +69,7 @@ test('issued nonces are required for both committed and legacy proofs', () => {
 
 test('widget-format proofs pass middleware and cannot be reused or altered', () => {
   for (const mode of ['valid', 'mismatch', 'missing', 'early', 'elevated']) {
-    const middleware = createMiddleware({ secret: 'test-secret', trustedProxies: 'none' });
+    const middleware = createMiddleware({ secret: 'test-secret-0123456789abcdef0123456789abcdef', trustedProxies: 'none' });
     const engine = middleware.engine;
     const req = { query: { siteKey: 'site' }, headers, socket: { remoteAddress: '203.0.113.1' } };
     let challenge;
@@ -116,7 +116,7 @@ test('fingerprint churn is bounded and old suspicion expires', () => {
 });
 
 test('malformed public requests return errors while the server stays available', async () => {
-  process.env.FCAPTCHA_SECRET = 'test-secret';
+  process.env.FCAPTCHA_SECRET = 'test-secret-0123456789abcdef0123456789abcdef';
   process.env.REDIS_URL = '';
   const { app } = require('./server');
   const server = app.listen(0, '127.0.0.1');
