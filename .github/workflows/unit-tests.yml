@@ -103,7 +103,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: server-python
-        run: pip install --require-hashes -r requirements.lock
+        # Resolve both files together so a requirements-only update cannot
+        # silently leave CI exercising an incompatible older lockfile.
+        run: pip install --require-hashes -r requirements.lock -r requirements.txt
 
       # Discovery, not a loop over files: a file that stops being discoverable
       # should show up as a drop in the count rather than as silence. It used to
