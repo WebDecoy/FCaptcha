@@ -59,7 +59,6 @@ const ipaddr = require('ipaddr.js');
 const {
   verify,
   jwkToKeyID,
-  helpers,
   HTTP_MESSAGE_SIGNATURES_DIRECTORY,
 } = require('web-bot-auth');
 const { verifierFromJWK } = require('web-bot-auth/crypto');
@@ -68,11 +67,6 @@ const VERIFY_TIMEOUT_MS = 3000;
 const directoryAgent = new https.Agent({ keepAlive: true, maxTotalSockets: 16, maxSockets: 2, maxFreeSockets: 2, timeout: VERIFY_TIMEOUT_MS });
 const MAX_DIRECTORY_BYTES = 256 * 1024;
 const DIRECTORY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-
-// The exact message web-bot-auth/crypto throws when crypto.subtle.verify()
-// returns false. This — and only this — is affirmative evidence of a forged
-// signature. Everything else (fetch failure, expiry, missing key) fails open.
-const CRYPTO_FAILURE_MESSAGE = 'invalid signature';
 
 // Discovery types from protocol-00. `directory` is the default when the header
 // carries no `type` parameter.
@@ -292,7 +286,9 @@ async function resolveKey(signatureAgentHeader, keyid) {
   for (const jwk of keys) {
     let thumbprint;
     try {
-      thumbprint = await jwkToKeyID(jwk, helpers.WEBCRYPTO_SHA256, helpers.BASE64URL_DECODE);
+      thumbprint = await jwkToKeyID(jwk,
+        value => crypto.subtle.digest('SHA-256', value),
+        value => Buffer.from(value).toString('base64url'));
     } catch {
       continue; // unsupported/malformed key in the set — skip it
     }
@@ -426,38 +422,47 @@ async function checkWebBotAuth(req) {
   }
   const path = req.originalUrl || req.url || '/';
   const message = {
+    kind: 'request',
     method: (req.method || 'POST').toUpperCase(),
-    url: `${forwardedScheme(req)}://${host}${path}`,
-    headers,
+    targetUri: `${forwardedScheme(req)}://${host}${path}`,
+    fields: Object.entries(headers).flatMap(([name, value]) =>
+      (Array.isArray(value) ? value : [value]).filter(v => v != null)
+        .map(v => ({ name, value: String(v) }))),
   };
 
   let cryptoFailed = false;
   let resolvedKeyId = '';
   let resolvedAlg = '';
+  let verifiedAgent = agent;
 
   try {
     await withTimeout(
-      verify(message, async (data, signature, params) => {
-        if (!sigAgentRaw) {
-          throw new FetchFailure('no Signature-Agent to resolve key');
-        }
-        assertWebBotAuthParams(params);
-        const jwk = await resolveKey(sigAgentRaw, params.keyid);
-        resolvedKeyId = params.keyid;
-        resolvedAlg = jwk.alg || (jwk.crv === 'Ed25519' ? 'ed25519' : '');
-        const verifyFn = await verifierFromJWK(jwk);
-        try {
-          await verifyFn(data, signature, params);
-        } catch (e) {
-          if (e && e.message === CRYPTO_FAILURE_MESSAGE) {
-            cryptoFailed = true;
-          }
-          throw e;
-        }
+      verify(message, {
+        async resolver(candidate) {
+          if (!candidate.signatureAgent) throw new FetchFailure('no Signature-Agent to resolve key');
+          // Resolve the covered dictionary member, not an unsigned first member.
+          const entry = candidate.signatureAgent;
+          const sourceHeader = `sig1=${JSON.stringify(entry.uri)};type=${entry.type}`;
+          const jwk = await resolveKey(sourceHeader, candidate.keyid);
+          const verifier = await verifierFromJWK(jwk);
+          resolvedKeyId = candidate.keyid;
+          resolvedAlg = verifier.algorithm;
+          verifiedAgent = displayAgent(JSON.stringify(entry.uri));
+          return {
+            ...verifier,
+            async verify(data, signature) {
+              const valid = await verifier.verify(data, signature);
+              // Only a completed cryptographic rejection is evidence of forgery.
+              if (valid === false) cryptoFailed = true;
+              return valid;
+            },
+          };
+        },
+        validate: assertWebBotAuthParams,
       }),
       VERIFY_TIMEOUT_MS,
     );
-    return [verifiedDetection(agent, resolvedKeyId, resolvedAlg)];
+    return [verifiedDetection(verifiedAgent, resolvedKeyId, resolvedAlg)];
   } catch (e) {
     if (cryptoFailed) {
       return [forgedDetection(agent, e)];
