@@ -24,7 +24,7 @@ jobs:
     env:
       FCAPTCHA_SECRET: conformance-test-secret-0123456789abcdef0123456789abcdef
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build production image
         run: docker build -f ${{ matrix.dockerfile }} -t fcaptcha-conformance .

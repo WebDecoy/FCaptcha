@@ -35,7 +35,7 @@ jobs:
 
     name: ${{ matrix.name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Always from the repository root: every image needs client/fcaptcha.js,
       # which sits outside the per-server directories.
