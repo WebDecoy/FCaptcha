@@ -372,7 +372,7 @@ func TestCheckWebBotAuthEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("keygen: %v", err)
 	}
-	signer, err := webbotauth.NewSigner(priv)
+	signer, err := webbotauth.NewSigner(priv, webbotauth.WithSignatureAgent("https://agent.example"))
 	if err != nil {
 		t.Fatalf("NewSigner: %v", err)
 	}
@@ -402,6 +402,21 @@ func TestCheckWebBotAuthEndToEnd(t *testing.T) {
 	forged := e.CheckWebBotAuth(context.Background(), webbotauth.RequestFromHTTP(r))
 	if len(forged) != 1 || forged[0].Category != CategoryBot {
 		t.Fatalf("expected forged bot detection on authority mismatch, got %+v", forged)
+	}
+
+	// A signature without an agent identity is not a verified agent claim,
+	// even when its key is pinned. Keep the upstream strict default.
+	legacySigner, err := webbotauth.NewSigner(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingAgent, _ := http.NewRequest("POST", "https://example.com/api/verify", nil)
+	if err := legacySigner.SignRequest(missingAgent); err != nil {
+		t.Fatal(err)
+	}
+	presence := e.CheckWebBotAuth(context.Background(), webbotauth.RequestFromHTTP(missingAgent))
+	if len(presence) != 1 || presence[0].Category != CategoryDeclaredAI || presence[0].Details["verified"] != false {
+		t.Fatalf("missing agent must stay unverified, got %+v", presence)
 	}
 }
 

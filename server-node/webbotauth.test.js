@@ -8,8 +8,8 @@
 // would otherwise refuse the loopback address a local server would use.
 
 const assert = require('assert');
-const { signatureHeaders } = require('web-bot-auth');
-const { Ed25519Signer } = require('web-bot-auth/crypto');
+const { sign: signRequest } = require('web-bot-auth');
+const { signerFromJWK } = require('web-bot-auth/crypto');
 const wba = require('./webbotauth');
 
 const AGENT_ORIGIN = 'https://agent.example';
@@ -19,16 +19,20 @@ async function generateSigner() {
   const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
   const privJwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
   const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
-  const signer = await Ed25519Signer.fromJWK(privJwk);
+  // Use the JOSE algorithm label required by the SDK, independent of the
+  // Node/OpenSSL version's exported Ed25519 JWK label.
+  privJwk.alg = pubJwk.alg = 'EdDSA';
+  const signer = await signerFromJWK(privJwk);
   return { signer, pubJwk };
 }
 
 // Signs message and returns headers ready to place on an inbound request.
-async function sign(signer, message) {
+async function sign(signer, message, options = {}) {
   const created = new Date();
   const expires = new Date(created.getTime() + 5 * 60 * 1000);
-  const headers = await signatureHeaders(message, signer, { created, expires });
-  return { signature: headers.Signature, 'signature-input': headers['Signature-Input'] };
+  const request = new Request(message.url, { method: message.method, headers: message.headers });
+  const headers = await signRequest(request, { signer, created, expires, ...options });
+  return { signature: headers.signature, 'signature-input': headers.signatureInput };
 }
 
 function fakeReq({ host, path = '/api/verify', method = 'POST', extraHeaders = {} }) {
@@ -261,6 +265,23 @@ async function testForged() {
   console.log('  ✓ forged signature (authority mismatch) → bot');
 }
 
+async function testCoveredMember() {
+  const { signer, pubJwk } = await generateSigner();
+  wba._internal.seedDirectoryCache(AGENT_ORIGIN, [pubJwk]);
+  const agentValue = `other="https://unsigned.example", sig2="${AGENT_ORIGIN}"`;
+  const message = {
+    method: 'POST', url: 'https://example.com/api/verify',
+    headers: { host: 'example.com', 'signature-agent': agentValue },
+  };
+  const signed = await sign(signer, message, { label: 'sig2', signatureAgentKey: 'sig2' });
+  const [detection] = await wba.checkWebBotAuth(fakeReq({
+    host: 'example.com', extraHeaders: { 'signature-agent': agentValue, ...signed },
+  }));
+  assert.strictEqual(detection.details.verified, true);
+  assert.strictEqual(detection.details.signatureAgent, AGENT_ORIGIN);
+  console.log('  ✓ key discovery and verified identity use the covered dictionary member');
+}
+
 async function testFailOpen() {
   // A validly-signed request that covers only @authority (no signature-agent):
   // checkWebBotAuth has no directory to resolve, so it cannot verify and must
@@ -297,6 +318,7 @@ async function main() {
   await testVerified();
   await testTypedDiscoveryVerified();
   await testForged();
+  await testCoveredMember();
   await testFailOpen();
   await testNoSignature();
   console.log('All webbotauth tests passed.');
