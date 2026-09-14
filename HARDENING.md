@@ -91,7 +91,10 @@ uses `requirements.lock` with mandatory hashes. Refresh the Python lock with:
 uv pip compile --python-version 3.12 --generate-hashes server-python/requirements.txt -o server-python/requirements.lock
 ```
 
-Go builds use 1.26.8, and CI runs `govulncheck`. Dependency-update automation and
+Go source builds require at least 1.26.8; the Go containers build with 1.27.1.
+The Node and Python containers use Node 26 and Python 3.14. CI covers Node
+22/24/26, Go 1.26.8/1.27.1, and Python 3.12/3.14, including `govulncheck`.
+Dependency-update automation and
 Docker provenance/SBOM generation are enabled in the repository workflows.
 
 The fast-JavaScript detector was removed from every scoring implementation and
