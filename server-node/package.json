@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.22.3",
+    "express": "^5.2.1",
     "ipaddr.js": "^2.4.0",
     "redis": "^4.6.12",
     "web-bot-auth": "^0.1.3"
