@@ -13,6 +13,32 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.39.0] — 2026-09-14
+
+### Dependencies and compatibility
+- Merge the five grouped maintenance updates: Go, Python, containers,
+  JavaScript, and GitHub Actions (#78–#82).
+- The bundled Node server now uses Express 5.2 and Redis client 6.2. Express
+  middleware consumers may continue using Express 4; the peer declaration now
+  also accepts Express 5. Node 22 remains the minimum supported runtime.
+- Upgrade Node Web Bot Auth to 0.2 and Go Web Bot Auth to 0.4.1. Migrate the
+  Node adapter to the new request-descriptor and verifier-object API. Resolve
+  keys and report verified identity from the signed dictionary member, not an
+  unrelated first member. Discovery failures remain unverified presence signals;
+  only an actual cryptographic rejection counts as forgery.
+- Keep Go's stricter signed-agent identity requirement; update its cryptographic
+  fixture and retain a regression check for missing agent identity.
+- Raise Python requirement floors to match the supported dependency baseline;
+  the existing hash lock already satisfies them. Update Playwright to 1.63.
+- Update pinned container bases to Go 1.27.1, Alpine 3.24.1, Node 26, and Python
+  3.14.7. Container runtime upgrades can affect custom images or extensions:
+  validate those before deployment. Go source builds still support 1.26.8.
+- Update GitHub Actions and test the minimum and container runtime lines:
+  Node 22/24/26, Go 1.26.8/1.27.1, and Python 3.12/3.14.
+
+Token format, admission limits, and browser verification behavior are unchanged
+from 1.38.0. Older deployments should still read [HARDENING.md](HARDENING.md).
+
 ## [1.38.0] — 2026-09-14
 
 Read [HARDENING.md](HARDENING.md) before upgrading. This release follows the
