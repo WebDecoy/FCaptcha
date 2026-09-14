@@ -1,17 +1,54 @@
 version: 2
+# One weekly batch per ecosystem, not one PR per dependency. Security fixes
+# remain independently eligible and grouped; nothing is auto-merged.
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
+    open-pull-requests-limit: 1
+    groups:
+      actions-maintenance:
+        patterns: ['*']
+      actions-security:
+        applies-to: security-updates
+        patterns: ['*']
   - package-ecosystem: gomod
     directory: /server-go
     schedule: { interval: weekly }
+    open-pull-requests-limit: 1
+    groups:
+      go-maintenance:
+        patterns: ['*']
+      go-security:
+        applies-to: security-updates
+        patterns: ['*']
   - package-ecosystem: npm
     directories: [/server-node, /client, /bench, /test/browser]
     schedule: { interval: weekly }
+    open-pull-requests-limit: 1
+    groups:
+      javascript-maintenance:
+        patterns: ['*']
+      javascript-security:
+        applies-to: security-updates
+        patterns: ['*']
   - package-ecosystem: pip
     directory: /server-python
     schedule: { interval: weekly }
+    open-pull-requests-limit: 1
+    groups:
+      python-maintenance:
+        patterns: ['*']
+      python-security:
+        applies-to: security-updates
+        patterns: ['*']
   - package-ecosystem: docker
     directories: [/docker, /server-go, /server-node, /server-python]
     schedule: { interval: weekly }
+    open-pull-requests-limit: 1
+    groups:
+      containers-maintenance:
+        patterns: ['*']
+      containers-security:
+        applies-to: security-updates
+        patterns: ['*']
