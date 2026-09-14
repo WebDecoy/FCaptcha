@@ -10,6 +10,6 @@
     "test": "node --test lib/*.test.js"
   },
   "devDependencies": {
-    "playwright": "^1.49.0"
+    "playwright": "^1.63.0"
   }
 }
