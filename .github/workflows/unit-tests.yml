@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           # crypto/tls only exposes ClientHelloInfo.Extensions from 1.24, which
           # native JA4 needs. go.mod says so; keep this in step with it.
