@@ -2274,15 +2274,15 @@
     }
 
     /**
-     * WebRTC fingerprinting - Get local IPs and media devices
-     * Very effective for detecting VMs, proxies, and headless browsers
+     * WebRTC media-device enumeration. Local IPs are not collected: browsers
+     * hide host candidates behind mDNS names, so a real visitor has none to
+     * report and the absence says nothing.
      */
     async _getWebRTCInfo() {
       try {
         const info = {
           supported: 'RTCPeerConnection' in window,
-          mediaDevices: { supported: false },
-          localIPs: []
+          mediaDevices: { supported: false }
         };
 
         if (!info.supported) return info;
@@ -2302,47 +2302,6 @@
           } catch (e) {
             info.mediaDevices = { supported: false, error: true };
           }
-        }
-
-        // Get local IPs via WebRTC (no permission needed)
-        try {
-          const pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-          });
-
-          const localIPs = new Set();
-
-          pc.onicecandidate = (event) => {
-            if (event.candidate) {
-              const candidate = event.candidate.candidate;
-              // Extract IP addresses from ICE candidates
-              const ipRegex = /([0-9]{1,3}\.){3}[0-9]{1,3}/g;
-              const matches = candidate.match(ipRegex);
-              if (matches) {
-                matches.forEach(ip => {
-                  // Filter out STUN server responses, keep only local IPs
-                  if (ip.startsWith('192.168.') || ip.startsWith('10.') ||
-                      ip.startsWith('172.') || ip.startsWith('169.254.')) {
-                    localIPs.add(ip);
-                  }
-                });
-              }
-            }
-          };
-
-          // Create data channel to trigger ICE gathering
-          pc.createDataChannel('');
-          await pc.createOffer().then(offer => pc.setLocalDescription(offer));
-
-          // Wait briefly for ICE candidates
-          await new Promise(r => setTimeout(r, 500));
-
-          info.localIPs = Array.from(localIPs);
-          info.hasLocalIP = localIPs.size > 0;
-
-          pc.close();
-        } catch (e) {
-          info.localIPError = true;
         }
 
         return info;

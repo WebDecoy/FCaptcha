@@ -13,6 +13,13 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [Unreleased]
+
+### Detection
+- Remove the WebRTC local-address check. Browsers hide local addresses by
+  default, so it fired on ordinary visitors. The client no longer collects
+  local IP addresses.
+
 ## [1.39.1] — 2026-09-23
 
 ### Dependencies

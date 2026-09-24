@@ -19,11 +19,6 @@
       "removable_by": "real-human capture"
     },
     {
-      "signal": "No local IP addresses detected via WebRTC",
-      "reason": "Headless Chromium on a loopback-only CI network surfaces no ICE host candidates. normalize.js appends a synthetic candidate to the SDP, which does not reach every code path the client uses to enumerate them. A real browser on a real LAN reports one.",
-      "removable_by": "capture on a host with a real network interface, or a more complete RTCPeerConnection shim"
-    },
-    {
       "signal": "RequestAnimationFrame timing too consistent",
       "reason": "Headless Chromium drives rAF from a metronomic timer rather than a display vsync, so frame deltas are more regular than on a real compositor.",
       "removable_by": "headed capture with GPU compositing"

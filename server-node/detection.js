@@ -894,16 +894,6 @@ function analyzeWebRTC(webrtcInfo) {
     });
   }
 
-  // Check local IP detection - VMs and some headless setups may not expose local IPs
-  if (webrtcInfo.hasLocalIP === false && !webrtcInfo.localIPError) {
-    detections.push({
-      category: 'headless',
-      score: 0.4,
-      confidence: 0.5,
-      reason: 'No local IP addresses detected via WebRTC'
-    });
-  }
-
   return detections;
 }
 
