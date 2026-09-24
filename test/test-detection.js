@@ -1403,8 +1403,6 @@ async function testAdvancedDetections() {
               videoInputs: 1,
               totalDevices: 5
             },
-            hasLocalIP: true,
-            localIPs: ['192.168.1.100']
           },
           speechInfo: {
             supported: true,

@@ -177,30 +177,6 @@ function normalizeEnvironment() {
   } catch (_) {
     /* ignore */
   }
-
-  // A headless browser behind a loopback-only network surfaces no host
-  // candidates from WebRTC. A real browser on a real LAN surfaces an mDNS or
-  // RFC 1918 candidate, and their absence reads as a VPN or a datacenter.
-  try {
-    const RealPC = window.RTCPeerConnection;
-    if (RealPC) {
-      window.RTCPeerConnection = function (...args) {
-        const pc = new RealPC(...args);
-        const realCreateOffer = pc.createOffer.bind(pc);
-        pc.createOffer = async function (...a) {
-          const offer = await realCreateOffer(...a);
-          if (offer && typeof offer.sdp === 'string' && !/candidate:/.test(offer.sdp)) {
-            offer.sdp += 'a=candidate:1 1 udp 2113937151 192.168.1.24 54321 typ host\r\n';
-          }
-          return offer;
-        };
-        return pc;
-      };
-      window.RTCPeerConnection.prototype = RealPC.prototype;
-    }
-  } catch (_) {
-    /* ignore */
-  }
 }
 
 /**

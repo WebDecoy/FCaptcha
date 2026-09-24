@@ -1,13 +1,13 @@
 'use strict';
 
-// Tests for HTTP header analysis (run: `node detection.test.js`).
+// Tests for HTTP header and WebRTC analysis (run: `node detection.test.js`).
 //
 // These cover a false positive the bench human panel surfaced: forwarding
 // headers were scored as suspicious unconditionally, so every visitor to every
 // deployment behind a reverse proxy carried a permanent bot detection.
 
 const assert = require('assert');
-const { analyzeHeaders } = require('./detection');
+const { analyzeHeaders, analyzeWebRTC } = require('./detection');
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -82,6 +82,19 @@ test('unrelated header detections still work', () => {
     dets.some((d) => /Missing \d+ expected browser headers/.test(d.reason)),
     'missing-header detection should be unaffected by the trust gate'
   );
+});
+
+test('WebRTC local-address availability does not affect the score', () => {
+  // Modern browsers hide local addresses; support older clients that still send
+  // these fields as well as newer clients that no longer collect addresses.
+  const mediaDevices = { supported: true, totalDevices: 3, audioInputs: 1, videoInputs: 1 };
+  for (const addresses of [
+    { hasLocalIP: false, localIPs: [] },
+    { hasLocalIP: true, localIPs: ['192.168.1.2'] },
+    {},
+  ]) {
+    assert.deepStrictEqual(analyzeWebRTC({ supported: true, mediaDevices, ...addresses }), []);
+  }
 });
 
 let failed = 0;
