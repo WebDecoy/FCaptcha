@@ -212,3 +212,38 @@ func TestCorroborationRequiresTwoNotThree(t *testing.T) {
 			"combination leaves the adversary allowed", corroborationMinAgree)
 	}
 }
+
+// Chrome's DevTools hardware-concurrency override sets the page's value and not
+// the worker's, with native getters: the same disagreement stealth tooling
+// leaves. Measured with Emulation.setHardwareConcurrencyOverride on Chrome 153:
+// page 2, worker 14. A developer testing that setting must not be floored.
+func workerMismatch(mismatches ...string) map[string]interface{} {
+	list := make([]interface{}, len(mismatches))
+	for i, m := range mismatches {
+		list[i] = m
+	}
+	return map[string]interface{}{"environmental": map[string]interface{}{
+		"workerConsistency": map[string]interface{}{
+			"supported": true, "consistent": false, "mismatches": list, "mismatchCount": float64(len(list)),
+		},
+	}}
+}
+
+func TestHardwareConcurrencyDisagreementContributes(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	dets := e.detectStealthArtifacts(workerMismatch("hardwareConcurrency"))
+	if len(dets) != 1 || dets[0].Category != CategoryBot {
+		t.Fatalf("want one bot detection, got %+v", dets)
+	}
+}
+
+func TestDevToolsHardwareConcurrencyOverrideIsNotFloored(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	dets := append([]DetectionResult{
+		{Category: CategoryBehavioral, Score: corroborationAgreeAt, Confidence: 1},
+		{Category: CategoryCDP, Score: 0.6, Confidence: 0.5, NonCorroborating: true},
+	}, e.detectStealthArtifacts(workerMismatch("hardwareConcurrency"))...)
+	if got := applyCorroborationFloor(0.15, dets); got != 0.15 {
+		t.Errorf("DevTools override session floored to %v", got)
+	}
+}

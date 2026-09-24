@@ -9,8 +9,9 @@ const assert = require('node:assert/strict');
 const {
   applyCorroborationFloor, calculateCategoryScores, detectCDP,
   CORROBORATION_AGREE_AT, CORROBORATION_MIN_AGREE, CORROBORATION_FLOOR,
-  DISPOSITIVE_FLOOR, BEHAVIOURAL_CATEGORIES,
+  DISPOSITIVE_FLOOR, BEHAVIOURAL_CATEGORIES, detectStealthArtifacts,
 } = require('./engine');
+const { analyzeWorkerConsistency } = require('./detection');
 
 // One detection per category at exactly the given strength, so each category's
 // noisy-OR score is the number written here.
@@ -94,4 +95,34 @@ test('a developer with DevTools open and a quick click is not floored', () => {
     { category: 'fingerprint', score: 0.4, confidence: 0.4 },
   ];
   assert.equal(applyCorroborationFloor(0.115, dets), 0.115);
+});
+
+// Chrome's DevTools hardware-concurrency override sets the page's value and not
+// the worker's, with native getters: the same disagreement stealth tooling
+// leaves. Measured with Emulation.setHardwareConcurrencyOverride on Chrome 153:
+// page 2, worker 14. A developer testing that setting must not be floored.
+const workerMismatch = (mismatches) => ({
+  environmental: { workerConsistency: { supported: true, consistent: false, mismatches, mismatchCount: mismatches.length } },
+});
+
+test('a hardwareConcurrency disagreement contributes but does not corroborate', () => {
+  const dets = detectStealthArtifacts(workerMismatch(['hardwareConcurrency']));
+  assert.equal(dets.length, 1);
+  assert.equal(dets[0].category, 'bot');
+});
+
+test('a developer using the DevTools hardware-concurrency override is not floored', () => {
+  const dets = [
+    { category: 'behavioral', score: CORROBORATION_AGREE_AT, confidence: 1 },  // one behavioural view
+    { category: 'cdp', score: 0.6, confidence: 0.5, nonCorroborating: true },  // DevTools open
+    ...detectStealthArtifacts(workerMismatch(['hardwareConcurrency'])),
+  ];
+  assert.equal(applyCorroborationFloor(0.15, dets), 0.15);
+});
+
+test('the generic worker check does not count hardwareConcurrency a second time', () => {
+  assert.deepEqual(analyzeWorkerConsistency(workerMismatch(['hardwareConcurrency']).environmental.workerConsistency), []);
+  const rest = analyzeWorkerConsistency(workerMismatch(['hardwareConcurrency', 'languages']).environmental.workerConsistency);
+  assert.equal(rest.length, 1);
+  assert.match(rest[0].reason, /languages$/);
 });

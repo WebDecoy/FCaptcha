@@ -10,6 +10,7 @@ services:
       - "3000:3000"
     environment:
       - FCAPTCHA_SECRET=${FCAPTCHA_SECRET:?Set FCAPTCHA_SECRET before starting FCaptcha}
+      - FCAPTCHA_EXPERIMENTAL_BLOCKING=${FCAPTCHA_EXPERIMENTAL_BLOCKING:-}
       - PORT=3000
     restart: unless-stopped
     healthcheck:

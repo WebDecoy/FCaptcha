@@ -502,6 +502,19 @@ function detectStealthArtifacts(signals) {
     });
   }
 
+  // The page and a Worker disagree on hardwareConcurrency. Stealth tooling
+  // patches the page's value and not the worker's. Contributory only: Chrome's
+  // DevTools hardware-concurrency override produces the same disagreement with
+  // native getters and an attached console, so a developer testing that
+  // setting is indistinguishable from the patch.
+  const worker = env.workerConsistency;
+  if (worker && Array.isArray(worker.mismatches) && worker.mismatches.includes('hardwareConcurrency')) {
+    detections.push({
+      category: 'bot', score: 0.45, confidence: 0.85,
+      reason: 'Page and Worker disagree on hardwareConcurrency'
+    });
+  }
+
   return detections;
 }
 

@@ -16,9 +16,19 @@ reading would call major. Read the **Breaking** entries rather than the number.
 ## [Unreleased]
 
 ### Detection
+- Scoring responses include an `experimental` object with a versioned candidate
+  score, `wouldBlock`, and experimental detections. Monitoring is the default;
+  `FCAPTCHA_EXPERIMENTAL_BLOCKING=stealth-corroboration-v1` opts into withholding
+  tokens with reason `experimental_detection`. Unknown or retired names, including `true`, remain
+  monitoring-only. Baseline scores and challenge costs stay unchanged. Opting in
+  may reject visitors using developer tools or anti-fingerprinting tools.
 - Remove the WebRTC local-address check. Browsers hide local addresses by
   default, so it fired on ordinary visitors. The client no longer collects
   local IP addresses.
+- The page/Worker `hardwareConcurrency` consistency check now runs on Go and
+  Python as well as Node. It contributes to the score but does not count toward
+  the corroboration floor, because Chrome's DevTools hardware-concurrency
+  override produces the same disagreement.
 
 ## [1.39.1] — 2026-09-23
 

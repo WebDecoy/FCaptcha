@@ -29,19 +29,32 @@ jobs:
       - name: Build production image
         run: docker build -f ${{ matrix.dockerfile }} -t fcaptcha-conformance .
 
-      - name: Start server
+      - name: Run shared contract for monitoring, pinned blocking, and unsupported selectors
         run: |
-          docker run -d --name fcaptcha-conformance -p 3000:3000 \
-            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" fcaptcha-conformance
-          for _ in $(seq 1 60); do
-            curl -sf http://localhost:3000/health >/dev/null && exit 0
-            sleep 0.5
+          for policy in '' stealth-corroboration-v1 stealth-corroboration-v0 true; do
+            echo "Testing experimental policy selector: '${policy}'"
+            docker run -d --name fcaptcha-conformance -p 3000:3000 \
+              -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" \
+              -e FCAPTCHA_EXPERIMENTAL_BLOCKING="$policy" fcaptcha-conformance
+            ready=false
+            for _ in $(seq 1 60); do
+              if curl -sf http://localhost:3000/health >/dev/null; then
+                ready=true
+                break
+              fi
+              sleep 0.5
+            done
+            if [ "$ready" != true ]; then
+              docker logs fcaptcha-conformance
+              exit 1
+            fi
+            if [ "$policy" = stealth-corroboration-v1 ]; then
+              node test/conformance.js http://localhost:3000 --experimental-blocking
+            else
+              node test/conformance.js http://localhost:3000
+            fi
+            docker rm -f fcaptcha-conformance
           done
-          docker logs fcaptcha-conformance
-          exit 1
-
-      - name: Run shared contract
-        run: node test/conformance.js http://localhost:3000
 
       - name: Server logs
         if: failure()

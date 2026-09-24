@@ -25,6 +25,7 @@ from server import (
     DISPOSITIVE_FLOOR,
     apply_corroboration_floor,
     detect_cdp,
+    detect_stealth_artifacts,
     BEHAVIOURAL_CATEGORIES,
     CORROBORATION_AGREE_AT,
     CORROBORATION_FLOOR,
@@ -437,6 +438,33 @@ def the_instance_id_is_bounded_before_it_becomes_a_key():
     assert widget_instance({}) == ""
     assert widget_instance({"meta": {"sessionId": 42}}) == ""
 
+
+
+# Chrome's DevTools hardware-concurrency override sets the page's value and not
+# the worker's, with native getters: the same disagreement stealth tooling
+# leaves. Measured with Emulation.setHardwareConcurrencyOverride on Chrome 153:
+# page 2, worker 14. A developer testing that setting must not be floored.
+def worker_mismatch(mismatches):
+    return {"environmental": {"workerConsistency": {
+        "supported": True, "consistent": False,
+        "mismatches": mismatches, "mismatchCount": len(mismatches),
+    }}}
+
+
+@test
+def a_hardware_concurrency_disagreement_contributes():
+    dets = detect_stealth_artifacts(worker_mismatch(["hardwareConcurrency"]))
+    assert len(dets) == 1 and dets[0].category == ThreatCategory.BOT, dets
+
+
+@test
+def a_devtools_hardware_concurrency_override_is_not_floored():
+    dets = [
+        Detection(ThreatCategory.BEHAVIORAL, CORROBORATION_AGREE_AT, 1.0, "one behavioural view"),
+        Detection(ThreatCategory.CDP, 0.6, 0.5, "console attached", non_corroborating=True),
+        *detect_stealth_artifacts(worker_mismatch(["hardwareConcurrency"])),
+    ]
+    assert apply_corroboration_floor(0.15, dets) == 0.15
 
 DetectionTests = test.testcase("DetectionTests")
 

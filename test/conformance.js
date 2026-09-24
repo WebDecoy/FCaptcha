@@ -11,6 +11,7 @@ const crypto = require('crypto');
 const { buildVerifyBody } = require('../bench/lib/pow');
 
 const SERVER = process.argv[2] || 'http://localhost:3000';
+const EXPERIMENTAL_BLOCKING = process.argv.includes('--experimental-blocking');
 const SECRET = process.env.FCAPTCHA_VERIFY_SECRET || process.env.FCAPTCHA_SECRET;
 if (!SECRET) throw new Error('FCAPTCHA_SECRET is required for conformance tests');
 
@@ -171,6 +172,76 @@ async function run() {
 
   const ready = await request('/ready', { method: 'GET' });
   ok(ready.status === 200 && ready.json?.status === 'ok', 'configured state is ready');
+
+  // Synthetic regression cases, not human captures. This candidate knowingly
+  // flags both #87's shape and a DevTools override with one behavioral warning.
+  // Only server configuration may enable the gate. Challenge cost and the
+  // baseline score stay independent in either mode.
+  for (const endpoint of ['verify', 'score']) {
+    for (const [index, scenario] of ['stealth-shaped', 'devtools-warning', 'clean'].entries()) {
+      const candidate = scenario !== 'clean';
+      const blocked = EXPERIMENTAL_BLOCKING && candidate;
+      const siteKey = `experimental-${endpoint}-${scenario}`;
+      const headers = {
+        'User-Agent': 'Mozilla/5.0 Chrome/120.0.0.0',
+        'Accept-Language': 'en-US', 'Accept-Encoding': 'gzip',
+        Origin: 'https://example.test',
+        'X-Real-IP': `203.0.113.${80 + (endpoint === 'score' ? 3 : 0) + index}`,
+      };
+      const signals = {
+        behavioral: {
+          totalPoints: 60, trajectoryLength: 400, approachPoints: 12,
+          approachDirectness: 0.4, microTremorScore: 0.5, velocityVariance: 0.5,
+          interactionDuration: 4200, overshootCorrections: 2,
+          ...(scenario === 'stealth-shaped'
+            ? { inputForensics: { coalescedSamples: 30, coalescedMax: 1 } }
+            : scenario === 'devtools-warning' ? { microTremorScore: 0.1 } : {}),
+        },
+        environmental: {
+          workerConsistency: { supported: true, consistent: !candidate,
+            mismatches: candidate ? ['hardwareConcurrency'] : [], mismatchCount: candidate ? 1 : 0 },
+          cdpRuntime: { consoleAttached: true },
+        },
+        // A submitted observation cannot select a policy or override the server.
+        experimental: { mode: EXPERIMENTAL_BLOCKING ? 'observe' : 'block', score: EXPERIMENTAL_BLOCKING ? 0 : 1, wouldBlock: !EXPERIMENTAL_BLOCKING },
+      };
+      const { body } = await buildVerifyBody(SERVER, siteKey, signals, headers);
+      const response = await request(`/api/${endpoint}`, { headers, body });
+      assert.strictEqual(response.status, 200, response.text);
+      const result = response.json;
+      assert.strictEqual(result.experimental.mode, EXPERIMENTAL_BLOCKING ? 'block' : 'observe');
+      assert.strictEqual(result.experimental.policy, 'stealth-corroboration-v1');
+      assert.strictEqual(result.experimental.score, candidate ? 0.6 : result.score);
+      assert.strictEqual(result.experimental.wouldBlock, candidate);
+      assert.deepStrictEqual(result.experimental.detections.map((d) => d.id), candidate ? ['worker-hardware-concurrency-mismatch'] : []);
+      assert.deepStrictEqual(result.experimental.corroboratingCategories, candidate ? [scenario === 'stealth-shaped' ? 'cdp' : 'vision_ai'] : []);
+      assert.ok(result.score < 0.5, response.text);
+      assert.strictEqual(result.success, !blocked, response.text);
+      if (blocked) {
+        assert.ok(!result.token, response.text);
+        assert.strictEqual(result.reason, 'experimental_detection');
+        assert.strictEqual(result.recommendation, 'block');
+      } else {
+        assert.ok(result.token, response.text);
+        assert.strictEqual(result.reason, undefined);
+        const claims = JSON.parse(Buffer.from(result.token, 'base64url'));
+        assert.ok(Math.abs(claims.score - result.score) < 0.001);
+        assert.strictEqual(claims.experimental, undefined);
+        const spent = await request('/api/token/verify', { body: { token: result.token, secret: SECRET } });
+        assert.strictEqual(spent.json.valid, true, spent.text);
+      }
+      const next = await request(`/api/pow/challenge?siteKey=${siteKey}`, { method: 'GET', headers });
+      assert.strictEqual(next.json.difficulty, 4, next.text);
+      assert.strictEqual(next.json.minAgeMs, 1500, next.text);
+      ok(true, `${endpoint}/${scenario}: experimental mode gates token correctly and preserves baseline challenge cost`);
+
+      // Observations cannot bypass the existing proof gate either.
+      const noProof = await request(`/api/${endpoint}`, { headers, body: { siteKey, signals } });
+      assert.strictEqual(noProof.json.success, false);
+      assert.strictEqual(noProof.json.reason, 'pow_not_satisfied');
+      assert.ok(!noProof.json.token);
+    }
+  }
 
   // A distinct source for each run keeps the production quota enabled even
   // when the same Redis database is shared by every runtime under test.

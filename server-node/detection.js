@@ -946,14 +946,17 @@ function analyzeWorkerConsistency(workerConsistency) {
 
   const detections = [];
 
-  // Mismatches indicate fingerprint spoofing
-  if (!workerConsistency.consistent && workerConsistency.mismatchCount > 0) {
-    const score = Math.min(0.9, 0.3 + (workerConsistency.mismatchCount * 0.15));
+  // Mismatches indicate fingerprint spoofing. hardwareConcurrency is scored
+  // separately (engine.js detectStealthArtifacts); counting it here as well
+  // would count the same mismatch twice.
+  const mismatches = (workerConsistency.mismatches || []).filter((m) => m !== 'hardwareConcurrency');
+  if (!workerConsistency.consistent && mismatches.length > 0) {
+    const score = Math.min(0.9, 0.3 + (mismatches.length * 0.15));
     detections.push({
       category: 'bot',
       score: score,
       confidence: 0.85,
-      reason: `Worker/main thread mismatch detected: ${workerConsistency.mismatches.join(', ')}`
+      reason: `Worker/main thread mismatch detected: ${mismatches.join(', ')}`
     });
   }
 

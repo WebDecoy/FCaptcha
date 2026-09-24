@@ -63,13 +63,15 @@ type DetectionResult struct {
 type VerificationResult struct {
 	Success        bool
 	Score          float64
+	Experimental   ExperimentalResult
 	Token          string
 	Timestamp      int64
 	Detections     []DetectionResult
 	CategoryScores map[string]float64
 	Recommendation string
 	// Reason explains a token withheld for something other than the score:
-	// "rate_limited", "pow_not_satisfied" or "hostname_not_allowed". Empty
+	// "rate_limited", "pow_not_satisfied", "hostname_not_allowed", or
+	// "experimental_detection". Empty
 	// otherwise. Without it
 	// an integrator whose score is comfortably under the threshold has no way to
 	// tell why no token came back.
@@ -329,8 +331,9 @@ type ScoringEngine struct {
 	botDirectories   *boundedBotAuth
 	// Which page origins may mint tokens. Unrestricted unless the operator sets
 	// FCAPTCHA_ALLOWED_HOSTNAMES; see siteverify.go.
-	allowedHostnames *HostnameAllowlist
-	redisClient      *redis.Client
+	allowedHostnames     *HostnameAllowlist
+	experimentalBlocking bool
+	redisClient          *redis.Client
 }
 
 // webBotAuthTimeout bounds the whole Web Bot Auth verification, including the
@@ -435,8 +438,9 @@ func NewScoringEngine(secretKey string) *ScoringEngine {
 			CategoryBot:         0.13,
 			CategoryDeclaredAI:  0.02,
 		},
-		uaPatterns:       compileUAPatterns(),
-		allowedHostnames: HostnameAllowlistFromEnv(),
+		uaPatterns:           compileUAPatterns(),
+		allowedHostnames:     HostnameAllowlistFromEnv(),
+		experimentalBlocking: experimentalBlockingEnabled(),
 		// Open directories: FCaptcha wants to attempt verification of ANY
 		// claimed agent identity — the interesting outcome is a signature that
 		// claims an identity and fails to prove it. An allowlist would silently
@@ -725,9 +729,13 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	finalScore := applyDispositiveFloor(e.calculateFinalScore(categoryScores), detections)
 	finalScore = applyCorroborationFloor(finalScore, detections)
 
+	experimental := evaluateExperimental(signals, finalScore, detections, e.experimentalBlocking)
+	experimentalBlocked := e.experimentalBlocking && experimental.WouldBlock && finalScore < 0.5
 	// Determine recommendation
 	var recommendation string
 	switch {
+	case experimentalBlocked:
+		recommendation = "block"
 	case finalScore < 0.3:
 		recommendation = "allow"
 	case finalScore < 0.6:
@@ -748,14 +756,14 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	// its own reason rather than smuggled in as a bot verdict.
 	hostnameAllowed := e.allowedHostnames.Permits(hostname)
 
-	// Three independent conditions, deliberately not folded into the score.
+	// Independent gates, deliberately not folded into the baseline score.
 	//
 	// powSatisfied is the one that matters most: a score threshold answers "how
 	// suspicious is this visitor", which is the wrong question to ask of someone
 	// who never completed the challenge. Gating here means no future reweighting
 	// can reopen the bypass, and it holds even if the dispositive floor is
 	// lowered or removed.
-	success := finalScore < 0.5 && hostnameAllowed && powSatisfied && !deviceRateExceeded
+	success := finalScore < 0.5 && hostnameAllowed && powSatisfied && !deviceRateExceeded && !experimentalBlocked
 
 	// Name the failed precondition whenever one fails, not only when the score
 	// would otherwise have allowed. Gating it on the score made the PoW case
@@ -771,6 +779,8 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 		withheldReason = "pow_not_satisfied"
 	case !hostnameAllowed:
 		withheldReason = "hostname_not_allowed"
+	case experimentalBlocked:
+		withheldReason = "experimental_detection"
 	}
 
 	var token string
@@ -791,6 +801,7 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	return &VerificationResult{
 		Success:        success,
 		Score:          finalScore,
+		Experimental:   experimental,
 		Token:          token,
 		Timestamp:      time.Now().Unix(),
 		Detections:     detections,
@@ -1495,6 +1506,27 @@ func (e *ScoringEngine) detectStealthArtifacts(signals map[string]interface{}) [
 			Confidence: 0.85,
 			Reason:     "Notification permission contradicts Permissions API (headless/stealth tell)",
 		})
+	}
+
+	// The page and a Worker disagree on hardwareConcurrency. Stealth tooling
+	// patches the page's value and not the worker's. Contributory only: Chrome's
+	// DevTools hardware-concurrency override produces the same disagreement with
+	// native getters and an attached console, so a developer testing that
+	// setting is indistinguishable from the patch.
+	if worker := getMap(env, "workerConsistency"); worker != nil {
+		if list, ok := worker["mismatches"].([]interface{}); ok {
+			for _, m := range list {
+				if str, ok := m.(string); ok && str == "hardwareConcurrency" {
+					results = append(results, DetectionResult{
+						Category:   CategoryBot,
+						Score:      0.45,
+						Confidence: 0.85,
+						Reason:     "Page and Worker disagree on hardwareConcurrency",
+					})
+					break
+				}
+			}
+		}
 	}
 
 	return results

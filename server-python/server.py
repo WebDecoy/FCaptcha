@@ -161,6 +161,16 @@ def _env_flag(name: str) -> bool:
 
 VERDICT_LOGGING_ENABLED = _env_flag("FCAPTCHA_LOG_VERDICTS")
 VERDICT_LOG_INCLUDE_RAW = _env_flag("FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW")
+# Change the ID when evidence, thresholds, or scoring semantics change so an
+# existing selector cannot silently opt an operator into a different policy.
+EXPERIMENTAL_POLICY = "stealth-corroboration-v1"
+
+
+def _experimental_blocking_enabled() -> bool:
+    return os.getenv("FCAPTCHA_EXPERIMENTAL_BLOCKING", "").strip() == EXPERIMENTAL_POLICY
+
+
+EXPERIMENTAL_BLOCKING_ENABLED = _experimental_blocking_enabled()
 
 # Token verification used to accept anyone who could reach the endpoint: all
 # three servers read `secret` out of the body and dropped it. Enforcing it is a
@@ -229,6 +239,7 @@ def log_verdict(endpoint: str, site_key: str, result: Dict) -> None:
         "siteKey": site_key,
         "success": result.get("success"),
         "score": result.get("score"),
+        "experimental": result.get("experimental"),
         "recommendation": result.get("recommendation"),
         "categoryScores": result.get("categoryScores"),
         "detections": detections,
@@ -1125,6 +1136,18 @@ def detect_stealth_artifacts(signals: Dict) -> List[Detection]:
             "Notification permission contradicts Permissions API (headless/stealth tell)"
         ))
 
+    # The page and a Worker disagree on hardwareConcurrency. Stealth tooling
+    # patches the page's value and not the worker's. Contributory only: Chrome's
+    # DevTools hardware-concurrency override produces the same disagreement with
+    # native getters and an attached console, so a developer testing that
+    # setting is indistinguishable from the patch.
+    mismatches = (env.get("workerConsistency") or {}).get("mismatches") or []
+    if isinstance(mismatches, list) and "hardwareConcurrency" in mismatches:
+        detections.append(Detection(
+            ThreatCategory.BOT, 0.45, 0.85,
+            "Page and Worker disagree on hardwareConcurrency"
+        ))
+
     return detections
 
 
@@ -1690,6 +1713,36 @@ def apply_corroboration_floor(score: float, detections: List[Detection]) -> floa
     return score
 
 
+def evaluate_experimental(signals: Dict, production_score: float, detections: List[Detection], blocking: bool = False) -> Dict:
+    """Observe by default: #87's stealth session and a DevTools override can look
+    identical. Never merge this evidence into production scoring or state.
+    Explicit server configuration can add a separate token gate.
+    All diagnostic strings are fixed, so verdict logs contain no raw values.
+    """
+    env = signals.get("environmental")
+    worker = env.get("workerConsistency") if isinstance(env, dict) else None
+    mismatch = (isinstance(worker, dict) and worker.get("supported") is True
+                and worker.get("consistent") is False
+                and isinstance(worker.get("mismatches"), list)
+                and "hardwareConcurrency" in worker["mismatches"])
+    category_scores = calculate_category_scores([d for d in detections if not d.non_corroborating])
+    categories = [c for c in BEHAVIOURAL_CATEGORIES
+                  if category_scores.get(c, 0) >= CORROBORATION_AGREE_AT - CORROBORATION_EPSILON]
+    score = max(production_score, CORROBORATION_FLOOR) if mismatch and categories else production_score
+    return {
+        "mode": "block" if blocking else "observe",
+        "policy": EXPERIMENTAL_POLICY,
+        "score": score,
+        # Score threshold only, not a hypothetical PoW/hostname/rate verdict.
+        "wouldBlock": score >= 0.5,
+        "detections": [{
+            "id": "worker-hardware-concurrency-mismatch",
+            "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools",
+        }] if mismatch else [],
+        "corroboratingCategories": categories,
+    }
+
+
 def calculate_final_score(category_scores: Dict[str, float]) -> float:
     total = 0.0
     for cat, weight in WEIGHTS.items():
@@ -2043,7 +2096,11 @@ def run_verification(
         detections,
     )
 
-    if final_score < 0.3:
+    experimental = evaluate_experimental(signals, final_score, detections, EXPERIMENTAL_BLOCKING_ENABLED)
+    experimental_blocked = EXPERIMENTAL_BLOCKING_ENABLED and experimental["wouldBlock"] and final_score < 0.5
+    if experimental_blocked:
+        recommendation = "block"
+    elif final_score < 0.3:
         recommendation = "allow"
     elif final_score < 0.6:
         recommendation = "challenge"
@@ -2061,14 +2118,14 @@ def run_verification(
     # its own reason rather than smuggled in as a bot verdict.
     hostname_allowed = ALLOWED_HOSTNAMES.permits(hostname)
 
-    # Three independent conditions, deliberately not folded into the score.
+    # Independent gates, deliberately not folded into the baseline score.
     #
     # pow_satisfied is the one that matters most: a score threshold answers "how
     # suspicious is this visitor", which is the wrong question to ask of someone
     # who never completed the challenge. Gating here means no future reweighting
     # can reopen the bypass, and it holds even if the dispositive floor is
     # lowered or removed.
-    success = final_score < 0.5 and hostname_allowed and pow_satisfied and not device_rate_exceeded
+    success = final_score < 0.5 and hostname_allowed and pow_satisfied and not device_rate_exceeded and not experimental_blocked
 
     # Name the failed precondition whenever one fails, not only when the score
     # would otherwise have allowed. Gating it on the score made the PoW case
@@ -2083,6 +2140,8 @@ def run_verification(
         withheld_reason = "pow_not_satisfied"
     elif not hostname_allowed:
         withheld_reason = "hostname_not_allowed"
+    elif experimental_blocked:
+        withheld_reason = "experimental_detection"
 
     token = generate_token(ip, site_key, final_score, {
         "hostname": hostname,
@@ -2097,6 +2156,7 @@ def run_verification(
     return {
         "success": success,
         "score": final_score,
+        "experimental": experimental,
         "token": token,
         "timestamp": int(time.time()),
         "recommendation": recommendation,
@@ -2231,6 +2291,7 @@ def score(req: ScoreRequest, request: Request):
     return {
         "success": result["success"],
         "score": result["score"],
+        "experimental": result["experimental"],
         "token": result["token"],
         # Echo the sanitized form, not the raw input: this is what got signed
         # into the token, so a caller comparing the two sees the same value.
