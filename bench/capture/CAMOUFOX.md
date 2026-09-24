@@ -80,3 +80,41 @@ Open the printed local URL in your own browser. Use made-up form data. Repeat
 with fresh output directories for other browsers, privacy settings, and input
 methods. The environment description is operator-declared; a few manual sessions
 still do not establish a population false-positive rate.
+
+## Optional research observations
+
+Add `--observations` to automated or manual runs to collect a separate set of
+browser observations **after the scoring response**. The probes run as page
+scripts, outside the automation driver's isolated world, and upload only to
+the local recorder. They do not enter FCaptcha's signals, score, tokens, or
+experimental enforcement policy. The production client does not load them.
+
+Use `--control-settings default privacy reduced-motion privacy-reduced-motion`
+to expand automated Firefox controls. Reports include the requested settings
+and observed browser responses; a privacy setting can mask another preference.
+Optional `--camoufox-config /path/to/config.json` labels a separate configuration
+experiment. The configuration is copied per launch so library-generated values
+cannot leak between repetitions. Configuration experiments must be reported
+separately from default-browser measurements.
+
+An unmodified Firefox executable can also provide controls without attaching
+Playwright. This checks browser APIs only, using fresh headless profiles; it
+does not measure human behavior or token acceptance:
+
+```sh
+python3 bench/capture/native_browser_probe.py --browser /path/to/firefox \
+  --out bench/test-results/native-control
+```
+
+Summarize the separate observations with:
+
+```sh
+python3 bench/capture/summarize_observations.py \
+  bench/test-results/browser-measurement/report.json \
+  bench/test-results/native-control/report.json \
+  --out bench/test-results/observation-summary.json
+```
+
+The summary counts observations, not detected bots. Unsupported APIs, missing
+contexts, and timeouts are unknowns and are excluded from valid observation
+counts. Raw data and detailed conclusions remain in ignored research artifacts.

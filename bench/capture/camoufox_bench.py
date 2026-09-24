@@ -6,6 +6,7 @@ Automated Firefox is a control, never a human false-positive measurement.
 """
 
 import argparse
+import copy
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
@@ -37,9 +38,10 @@ name. Scroll down and back, then complete the check. Do not enter personal data.
 <p><a href="#footer">Read more</a></p><div id="captcha"></div>
 <button id="submit" hidden>Complete check</button><pre id="result"></pre>
 <div id="filler"></div><p id="footer">Return to the check above.</p>
-<script src="/fcaptcha.js"></script><script>
+__RESEARCH_SCRIPT__<script src="/fcaptcha.js"></script><script>
 const options = __OPTIONS__;
 FCaptcha.configure({serverUrl: location.origin});
+if (options.observations) window.startBrowserObservationCapture();
 function show(value) {
   document.querySelector('#result').textContent = JSON.stringify({
     success:value.success, score:value.score, reason:value.reason,
@@ -83,7 +85,7 @@ def request(url, body=None, headers=None):
 class CaptureServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, backend, mode):
+    def __init__(self, backend, mode, observations=False):
         super().__init__(('127.0.0.1', 0), CaptureHandler)
         self.backend = backend
         self.mode = mode
@@ -93,6 +95,10 @@ class CaptureServer(ThreadingHTTPServer):
         self.requests = []
         self.client_sha256 = None
         self.finished = threading.Event()
+        self.observations = None
+        self.observations_finished = threading.Event()
+        self.probe_source = (Path(__file__).with_name('consistency_probe.js').read_bytes()
+                             if observations else None)
 
 
 class CaptureHandler(BaseHTTPRequestHandler):
@@ -108,12 +114,32 @@ class CaptureHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == '/':
-            options = {'mode': self.server.mode, 'siteKey': self.server.site_key}
-            data = PAGE.replace('__OPTIONS__', json.dumps(options)).encode()
+            options = {'mode': self.server.mode, 'siteKey': self.server.site_key, 'observations': self.server.probe_source is not None}
+            script = '<script src="/__research/probe.js"></script>' if self.server.probe_source else ''
+            data = PAGE.replace('__OPTIONS__', json.dumps(options)).replace('__RESEARCH_SCRIPT__', script).encode()
             return self.respond(200, 'text/html; charset=utf-8', data)
+        if self.server.probe_source:
+            path = urllib.parse.urlsplit(self.path).path
+            if path == '/__research/probe.js':
+                return self.respond(200, 'application/javascript', self.server.probe_source)
+            if path == '/__research/frame':
+                return self.respond(200, 'text/html', b'<!doctype html><body><script src="/__research/probe.js"></script>')
         self.forward()
 
     def do_POST(self):
+        if self.path == '/__research/observations' and self.server.probe_source:
+            size = int(self.headers.get('Content-Length', '0'))
+            if size > 512_000:
+                return self.respond(413, 'text/plain', b'Too large')
+            try:
+                value = json.loads(self.rfile.read(size))
+            except (ValueError, UnicodeDecodeError):
+                return self.respond(400, 'text/plain', b'Invalid JSON')
+            if not isinstance(value, dict) or not self.server.finished.is_set():
+                return self.respond(400, 'text/plain', b'Expected observations after scoring')
+            self.server.observations = value
+            self.server.observations_finished.set()
+            return self.respond(200, 'application/json', b'{"saved":true}')
         self.forward()
 
     def forward(self):
@@ -159,8 +185,8 @@ class CaptureHandler(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def capture_server(backend, mode):
-    server = CaptureServer(backend, mode)
+def capture_server(backend, mode, observations=False):
+    server = CaptureServer(backend, mode, observations)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -241,11 +267,12 @@ def run_case(args, case, index):
               'seed': args.seed + index, 'normalization': 'none',
               'startedAt': datetime.now(timezone.utc).isoformat()}
     started = time.monotonic()
-    with capture_server(args.server, case['mode']) as (server, url):
+    with capture_server(args.server, case['mode'], args.observations) as (server, url):
         try:
             if case['browser'] == 'camoufox':
                 from camoufox.sync_api import Camoufox
-                manager = Camoufox(browser=args.browser_version, headless=case['headless'], humanize=case['humanize'])
+                manager = Camoufox(browser=args.browser_version, headless=case['headless'],
+                                   humanize=case['humanize'], config=copy.deepcopy(args.camoufox_config) or None)
             else:
                 from playwright.sync_api import sync_playwright
                 manager = sync_playwright()
@@ -254,6 +281,8 @@ def run_case(args, case, index):
                     browser = launched
                 else:
                     prefs = {'privacy.resistFingerprinting': True} if case['privacy'] else {}
+                    if case.get('reducedMotion'):
+                        prefs['ui.prefersReducedMotion'] = 1
                     browser = launched.firefox.launch(headless=case['headless'], firefox_user_prefs=prefs)
                 sample['browserVersion'] = browser.version
                 page = browser.new_page()
@@ -270,6 +299,12 @@ def run_case(args, case, index):
                     raise RuntimeError('No scoring request: ' + page.locator('#result').inner_text())
                 sample['capture'] = finish_capture(server, args.secret)
                 attach_verdict_log(sample, args.verdict_log)
+                if args.observations:
+                    deadline = time.monotonic() + 25
+                    while not server.observations_finished.is_set() and time.monotonic() < deadline:
+                        page.wait_for_timeout(100)
+                    sample['observations'] = server.observations or {'status': 'timeout'}
+                    sample['probeSha256'] = hashlib.sha256(server.probe_source).hexdigest()
                 browser.close()
         except Exception as error:
             sample['error'] = str(error)
@@ -288,6 +323,8 @@ def summarize(samples):
     groups = {}
     for sample in samples:
         key = '/'.join(str(sample[k]) for k in ('browser', 'headless', 'humanize', 'privacy', 'mode'))
+        if sample.get('reducedMotion'):
+            key += '/reduced-motion'
         group = groups.setdefault(key, {'attempts': 0, 'completed': 0, 'errors': 0, 'validTokens': 0,
                                         'experimentalWouldBlock': 0, 'additionalExperimentalBlocks': 0,
                                         'scores': [], 'detections': {}})
@@ -314,7 +351,7 @@ def manual_capture(args):
               'inputSource': 'operator-declared manual input', 'provenance': 'captured',
               'headless': False, 'humanize': False, 'privacy': 'operator-described',
               'mode': args.modes[0], 'normalization': 'none'}
-    with capture_server(args.server, args.modes[0]) as (server, url):
+    with capture_server(args.server, args.modes[0], args.observations) as (server, url):
         print(f'Open {url} in your own browser and complete the page. Waiting {args.timeout}s.', flush=True)
         if not server.finished.wait(args.timeout):
             sample['error'] = 'No manual submission received; human baseline remains unmeasured'
@@ -322,6 +359,10 @@ def manual_capture(args):
             try:
                 sample['capture'] = finish_capture(server, args.secret)
                 attach_verdict_log(sample, args.verdict_log)
+                if args.observations:
+                    server.observations_finished.wait(25)
+                    sample['observations'] = server.observations or {'status': 'timeout'}
+                    sample['probeSha256'] = hashlib.sha256(server.probe_source).hexdigest()
             except Exception as error:
                 sample['error'] = str(error)
     return sample
@@ -341,7 +382,14 @@ def main():
     parser.add_argument('--manual', action='store_true', help='Record one person using their own browser; launches no browser automation')
     parser.add_argument('--environment-label', help='Required with --manual, e.g. Firefox 153 default or Firefox 153 RFP')
     parser.add_argument('--verdict-log', type=Path, help='Local server verdict log; joins diagnostics missing from /api/score responses')
+    parser.add_argument('--observations', action='store_true', help='Collect research probes after scoring; never submitted to FCaptcha')
+    parser.add_argument('--control-settings', nargs='+', choices=['default', 'privacy', 'reduced-motion', 'privacy-reduced-motion'],
+                        default=['default', 'privacy'])
+    parser.add_argument('--camoufox-config', type=Path, help='Optional local JSON config for a labeled robustness experiment')
     args = parser.parse_args()
+    args.camoufox_config = json.loads(args.camoufox_config.read_text()) if args.camoufox_config else {}
+    if not isinstance(args.camoufox_config, dict):
+        parser.error('--camoufox-config must contain an object')
     args.server = args.server.rstrip('/')
     parsed = urllib.parse.urlsplit(args.server)
     if parsed.scheme != 'http' or parsed.hostname not in ('127.0.0.1', 'localhost', '::1'):
@@ -361,12 +409,13 @@ def main():
     cases = []
     for browser in args.browsers:
         for headless in ([False, True] if args.display == 'both' else [args.display == 'headless']):
-            for variant in [False, True]:
+            for variant in ([False, True] if browser == 'camoufox' else args.control_settings):
                 for mode in args.modes:
                     for repeat in range(args.repeats):
                         cases.append({'browser': browser, 'headless': headless, 'mode': mode, 'repeat': repeat,
                                       'humanize': variant if browser == 'camoufox' else False,
-                                      'privacy': variant if browser == 'firefox' else False})
+                                      'privacy': browser == 'firefox' and 'privacy' in variant,
+                                      'reducedMotion': browser == 'firefox' and 'reduced-motion' in variant})
     packages = {}
     for package in ['camoufox', 'playwright', 'browserforge']:
         try:
@@ -380,7 +429,8 @@ def main():
         'clientSha256': hashlib.sha256((ROOT/'client/fcaptcha.js').read_bytes()).hexdigest(),
         'recorderSha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'platform': platform.platform(), 'server': args.server,
-        'camoufoxBuild': args.browser_version,
+        'camoufoxBuild': args.browser_version, 'camoufoxConfig': args.camoufox_config,
+        'researchObservations': args.observations,
         'packages': packages,
         'limitations': ['All input is automated; no human false-positive rate is measured.',
                         'Loopback proxy isolates state per sample and removes transport fingerprinting.',

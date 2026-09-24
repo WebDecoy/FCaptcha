@@ -23,6 +23,33 @@ def sample():
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_observations_are_opt_in_and_separate_from_scoring(self):
+        with capture_server('', 'invisible', observations=True) as (server, url):
+            def submit():
+                req = urllib.request.Request(url + '__research/observations',
+                    data=b'{"revision":"test","main":{"value":42}}',
+                    headers={'Content-Type': 'application/json'})
+                return urllib.request.urlopen(req)
+
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                submit()
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+            self.assertFalse(server.observations_finished.is_set())
+            server.records.append({'request': {'signals': {'untouched': True}}})
+            before = copy.deepcopy(server.records)
+            server.finished.set()
+            with submit() as response:
+                self.assertEqual(response.status, 200)
+            self.assertEqual(server.records, before)
+            self.assertTrue(server.observations_finished.is_set())
+            self.assertEqual(server.observations['main']['value'], 42)
+        with capture_server('', 'invisible') as (_, url):
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(url + '__research/probe.js')
+            self.assertEqual(error.exception.code, 404)
+            error.exception.close()
+
     def test_proxy_preserves_signal_bytes_and_browser_headers(self):
         received = {}
 
