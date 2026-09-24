@@ -90,6 +90,8 @@ class CaptureServer(ThreadingHTTPServer):
         self.site_key = 'browser-bench-' + uuid.uuid4().hex
         self.client_ip = '2001:db8:' + ':'.join(uuid.uuid4().hex[i:i+4] for i in range(0, 24, 4))
         self.records = []
+        self.requests = []
+        self.client_sha256 = None
         self.finished = threading.Event()
 
 
@@ -141,6 +143,9 @@ class CaptureHandler(BaseHTTPRequestHandler):
                 payload = response.read()
                 status = response.status
                 content_type = response.headers.get('Content-Type', 'application/octet-stream')
+            self.server.requests.append({'method': self.command, 'path': path, 'status': status})
+            if path == '/fcaptcha.js':
+                self.server.client_sha256 = hashlib.sha256(payload).hexdigest()
             if path in ('/api/score', '/api/verify'):
                 self.server.records.append({
                     'endpoint': path, 'httpStatus': status,
@@ -201,6 +206,7 @@ def finish_capture(server, secret):
         record['tokenVerification'] = verification
         record['tokenValid'] = status == 200 and verification.get('valid') is True
     record['clientIp'] = server.client_ip
+    record['clientSha256'] = getattr(server, 'client_sha256', None)
     if record['httpStatus'] != 200:
         raise RuntimeError(f"Scoring HTTP {record['httpStatus']}")
     if result.get('experimental', {}).get('mode') != 'observe':
@@ -273,6 +279,7 @@ def run_case(args, case, index):
                     record['tokenIssued'] = record.get('tokenIssued', bool(record['response'].get('token')))
                     record['response'].pop('token', None)
                 sample['failedCaptures'] = server.records
+        sample['httpRequests'] = server.requests
     sample['durationSeconds'] = round(time.monotonic() - started, 3)
     return sample
 

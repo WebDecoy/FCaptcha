@@ -1,12 +1,15 @@
 import copy
 import json
 from pathlib import Path
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import tempfile
+import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import urllib.request
 
-from camoufox_bench import attach_verdict_log, finish_capture, summarize
+from camoufox_bench import attach_verdict_log, capture_server, finish_capture, summarize
 
 
 def sample():
@@ -20,6 +23,42 @@ def sample():
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_proxy_preserves_signal_bytes_and_browser_headers(self):
+        received = {}
+
+        class Backend(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_POST(self):
+                received['body'] = self.rfile.read(int(self.headers['Content-Length']))
+                received['language'] = self.headers['Accept-Language']
+                received['ip'] = self.headers['X-Forwarded-For']
+                payload = b'{"success":false,"score":0.6}'
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(payload)
+
+        backend = ThreadingHTTPServer(('127.0.0.1', 0), Backend)
+        thread = threading.Thread(target=backend.serve_forever, daemon=True)
+        thread.start()
+        raw = b'{ "signals": { "environmental": {"webdriver":false} }, "siteKey": "test" }'
+        try:
+            with capture_server(f'http://127.0.0.1:{backend.server_port}', 'invisible') as (server, url):
+                req = urllib.request.Request(url + 'api/score', data=raw,
+                    headers={'Content-Type': 'application/json', 'Accept-Language': 'en-US'})
+                with urllib.request.urlopen(req) as response:
+                    self.assertEqual(response.status, 200)
+                self.assertEqual(received['body'], raw)
+                self.assertEqual(received['language'], 'en-US')
+                self.assertEqual(received['ip'], server.client_ip)
+                self.assertEqual(server.records[0]['request']['signals'], json.loads(raw)['signals'])
+        finally:
+            backend.shutdown()
+            backend.server_close()
+            thread.join()
+
     def test_errors_are_not_counted_as_detection_outcomes(self):
         allowed = sample()
         blocked = copy.deepcopy(allowed)

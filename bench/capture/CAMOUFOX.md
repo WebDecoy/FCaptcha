@@ -39,12 +39,13 @@ and sustained-abuse detection from the measurement. The browser's actual
 signal body reaches the server unchanged. Issued tokens are validated and
 removed from saved responses; the secret never enters the page or report.
 
-Reports include browser/package versions, the client hash, source commit,
+Reports include browser/package versions, the served client hash, source commit,
 input seed, raw signals, and per-configuration results. Camoufox generates
 fingerprints per launch; the report records those observed signals, not a claim
 that future launches will have identical fingerprints. Fresh output directories
 prevent accidentally overwriting a previous report. Errors are counted separately
 from detection outcomes, and partial results are saved after every attempt.
+HTTP request status and page errors are retained to diagnose incomplete runs.
 Use `--verdict-log /path/to/server.log` with `FCAPTCHA_LOG_VERDICTS=true` on
 the server to join per-sample diagnostics: invisible responses do not include
 the full production detection list. Logs are joined by the unique sample site
