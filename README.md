@@ -243,8 +243,8 @@ release listeners, sensors, timers, and workers. Invisible sessions expose
     action: 'login'
   });
 
-  if (result.score < 0.5) {
-    // Likely human
+  if (result.success && result.token) {
+    // Send the token to your backend for server-side verification.
   }
 </script>
 ```
@@ -606,6 +606,7 @@ challenge:
 | A **valid proof of work** for a challenge this server issued, with the signals bound to it | `pow_not_satisfied` |
 | The minting origin is permitted, if `FCAPTCHA_ALLOWED_HOSTNAMES` is set | `hostname_not_allowed` |
 | Fewer than 10 verifications in the last minute from this page instance, device and address | `rate_limited` |
+| Experimental checks permit issuance, if `FCAPTCHA_EXPERIMENTAL_BLOCKING` is enabled | `experimental_detection` |
 
 The widget solves a proof of work on every path and aborts rather than submit
 without one, so a request that arrives without a valid solution did not come from
@@ -672,6 +673,34 @@ Get a score for invisible mode.
   "action": "login"
 }
 ```
+
+### Experimental observations
+
+Both `/api/verify` and `/api/score`, and the Node scoring library, include an
+`experimental` object alongside the production `score`. It is
+also included in verdict logs when `FCAPTCHA_LOG_VERDICTS` is enabled.
+
+Experimental checks **default to monitoring only** (`experimental.mode: "observe"`).
+To opt into blocking, set
+`FCAPTCHA_EXPERIMENTAL_BLOCKING=stealth-corroboration-v1` and restart the server. The name must match the shipped policy; unset, unknown, or retired names
+(including `true`) remain monitoring-only. Policy changes require
+a new name and an explicit opt-in after upgrading. The response then reports
+`experimental.mode: "block"`. When experimental checks deny an otherwise acceptable request, it returns `success: false`,
+`recommendation: "block"`, `reason: "experimental_detection"`, and no token.
+Existing proof, hostname, and rate-limit failures retain their own reasons.
+
+The top-level `score` remains the baseline score in both modes; experimental
+results do not alter rate limits or future challenge costs. Use `success` and
+server-side token verification for access decisions, since a low score alone
+does not guarantee acceptance. Experimental checks are unvalidated and enabling
+blocking may reject legitimate visitors using developer tools or anti-fingerprinting
+tools. Monitor your traffic before opting in.
+
+The Node library accepts `experimentalBlocking: "stealth-corroboration-v1"`
+or `false` in `createScoringEngine()` and `createMiddleware()` options. An explicit
+value overrides the environment setting; unknown or retired names select monitoring,
+and values other than a string or `false` are rejected. Omitting the option inherits
+the environment setting. Configure the same policy on every replica.
 
 ### POST /api/token/verify
 Verify a previously issued token (server-side).
@@ -800,6 +829,7 @@ Set `action` (and optionally `cdata`) when you request the token —
 | `FCAPTCHA_PPROF` | (Go) Enable the pprof debug server (`1`/`true`/`yes`/`on`) | off |
 | `FCAPTCHA_PPROF_ADDR` | (Go) Listen address for pprof when enabled — keep it loopback-only | `127.0.0.1:3001` |
 | `FCAPTCHA_LOG_VERDICTS` | Log one privacy-safe JSON line per `/api/verify` and `/api/score` (score, recommendation, category scores, and per-hit category/score/confidence). Omits IP, user agent, raw signals, and free-text detection reasons. For observability/tuning (`1`/`true`/`yes`/`on`) | off |
+| `FCAPTCHA_EXPERIMENTAL_BLOCKING` | Pin experimental blocking to `stealth-corroboration-v1`. Restart to apply. Unset, unknown, or retired names monitor only; may reject developer-tool or anti-fingerprinting users | off |
 | `FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW` | Also include the free-text detection `reason` in verdict logs. **Reasons can contain visitor-derived data** (reverse-DNS hostnames, UA/header fragments, form field ids) — only enable in trusted debugging contexts with no privacy obligations. Requires `FCAPTCHA_LOG_VERDICTS` | off |
 
 Go and Python HTTP access logs are off by default. Set `FCAPTCHA_LOG_ACCESS=1` to enable

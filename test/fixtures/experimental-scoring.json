@@ -1,0 +1,353 @@
+{
+  "provenance": "synthetic",
+  "notes": "Scoring fixtures, not browser captures or evidence about human false-positive rates. The issue-87 and DevTools cases deliberately show that this policy cannot distinguish them.",
+  "cases": [
+    {
+      "name": "issue-87-shape",
+      "signals": {
+        "environmental": {
+          "workerConsistency": {
+            "supported": true,
+            "consistent": false,
+            "mismatches": [
+              "hardwareConcurrency"
+            ],
+            "mismatchCount": 1
+          }
+        }
+      },
+      "detections": [
+        {
+          "category": "cdp",
+          "score": 0.8,
+          "confidence": 0.6
+        },
+        {
+          "category": "cdp",
+          "score": 0.6,
+          "confidence": 0.5,
+          "nonCorroborating": true
+        }
+      ],
+      "productionScore": 0.15,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.6,
+        "wouldBlock": true,
+        "detections": [
+          {
+            "id": "worker-hardware-concurrency-mismatch",
+            "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools"
+          }
+        ],
+        "corroboratingCategories": [
+          "cdp"
+        ]
+      }
+    },
+    {
+      "name": "devtools-override-with-one-behavioral-warning",
+      "signals": {
+        "environmental": {
+          "workerConsistency": {
+            "supported": true,
+            "consistent": false,
+            "mismatches": [
+              "hardwareConcurrency"
+            ],
+            "mismatchCount": 1
+          }
+        }
+      },
+      "detections": [
+        {
+          "category": "behavioral",
+          "score": 0.4,
+          "confidence": 1
+        },
+        {
+          "category": "cdp",
+          "score": 0.6,
+          "confidence": 0.5,
+          "nonCorroborating": true
+        }
+      ],
+      "productionScore": 0.15,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.6,
+        "wouldBlock": true,
+        "detections": [
+          {
+            "id": "worker-hardware-concurrency-mismatch",
+            "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools"
+          }
+        ],
+        "corroboratingCategories": [
+          "behavioral"
+        ]
+      }
+    },
+    {
+      "name": "mismatch-alone",
+      "signals": {
+        "environmental": {
+          "workerConsistency": {
+            "supported": true,
+            "consistent": false,
+            "mismatches": [
+              "hardwareConcurrency"
+            ],
+            "mismatchCount": 1
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.05,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.05,
+        "wouldBlock": false,
+        "detections": [
+          {
+            "id": "worker-hardware-concurrency-mismatch",
+            "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools"
+          }
+        ],
+        "corroboratingCategories": []
+      }
+    },
+    {
+      "name": "console-is-not-corroboration",
+      "signals": {
+        "environmental": {
+          "workerConsistency": {
+            "supported": true,
+            "consistent": false,
+            "mismatches": [
+              "hardwareConcurrency"
+            ],
+            "mismatchCount": 1
+          }
+        }
+      },
+      "detections": [
+        {
+          "category": "cdp",
+          "score": 0.6,
+          "confidence": 0.5,
+          "nonCorroborating": true
+        }
+      ],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [
+          {
+            "id": "worker-hardware-concurrency-mismatch",
+            "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools"
+          }
+        ],
+        "corroboratingCategories": []
+      }
+    },
+    {
+      "name": "no-worker-data",
+      "signals": {},
+      "detections": [
+        {
+          "category": "cdp",
+          "score": 0.8,
+          "confidence": 0.6
+        }
+      ],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [
+          "cdp"
+        ]
+      }
+    },
+    {
+      "name": "unsupported-worker",
+      "signals": {
+        "environmental": {
+          "workerConsistency": {
+            "supported": false,
+            "consistent": false,
+            "mismatches": [
+              "hardwareConcurrency"
+            ],
+            "mismatchCount": 1
+          }
+        }
+      },
+      "detections": [
+        {
+          "category": "cdp",
+          "score": 0.8,
+          "confidence": 0.6
+        }
+      ],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [
+          "cdp"
+        ]
+      }
+    },
+    {
+      "name": "incomplete-worker",
+      "signals": {
+        "environmental": {
+          "workerConsistency": {
+            "mismatches": [
+              "hardwareConcurrency"
+            ]
+          }
+        }
+      },
+      "detections": [
+        {
+          "category": "cdp",
+          "score": 0.8,
+          "confidence": 0.6
+        }
+      ],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [
+          "cdp"
+        ]
+      }
+    },
+    {
+      "name": "other-mismatch",
+      "signals": {
+        "environmental": {
+          "workerConsistency": {
+            "supported": true,
+            "consistent": false,
+            "mismatches": [
+              "languages"
+            ],
+            "mismatchCount": 1
+          }
+        }
+      },
+      "detections": [
+        {
+          "category": "cdp",
+          "score": 0.8,
+          "confidence": 0.6
+        }
+      ],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [
+          "cdp"
+        ]
+      }
+    },
+    {
+      "name": "weak-behavioral-warning",
+      "signals": {
+        "environmental": {
+          "workerConsistency": {
+            "supported": true,
+            "consistent": false,
+            "mismatches": [
+              "hardwareConcurrency"
+            ],
+            "mismatchCount": 1
+          }
+        }
+      },
+      "detections": [
+        {
+          "category": "behavioral",
+          "score": 0.399,
+          "confidence": 1
+        }
+      ],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [
+          {
+            "id": "worker-hardware-concurrency-mismatch",
+            "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools"
+          }
+        ],
+        "corroboratingCategories": []
+      }
+    },
+    {
+      "name": "existing-production-block",
+      "signals": {
+        "environmental": {
+          "workerConsistency": {
+            "supported": true,
+            "consistent": false,
+            "mismatches": [
+              "hardwareConcurrency"
+            ],
+            "mismatchCount": 1
+          }
+        }
+      },
+      "detections": [
+        {
+          "category": "cdp",
+          "score": 0.8,
+          "confidence": 0.6
+        }
+      ],
+      "productionScore": 0.9,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.9,
+        "wouldBlock": true,
+        "detections": [
+          {
+            "id": "worker-hardware-concurrency-mismatch",
+            "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools"
+          }
+        ],
+        "corroboratingCategories": [
+          "cdp"
+        ]
+      }
+    }
+  ]
+}

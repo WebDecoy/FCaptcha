@@ -1,5 +1,7 @@
 'use strict';
 
+const { EXPERIMENTAL_POLICY } = require('./experimental');
+
 const INSECURE_DEFAULT_SECRET = 'dev-secret-change-in-production';
 
 // The library constructs the secret more than once per process (the challenge
@@ -28,4 +30,12 @@ function signingSecret(explicit, env = process.env) {
   return signingSecretFromEnv(env);
 }
 
-module.exports = { INSECURE_DEFAULT_SECRET, signingSecret, signingSecretFromEnv };
+function experimentalBlockingEnabled(explicit, env = process.env) {
+  if (explicit !== undefined && explicit !== false && typeof explicit !== 'string') {
+    throw new TypeError('experimentalBlocking must be a policy name or false');
+  }
+  const policy = explicit === undefined ? env.FCAPTCHA_EXPERIMENTAL_BLOCKING : explicit;
+  return typeof policy === 'string' && policy.trim() === EXPERIMENTAL_POLICY;
+}
+
+module.exports = { INSECURE_DEFAULT_SECRET, signingSecret, signingSecretFromEnv, experimentalBlockingEnabled };

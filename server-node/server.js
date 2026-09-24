@@ -12,7 +12,7 @@ const detection = require('./detection');
 const webbotauth = require('./webbotauth');
 const { ProxyTrust, networkIdentity } = require('./clientip');
 const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
-const { signingSecretFromEnv } = require('./config');
+const { signingSecretFromEnv, experimentalBlockingEnabled } = require('./config');
 const { AdmissionLimiter, ChallengeMap } = require('./admission');
 const { ipBinding } = require('./ip-binding');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
@@ -43,6 +43,7 @@ app.use(express.json({ limit: MAX_REQUEST_BODY_BYTES }));
 app.use(express.urlencoded({ extended: false, limit: MAX_REQUEST_BODY_BYTES }));
 
 const SECRET_KEY = signingSecretFromEnv();
+const EXPERIMENTAL_BLOCKING_ENABLED = experimentalBlockingEnabled();
 const REDIS_URL = process.env.REDIS_URL || '';
 const SHARED_STATE = REDIS_URL ? new RedisState(REDIS_URL) : null;
 
@@ -144,6 +145,7 @@ function logVerdict(endpoint, siteKey, result) {
     siteKey,
     success: result.success,
     score: result.score,
+    experimental: result.experimental,
     recommendation: result.recommendation,
     categoryScores: result.categoryScores,
     detections: (result.detections || []).map((d) => {
@@ -375,6 +377,7 @@ const {
   applyCorroborationFloor,
   widgetInstance, deviceRateKey, deviceRateDetection, DEVICE_VERIFICATIONS_PER_MINUTE
 } = require('./engine');
+const { evaluateExperimental } = require('./experimental');
 
 // Stateful detectors stay here: they read the module-level stores below.
 async function detectFingerprint(signals, ip, siteKey) {
@@ -748,8 +751,11 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
     detections
   );
 
+  const experimental = evaluateExperimental(signals, finalScore, detections, EXPERIMENTAL_BLOCKING_ENABLED);
+  const experimentalBlocked = EXPERIMENTAL_BLOCKING_ENABLED && experimental.wouldBlock && finalScore < 0.5;
   let recommendation;
-  if (finalScore < 0.3) recommendation = 'allow';
+  if (experimentalBlocked) recommendation = 'block';
+  else if (finalScore < 0.3) recommendation = 'allow';
   else if (finalScore < 0.6) recommendation = 'challenge';
   else recommendation = 'block';
 
@@ -764,14 +770,14 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
   // its own reason rather than smuggled in as a bot verdict.
   const hostnameAllowed = ALLOWED_HOSTNAMES.permits(hostname);
 
-  // Three independent conditions, deliberately not folded into the score.
+  // Independent gates, deliberately not folded into the baseline score.
   //
   // powSatisfied is the one that matters most: a score threshold answers "how
   // suspicious is this visitor", which is the wrong question to ask of someone
   // who never completed the challenge. Gating here means no future reweighting
   // can reopen the bypass, and it holds even if the dispositive floor is
   // lowered or removed.
-  const success = finalScore < 0.5 && hostnameAllowed && powSatisfied && !deviceRateExceeded;
+  const success = finalScore < 0.5 && hostnameAllowed && powSatisfied && !deviceRateExceeded && !experimentalBlocked;
 
   // Name the failed precondition whenever one fails, not only when the score
   // would otherwise have allowed. Gating it on the score made the PoW case
@@ -783,6 +789,7 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
   if (deviceRateExceeded) withheldReason = 'rate_limited';
   else if (!powSatisfied) withheldReason = 'pow_not_satisfied';
   else if (!hostnameAllowed) withheldReason = 'hostname_not_allowed';
+  else if (experimentalBlocked) withheldReason = 'experimental_detection';
 
   const token = success
     ? generateToken(ip, siteKey, finalScore, {
@@ -799,6 +806,7 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
   return {
     success,
     score: finalScore,
+    experimental,
     token,
     timestamp: Math.floor(Date.now() / 1000),
     recommendation,
@@ -907,6 +915,7 @@ app.post('/api/score', validateScoringRequest, asyncRoute(async (req, res) => {
   res.json({
     success: result.success,
     score: result.score,
+    experimental: result.experimental,
     token: result.token,
     // Echo the sanitized form, not the raw input: this is what got signed into
     // the token, so a caller comparing the two sees the same value.

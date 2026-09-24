@@ -179,6 +179,7 @@ func logVerdict(endpoint, siteKey string, result *VerificationResult) {
 		"siteKey":        siteKey,
 		"success":        result.Success,
 		"score":          result.Score,
+		"experimental":   result.Experimental,
 		"recommendation": result.Recommendation,
 		"categoryScores": result.CategoryScores,
 		"detections":     detections,
@@ -461,6 +462,7 @@ type VerifyRequest struct {
 type VerifyResponse struct {
 	Success        bool               `json:"success"`
 	Score          float64            `json:"score"`
+	Experimental   ExperimentalResult `json:"experimental"`
 	Token          string             `json:"token,omitempty"`
 	Timestamp      int64              `json:"timestamp"`
 	Recommendation string             `json:"recommendation"`
@@ -582,6 +584,7 @@ func verifyHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGu
 		resp := VerifyResponse{
 			Success:        result.Success,
 			Score:          result.Score,
+			Experimental:   result.Experimental,
 			Token:          result.Token,
 			Timestamp:      result.Timestamp,
 			Recommendation: result.Recommendation,
@@ -661,9 +664,10 @@ func invisibleScoreHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *S
 		logVerdict("score", req.SiteKey, result)
 
 		resp := map[string]interface{}{
-			"success": result.Success,
-			"score":   result.Score,
-			"token":   result.Token,
+			"success":      result.Success,
+			"score":        result.Score,
+			"experimental": result.Experimental,
+			"token":        result.Token,
 			// Echo the sanitized form, not the raw input: this is what got
 			// signed into the token, so a caller comparing the two sees the
 			// same value.

@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const detection = require('./detection');
 const { ProxyTrust, networkIdentity } = require('./clientip');
 const { SuspicionLedger, computeChallengeCost, BASE_MIN_AGE_MS } = require('./suspicion');
-const { signingSecret } = require('./config');
+const { signingSecret, experimentalBlockingEnabled } = require('./config');
 const { AdmissionLimiter, ChallengeMap } = require('./admission');
 const { ipBinding } = require('./ip-binding');
 const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
@@ -194,9 +194,11 @@ const {
   widgetInstance, deviceRateKey, deviceRateDetection, DEVICE_VERIFICATIONS_PER_MINUTE
 } = require('./engine');
 const { detectInputForensics } = require('./inputforensics');
+const { evaluateExperimental } = require('./experimental');
 
 class ScoringEngine {
   constructor(options = {}) {
+    this.experimentalBlocking = experimentalBlockingEnabled(options.experimentalBlocking);
     this.secret = signingSecret(options.secret);
     this.powStore = options.powStore || new PoWChallengeStore({ secret: this.secret });
     this.rateLimiter = options.rateLimiter || new RateLimiter();
@@ -364,8 +366,11 @@ class ScoringEngine {
       detections
     );
 
+    const experimental = evaluateExperimental(signals, finalScore, detections, this.experimentalBlocking);
+    const experimentalBlocked = this.experimentalBlocking && experimental.wouldBlock && finalScore < 0.5;
     let recommendation;
-    if (finalScore < 0.3) recommendation = 'allow';
+    if (experimentalBlocked) recommendation = 'block';
+    else if (finalScore < 0.3) recommendation = 'allow';
     else if (finalScore < 0.6) recommendation = 'challenge';
     else recommendation = 'block';
 
@@ -374,7 +379,7 @@ class ScoringEngine {
     // dilute it below the allow threshold and used to mint a token for an empty
     // request. Keep this gate independent of scoring so weight changes cannot
     // reopen the bypass.
-    const success = finalScore < 0.5 && powSatisfied && !deviceRateExceeded;
+    const success = finalScore < 0.5 && powSatisfied && !deviceRateExceeded && !experimentalBlocked;
     const token = success ? this._generateToken(ip, siteKey, finalScore) : null;
 
     // Feed the ledger so the next challenge this source asks for is priced on
@@ -384,12 +389,14 @@ class ScoringEngine {
     return {
       success,
       score: finalScore,
+      experimental,
       token,
       timestamp: Math.floor(Date.now() / 1000),
       recommendation,
       categoryScores,
       detections,
-      ...(deviceRateExceeded ? { reason: 'rate_limited' } : !powSatisfied ? { reason: 'pow_not_satisfied' } : {})
+      ...(deviceRateExceeded ? { reason: 'rate_limited' } : !powSatisfied ? { reason: 'pow_not_satisfied' }
+        : experimentalBlocked ? { reason: 'experimental_detection' } : {})
     };
   }
 
