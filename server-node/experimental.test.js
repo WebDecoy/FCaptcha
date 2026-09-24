@@ -27,7 +27,7 @@ test('experimental blocking requires the current policy and library options over
     assert.equal(experimentalBlockingEnabled(name, {}), true);
   }
   for (const name of ['', '0', 'false', 'no', 'off', 'garbage', '1', 'true', 'yes', 'on', ' TRUE ',
-    'stealth-corroboration-v0', 'stealth-corroboration-v2', 'STEALTH-CORROBORATION-V1', '*', `${policy},other`]) {
+    'stealth-corroboration-v0', 'stealth-corroboration-v2', 'animation-consistency-v1', 'STEALTH-CORROBORATION-V1', '*', `${policy},other`]) {
     assert.equal(experimentalBlockingEnabled(undefined, { FCAPTCHA_EXPERIMENTAL_BLOCKING: name }), false);
     assert.equal(experimentalBlockingEnabled(name, enabledEnv), false);
   }
@@ -52,7 +52,8 @@ test('experimental blocking requires the current policy and library options over
 });
 
 for (const blocking of [false, true]) {
-  test(`experimental blocking=${blocking}: gate follows config; score and challenge cost stay unchanged`, () => {
+ for (const animationOnly of [false, true]) {
+  test(`experimental blocking=${blocking}, animationOnly=${animationOnly}: gate follows config; score and challenge cost stay unchanged`, () => {
     const engine = createScoringEngine({ secret: 'experimental-test-secret-0123456789abcdef0123456789', experimentalBlocking: blocking ? 'stealth-corroboration-v1' : false });
     const ip = '203.0.113.87';
     const site = 'experimental';
@@ -62,7 +63,8 @@ for (const blocking of [false, true]) {
       behavioral: { totalPoints: 60, trajectoryLength: 400, approachPoints: 12,
         approachDirectness: 0.4, microTremorScore: 0.5, velocityVariance: 0.5,
         interactionDuration: 4200, inputForensics: { coalescedSamples: 30, coalescedMax: 1 } },
-      environmental: fixtures.cases[0].signals.environmental,
+      environmental: animationOnly ? fixtures.cases.find((c) => c.name === 'animation-observed').signals.environmental
+        : fixtures.cases[0].signals.environmental,
       experimental: { mode: blocking ? 'observe' : 'block', wouldBlock: !blocking },
       meta: { challengeNonce: challenge.nonce },
     };
@@ -75,12 +77,14 @@ for (const blocking of [false, true]) {
     const result = engine.verify(signals, ip, site, 'Mozilla/5.0', {
       accept: 'text/html', 'accept-language': 'en-US', 'accept-encoding': 'gzip', connection: 'keep-alive',
     }, { challengeId: challenge.id, nonce, hash: hash(), signalsHash }, raw);
-    assert.equal(result.experimental.wouldBlock, true);
-    assert.equal(result.experimental.score, 0.6);
+    assert.equal(result.experimental.wouldBlock, !animationOnly);
+    assert.equal(result.experimental.score, animationOnly ? result.score : 0.6);
+    assert.equal(result.experimental.observations['animation-consistency-v1'].mode, 'observe');
+    assert.equal(result.experimental.observations['animation-consistency-v1'].status, animationOnly ? 'detected' : 'unknown');
     assert.equal(result.experimental.mode, blocking ? 'block' : 'observe');
     assert.ok(result.score < 0.5);
-    assert.equal(result.success, !blocking);
-    if (blocking) {
+    assert.equal(result.success, !(blocking && !animationOnly));
+    if (blocking && !animationOnly) {
       assert.equal(result.token, null);
       assert.equal(result.reason, 'experimental_detection');
       assert.equal(result.recommendation, 'block');
@@ -97,4 +101,5 @@ for (const blocking of [false, true]) {
     assert.equal(next.difficulty, 4);
     assert.ok(result.detections.every((d) => !d.id), 'experimental evidence leaked into production detections');
   });
+ }
 }

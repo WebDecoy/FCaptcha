@@ -680,6 +680,14 @@ Both `/api/verify` and `/api/score`, and the Node scoring library, include an
 `experimental` object alongside the production `score`. It is
 also included in verdict logs when `FCAPTCHA_LOG_VERDICTS` is enabled.
 
+`experimental.observations` contains additional versioned browser-consistency
+checks. Each reports its own `mode`, `status` (`detected`, `clear`, or `unknown`),
+and fixed detection identifiers. These observations are monitoring-only, even
+when the policy below is configured to block. They do not change either score,
+`wouldBlock`, token issuance, or challenge costs. Missing or unsupported probes
+report `unknown`; a detection is not proof of automation. Do not use these
+observations for access decisions.
+
 Experimental checks **default to monitoring only** (`experimental.mode: "observe"`).
 To opt into blocking, set
 `FCAPTCHA_EXPERIMENTAL_BLOCKING=stealth-corroboration-v1` and restart the server. The name must match the shipped policy; unset, unknown, or retired names

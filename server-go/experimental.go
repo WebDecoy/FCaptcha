@@ -18,12 +18,80 @@ func experimentalBlockingEnabled() bool {
 // token. It never updates suspicion or rate limits. Its strings are fixed diagnostics,
 // safe to include in verdict logs without raw visitor data.
 type ExperimentalResult struct {
-	Mode                    string                  `json:"mode"`
-	Policy                  string                  `json:"policy"`
-	Score                   float64                 `json:"score"`
-	WouldBlock              bool                    `json:"wouldBlock"`
-	Detections              []ExperimentalDetection `json:"detections"`
-	CorroboratingCategories []string                `json:"corroboratingCategories"`
+	Mode                    string                             `json:"mode"`
+	Policy                  string                             `json:"policy"`
+	Score                   float64                            `json:"score"`
+	WouldBlock              bool                               `json:"wouldBlock"`
+	Detections              []ExperimentalDetection            `json:"detections"`
+	CorroboratingCategories []string                           `json:"corroboratingCategories"`
+	Observations            map[string]ExperimentalObservation `json:"observations"`
+}
+
+type ExperimentalObservation struct {
+	Mode       string                  `json:"mode"`
+	Status     string                  `json:"status"`
+	Detections []ExperimentalDetection `json:"detections"`
+}
+
+func animationRealm(value interface{}) (bool, bool) {
+	realm, ok := value.(map[string]interface{})
+	if !ok || realm["status"] != "ok" {
+		return false, false
+	}
+	specified, ok := realm["specified"].([]interface{})
+	if !ok || len(specified) != 3 {
+		return false, false
+	}
+	for _, raw := range specified {
+		if n, ok := raw.(float64); !ok || n != 1000 {
+			return false, false
+		}
+	}
+	durations, ok := realm["durations"].([]interface{})
+	if !ok || len(durations) != 3 {
+		return false, false
+	}
+	match := true
+	for i, raw := range durations {
+		row, ok := raw.([]interface{})
+		if !ok || len(row) != 4 {
+			return false, false
+		}
+		want := float64(0)
+		if i == 2 {
+			want = 1000
+		}
+		for _, raw := range row {
+			n, ok := raw.(float64)
+			if !ok || math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 1e9 {
+				return false, false
+			}
+			match = match && n == want
+		}
+	}
+	return match, true
+}
+
+func animationObservation(signals map[string]interface{}) ExperimentalObservation {
+	result := ExperimentalObservation{Mode: "observe", Status: "unknown", Detections: []ExperimentalDetection{}}
+	probe := getMap(getMap(signals, "environmental"), "animationConsistency")
+	if version, ok := probe["version"].(float64); !ok || version != 1 {
+		return result
+	}
+	main, mainOK := animationRealm(probe["main"])
+	frame, frameOK := animationRealm(probe["iframe"])
+	if !mainOK || !frameOK {
+		return result
+	}
+	result.Status = "clear"
+	if main && frame {
+		result.Status = "detected"
+		result.Detections = append(result.Detections, ExperimentalDetection{
+			ID:     "animation-timing-inconsistency",
+			Reason: "Browser API timing inconsistency; experimental observation, not proof of automation",
+		})
+	}
+	return result
 }
 
 type ExperimentalDetection struct {
@@ -38,6 +106,7 @@ func evaluateExperimental(signals map[string]interface{}, productionScore float6
 	result := ExperimentalResult{
 		Mode: "observe", Policy: experimentalPolicy, Score: productionScore,
 		Detections: []ExperimentalDetection{}, CorroboratingCategories: []string{},
+		Observations: map[string]ExperimentalObservation{"animation-consistency-v1": animationObservation(signals)},
 	}
 	if blocking {
 		result.Mode = "block"

@@ -12,6 +12,8 @@ const { buildVerifyBody } = require('../bench/lib/pow');
 
 const SERVER = process.argv[2] || 'http://localhost:3000';
 const EXPERIMENTAL_BLOCKING = process.argv.includes('--experimental-blocking');
+const animationProbe = require('./fixtures/experimental-scoring.json').cases
+  .find((c) => c.name === 'animation-observed').signals.environmental.animationConsistency;
 const SECRET = process.env.FCAPTCHA_VERIFY_SECRET || process.env.FCAPTCHA_SECRET;
 if (!SECRET) throw new Error('FCAPTCHA_SECRET is required for conformance tests');
 
@@ -178,15 +180,15 @@ async function run() {
   // Only server configuration may enable the gate. Challenge cost and the
   // baseline score stay independent in either mode.
   for (const endpoint of ['verify', 'score']) {
-    for (const [index, scenario] of ['stealth-shaped', 'devtools-warning', 'clean'].entries()) {
-      const candidate = scenario !== 'clean';
+    for (const [index, scenario] of ['stealth-shaped', 'devtools-warning', 'clean', 'animation-only'].entries()) {
+      const candidate = scenario === 'stealth-shaped' || scenario === 'devtools-warning';
       const blocked = EXPERIMENTAL_BLOCKING && candidate;
       const siteKey = `experimental-${endpoint}-${scenario}`;
       const headers = {
         'User-Agent': 'Mozilla/5.0 Chrome/120.0.0.0',
         'Accept-Language': 'en-US', 'Accept-Encoding': 'gzip',
         Origin: 'https://example.test',
-        'X-Real-IP': `203.0.113.${80 + (endpoint === 'score' ? 3 : 0) + index}`,
+        'X-Real-IP': `203.0.113.${80 + (endpoint === 'score' ? 4 : 0) + index}`,
       };
       const signals = {
         behavioral: {
@@ -198,6 +200,7 @@ async function run() {
             : scenario === 'devtools-warning' ? { microTremorScore: 0.1 } : {}),
         },
         environmental: {
+          ...(scenario === 'animation-only' ? { animationConsistency: animationProbe } : {}),
           workerConsistency: { supported: true, consistent: !candidate,
             mismatches: candidate ? ['hardwareConcurrency'] : [], mismatchCount: candidate ? 1 : 0 },
           cdpRuntime: { consoleAttached: true },
@@ -215,6 +218,11 @@ async function run() {
       assert.strictEqual(result.experimental.wouldBlock, candidate);
       assert.deepStrictEqual(result.experimental.detections.map((d) => d.id), candidate ? ['worker-hardware-concurrency-mismatch'] : []);
       assert.deepStrictEqual(result.experimental.corroboratingCategories, candidate ? [scenario === 'stealth-shaped' ? 'cdp' : 'vision_ai'] : []);
+      const observation = result.experimental.observations['animation-consistency-v1'];
+      assert.strictEqual(observation.mode, 'observe');
+      assert.strictEqual(observation.status, scenario === 'animation-only' ? 'detected' : 'unknown');
+      assert.deepStrictEqual(observation.detections.map((d) => d.id),
+        scenario === 'animation-only' ? ['animation-timing-inconsistency'] : []);
       assert.ok(result.score < 0.5, response.text);
       assert.strictEqual(result.success, !blocked, response.text);
       if (blocked) {

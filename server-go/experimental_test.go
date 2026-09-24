@@ -48,7 +48,7 @@ func TestExperimentalSharedFixtures(t *testing.T) {
 func TestExperimentalBlockingConfig(t *testing.T) {
 	for _, flag := range []string{"", "0", "false", "no", "off", "garbage", "1", "true", "yes", "on", " TRUE ",
 		"stealth-corroboration-v1", " stealth-corroboration-v1 ", "stealth-corroboration-v0",
-		"stealth-corroboration-v2", "STEALTH-CORROBORATION-V1", "*", "stealth-corroboration-v1,other"} {
+		"stealth-corroboration-v2", "animation-consistency-v1", "STEALTH-CORROBORATION-V1", "*", "stealth-corroboration-v1,other"} {
 		t.Run(flag, func(t *testing.T) {
 			t.Setenv("FCAPTCHA_EXPERIMENTAL_BLOCKING", flag)
 			want := flag == "stealth-corroboration-v1" || flag == " stealth-corroboration-v1 "

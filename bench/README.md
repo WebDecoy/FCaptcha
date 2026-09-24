@@ -2,6 +2,10 @@
 
 A labeled corpus, a replayer, and per-signal false-positive accounting.
 
+For separate browser measurements with Camoufox, automated Firefox controls,
+and manual browser sessions, see [the browser recorder](capture/CAMOUFOX.md).
+Those research outputs are kept outside the committed human corpus.
+
 FCaptcha has always made claims about false positives — that keyboard-only users
 are exempt, that privacy extensions are safe, that touch users are not treated as
 bots — and until this existed, none of them were measured. This is the apparatus

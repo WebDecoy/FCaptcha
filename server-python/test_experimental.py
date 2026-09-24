@@ -25,7 +25,7 @@ class ExperimentalTests(unittest.TestCase):
             self.assertFalse(_experimental_blocking_enabled())
         for flag in ("", "0", "false", "no", "off", "garbage", "1", "true", "yes", "on", " TRUE ",
                      "stealth-corroboration-v1", " stealth-corroboration-v1 ", "stealth-corroboration-v0",
-                     "stealth-corroboration-v2", "STEALTH-CORROBORATION-V1", "*", "stealth-corroboration-v1,other"):
+                     "stealth-corroboration-v2", "animation-consistency-v1", "STEALTH-CORROBORATION-V1", "*", "stealth-corroboration-v1,other"):
             with self.subTest(flag), patch.dict(os.environ, {"FCAPTCHA_EXPERIMENTAL_BLOCKING": flag}):
                 self.assertEqual(_experimental_blocking_enabled(), flag in ("stealth-corroboration-v1", " stealth-corroboration-v1 "))
 

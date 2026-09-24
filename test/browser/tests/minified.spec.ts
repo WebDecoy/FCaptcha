@@ -108,6 +108,7 @@ test.describe('minified bundle', () => {
     expect(present, 'no fingerprints collected — the comparison proves nothing').toBeGreaterThan(0);
 
     expect(b).toEqual(a);
+    expect(fromMin.environmental.animationConsistency).toEqual(fromSource.environmental.animationConsistency);
   });
 
   test('collects the same signal shape as the source', async ({ page }) => {

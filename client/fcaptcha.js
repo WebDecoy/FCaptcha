@@ -1474,7 +1474,57 @@
         cssMediaQueries: this._getCSSMediaQueries(),
         permissionsInfo: this._getPermissionsInfo(),
         fontsInfo: this._getFontsInfo(),
+        animationConsistency: this._checkAnimationConsistency(),
       };
+    }
+
+    // Experimental only. Keep the compact measurements separate from every
+    // production detector. A supported Camoufox configuration removes this
+    // finite/infinite timing contradiction; it is not a browser identity.
+    _checkAnimationConsistency() {
+      const measure = (doc) => {
+        let element;
+        try {
+          if (!doc?.body || typeof doc.defaultView?.Element?.prototype.animate !== 'function') {
+            return { status: 'unsupported' };
+          }
+          element = doc.createElement('div');
+          element.style.cssText = 'position:fixed;left:-10000px;visibility:hidden;pointer-events:none';
+          doc.body.append(element);
+          const specified = [];
+          const durations = [];
+          for (const iterations of [1, 3, Infinity]) {
+            const animation = element.animate([{ opacity: 0.2 }, { opacity: 0.8 }], {
+              duration: 1000, iterations, fill: 'both', easing: 'linear',
+            });
+            try {
+              animation.pause();
+              specified.push(animation.effect.getTiming().duration);
+              durations.push([0, 250, 500, 750].map((time) => {
+                animation.currentTime = time;
+                return animation.effect.getComputedTiming().duration;
+              }));
+            } finally { animation.cancel(); }
+          }
+          return { status: 'ok', specified, durations };
+        } catch { return { status: 'error' }; }
+        finally { element?.remove(); }
+      };
+      const result = { version: 1, main: measure(document), iframe: { status: 'unsupported' } };
+      let frame;
+      try {
+        if (!document.body) return result;
+        frame = document.createElement('iframe');
+        frame.setAttribute('aria-hidden', 'true');
+        frame.tabIndex = -1;
+        frame.style.cssText = 'position:fixed;left:-10000px;width:1px;height:1px;visibility:hidden;pointer-events:none';
+        // The initial same-origin about:blank document needs no script, URL,
+        // network request, or load-event wait. Unavailable contexts are neutral.
+        document.body.append(frame);
+        result.iframe = measure(frame.contentDocument);
+      } catch { result.iframe = { status: 'error' }; }
+      finally { frame?.remove(); }
+      return result;
     }
 
     // Async detections collected separately

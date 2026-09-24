@@ -1713,6 +1713,34 @@ def apply_corroboration_floor(score: float, detections: List[Detection]) -> floa
     return score
 
 
+def animation_observation(signals: Dict) -> Dict:
+    env = signals.get("environmental")
+    probe = env.get("animationConsistency") if isinstance(env, dict) else None
+
+    def realm(value):
+        if not isinstance(value, dict) or value.get("status") != "ok":
+            return None
+        specified, durations = value.get("specified"), value.get("durations")
+        if (not isinstance(specified, list) or len(specified) != 3
+                or any(type(n) not in (int, float) or n != 1000 for n in specified)
+                or not isinstance(durations, list) or len(durations) != 3
+                or any(not isinstance(row, list) or len(row) != 4
+                       or any(type(n) not in (int, float) or not 0 <= n <= 1e9 for n in row)
+                       for row in durations)):
+            return None
+        return all(all(n == (1000 if i == 2 else 0) for n in row) for i, row in enumerate(durations))
+
+    valid = isinstance(probe, dict) and type(probe.get("version")) in (int, float) and probe["version"] == 1
+    main = realm(probe.get("main")) if valid else None
+    frame = realm(probe.get("iframe")) if valid else None
+    status = "unknown" if main is None or frame is None else "detected" if main and frame else "clear"
+    # This observation has no enforcement selector and cannot alter the old policy.
+    return {"mode": "observe", "status": status, "detections": [{
+        "id": "animation-timing-inconsistency",
+        "reason": "Browser API timing inconsistency; experimental observation, not proof of automation",
+    }] if status == "detected" else []}
+
+
 def evaluate_experimental(signals: Dict, production_score: float, detections: List[Detection], blocking: bool = False) -> Dict:
     """Observe by default: #87's stealth session and a DevTools override can look
     identical. Never merge this evidence into production scoring or state.
@@ -1740,6 +1768,7 @@ def evaluate_experimental(signals: Dict, production_score: float, detections: Li
             "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools",
         }] if mismatch else [],
         "corroboratingCategories": categories,
+        "observations": {"animation-consistency-v1": animation_observation(signals)},
     }
 
 
