@@ -13,6 +13,19 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.39.1] — 2026-09-23
+
+### Dependencies
+- Merge the grouped maintenance updates for containers, Python, and Go
+  (#84–#86).
+- Refresh the pinned Go 1.27.1 Alpine and Node 26 Alpine container base
+  digests.
+- Raise the Python `uvicorn` floor to 0.53.0; the hash lock already pins it.
+- Update the Go Redis client to go-redis 9.22.0 and the test-only miniredis to
+  2.39.0.
+
+Token format, detection, and verification behavior are unchanged from 1.39.0.
+
 ## [1.39.0] — 2026-09-14
 
 ### Dependencies and compatibility
