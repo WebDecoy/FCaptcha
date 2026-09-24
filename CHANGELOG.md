@@ -13,6 +13,15 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [Unreleased]
+
+### Detection
+- Add monitoring-only browser-consistency observations under
+  `experimental.observations` in scoring responses and verdict logs across all
+  three servers. Existing experimental blocking selectors do not enable these
+  observations. Missing or unsupported probes are reported as unknown; baseline
+  scores, tokens, and challenge costs are unchanged.
+
 ## [1.40.0] — 2026-09-24
 
 ### Detection

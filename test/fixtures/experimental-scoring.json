@@ -43,7 +43,14 @@
         ],
         "corroboratingCategories": [
           "cdp"
-        ]
+        ],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     },
     {
@@ -87,7 +94,14 @@
         ],
         "corroboratingCategories": [
           "behavioral"
-        ]
+        ],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     },
     {
@@ -117,7 +131,14 @@
             "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools"
           }
         ],
-        "corroboratingCategories": []
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     },
     {
@@ -154,7 +175,14 @@
             "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools"
           }
         ],
-        "corroboratingCategories": []
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     },
     {
@@ -176,7 +204,14 @@
         "detections": [],
         "corroboratingCategories": [
           "cdp"
-        ]
+        ],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     },
     {
@@ -209,7 +244,14 @@
         "detections": [],
         "corroboratingCategories": [
           "cdp"
-        ]
+        ],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     },
     {
@@ -239,7 +281,14 @@
         "detections": [],
         "corroboratingCategories": [
           "cdp"
-        ]
+        ],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     },
     {
@@ -272,7 +321,14 @@
         "detections": [],
         "corroboratingCategories": [
           "cdp"
-        ]
+        ],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     },
     {
@@ -308,7 +364,14 @@
             "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools"
           }
         ],
-        "corroboratingCategories": []
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     },
     {
@@ -346,7 +409,1870 @@
         ],
         "corroboratingCategories": [
           "cdp"
-        ]
+        ],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-observed",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "detected",
+            "detections": [
+              {
+                "id": "animation-timing-inconsistency",
+                "reason": "Browser API timing inconsistency; experimental observation, not proof of automation"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-normal",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "clear",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-one-realm-only",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "clear",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-unsupported",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "unsupported"
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-failed",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "error"
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-missing-context",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-wrong-version",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 2,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-boolean-version",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": true,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-string-version",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": "1",
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-altered-request",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                0,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-boolean-duration",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  false,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-string-duration",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  "0",
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-null-duration",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  null,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-negative-duration",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  -1,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-short-samples",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-extra-samples",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-wrong-realm-type",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": [],
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-missing-durations",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-infinite-also-zero",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "clear",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-null",
+      "signals": {
+        "environmental": {
+          "animationConsistency": null
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-array",
+      "signals": {
+        "environmental": {
+          "animationConsistency": []
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-boolean",
+      "signals": {
+        "environmental": {
+          "animationConsistency": true
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-string",
+      "signals": {
+        "environmental": {
+          "animationConsistency": "detected"
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "animation-oversized-duration",
+      "signals": {
+        "environmental": {
+          "animationConsistency": {
+            "version": 1,
+            "main": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  1e+100,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            },
+            "iframe": {
+              "status": "ok",
+              "specified": [
+                1000,
+                1000,
+                1000
+              ],
+              "durations": [
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                [
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ]
+              ]
+            }
+          }
+        },
+        "experimental": {
+          "mode": "block",
+          "observations": {
+            "animation-consistency-v1": {
+              "mode": "block",
+              "status": "detected"
+            }
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.0732,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.0732,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
       }
     }
   ]
