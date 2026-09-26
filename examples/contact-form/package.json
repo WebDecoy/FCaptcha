@@ -1,0 +1,7 @@
+{
+  "name": "fcaptcha-contact-form-example",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node start.mjs", "test": "node --test test.mjs" }
+}

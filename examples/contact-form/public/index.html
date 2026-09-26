@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FCaptcha · Contact form example</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <main>
+    <header><a href="https://github.com/WebDecoy/FCaptcha">FCaptcha / OSS example</a><button id="language" type="button">English</button></header>
+    <p class="eyebrow" id="eyebrow">セルフホスト · サーバー側検証</p>
+    <h1 id="title">画像パズルなしの<br>お問い合わせフォーム。</h1>
+    <p id="intro">メッセージを入力して、FCaptchaで保護された送信を試せます。</p>
+    <form id="contact">
+      <label id="message-label" for="message">テストメッセージ</label>
+      <textarea id="message" name="message" required maxlength="2000" rows="4" placeholder="テスト用の文章を入力してください"></textarea>
+      <button id="submit" type="submit" disabled>準備中…</button>
+    </form>
+    <p id="status" role="status" aria-live="polite"></p>
+    <p class="note" id="note">ローカルのデモです。メッセージは保存・送信されません。個人情報を入力しないでください。</p>
+    <footer id="footer">MIT licensed · Go / Node.js / Python</footer>
+  </main>
+</body>
+</html>
