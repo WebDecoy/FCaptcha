@@ -1,5 +1,7 @@
 # F***Captcha
 
+[Prebuilt Docker image](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) · [Docker installation guide](docker/README.md)
+
 **Open source CAPTCHA that blocks bots, vision AI agents, and automation - with a single click or less.**
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -39,10 +41,14 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 
 ### Docker (recommended)
 
-One command to deploy:
+A **prebuilt public image** is available at [`ghcr.io/webdecoy/fcaptcha`](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) for **Linux AMD64 and ARM64**. No GitHub login or source build is required. Use `:latest` to try the current image, or pin a release tag (for example, `:1.41.0`) or digest for reproducible deployments.
+
+See the [Docker guide](docker/README.md) for local startup, Compose, version pinning, and upgrades.
+
+Quick local start:
 
 ```bash
-docker run -d -p 3000:3000 -e FCAPTCHA_SECRET="$(openssl rand -hex 32)" ghcr.io/webdecoy/fcaptcha
+docker run -d --name fcaptcha -p 127.0.0.1:3000:3000 -e FCAPTCHA_SECRET="$(openssl rand -hex 32)" ghcr.io/webdecoy/fcaptcha:latest
 ```
 
 This gives you:
