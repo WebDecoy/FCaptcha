@@ -1,5 +1,6 @@
 'use strict';
 
+const { identityObservation, IDENTITY_POLICY } = require('./identity');
 const { calculateCategoryScores, BEHAVIOURAL_CATEGORIES, CORROBORATION_AGREE_AT,
   CORROBORATION_FLOOR } = require('./engine');
 
@@ -51,7 +52,10 @@ function evaluateExperimental(signals, productionScore, detections, blocking = f
       reason: 'Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools',
     }] : [],
     corroboratingCategories,
-    observations: { [ANIMATION_POLICY]: animationObservation(signals) },
+    observations: {
+      [ANIMATION_POLICY]: animationObservation(signals),
+      [IDENTITY_POLICY]: identityObservation(signals),
+    },
   };
 }
 

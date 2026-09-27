@@ -14,6 +14,8 @@ const SERVER = process.argv[2] || 'http://localhost:3000';
 const EXPERIMENTAL_BLOCKING = process.argv.includes('--experimental-blocking');
 const animationProbe = require('./fixtures/experimental-scoring.json').cases
   .find((c) => c.name === 'animation-observed').signals.environmental.animationConsistency;
+const identityProbe = require('./fixtures/identity-coherence.json').cases
+  .find((c) => c.name === 'direct3d-under-macos-claim').signals.environmental;
 const SECRET = process.env.FCAPTCHA_VERIFY_SECRET || process.env.FCAPTCHA_SECRET;
 if (!SECRET) throw new Error('FCAPTCHA_SECRET is required for conformance tests');
 
@@ -180,7 +182,7 @@ async function run() {
   // Only server configuration may enable the gate. Challenge cost and the
   // baseline score stay independent in either mode.
   for (const endpoint of ['verify', 'score']) {
-    for (const [index, scenario] of ['stealth-shaped', 'devtools-warning', 'clean', 'animation-only'].entries()) {
+    for (const [index, scenario] of ['stealth-shaped', 'devtools-warning', 'clean', 'animation-only', 'identity-only'].entries()) {
       const candidate = scenario === 'stealth-shaped' || scenario === 'devtools-warning';
       const blocked = EXPERIMENTAL_BLOCKING && candidate;
       const siteKey = `experimental-${endpoint}-${scenario}`;
@@ -188,7 +190,7 @@ async function run() {
         'User-Agent': 'Mozilla/5.0 Chrome/120.0.0.0',
         'Accept-Language': 'en-US', 'Accept-Encoding': 'gzip',
         Origin: 'https://example.test',
-        'X-Real-IP': `203.0.113.${80 + (endpoint === 'score' ? 4 : 0) + index}`,
+        'X-Real-IP': `203.0.113.${80 + (endpoint === 'score' ? 5 : 0) + index}`,
       };
       const signals = {
         behavioral: {
@@ -201,6 +203,7 @@ async function run() {
         },
         environmental: {
           ...(scenario === 'animation-only' ? { animationConsistency: animationProbe } : {}),
+          ...(scenario === 'identity-only' ? identityProbe : {}),
           workerConsistency: { supported: true, consistent: !candidate,
             mismatches: candidate ? ['hardwareConcurrency'] : [], mismatchCount: candidate ? 1 : 0 },
           cdpRuntime: { consoleAttached: true },
@@ -223,6 +226,12 @@ async function run() {
       assert.strictEqual(observation.status, scenario === 'animation-only' ? 'detected' : 'unknown');
       assert.deepStrictEqual(observation.detections.map((d) => d.id),
         scenario === 'animation-only' ? ['animation-timing-inconsistency'] : []);
+      // Observe-only: it never selects the blocking policy, whatever the server runs.
+      const identity = result.experimental.observations['identity-coherence-v1'];
+      assert.strictEqual(identity.mode, 'observe');
+      assert.strictEqual(identity.status, scenario === 'identity-only' ? 'detected' : 'unknown');
+      assert.deepStrictEqual(identity.detections.map((d) => d.id),
+        scenario === 'identity-only' ? ['gpu-backend-os-mismatch'] : []);
       assert.ok(result.score < 0.5, response.text);
       assert.strictEqual(result.success, !blocked, response.text);
       if (blocked) {
