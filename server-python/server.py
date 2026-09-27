@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from collections import defaultdict, OrderedDict
 from admission import AdmissionLimiter
+from identity import IDENTITY_POLICY, identity_observation
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -1768,7 +1769,10 @@ def evaluate_experimental(signals: Dict, production_score: float, detections: Li
             "reason": "Page and Worker disagree on hardwareConcurrency; also possible with DevTools or privacy tools",
         }] if mismatch else [],
         "corroboratingCategories": categories,
-        "observations": {"animation-consistency-v1": animation_observation(signals)},
+        "observations": {
+            "animation-consistency-v1": animation_observation(signals),
+            IDENTITY_POLICY: identity_observation(signals),
+        },
     }
 
 

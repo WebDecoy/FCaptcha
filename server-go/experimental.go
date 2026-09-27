@@ -106,7 +106,10 @@ func evaluateExperimental(signals map[string]interface{}, productionScore float6
 	result := ExperimentalResult{
 		Mode: "observe", Policy: experimentalPolicy, Score: productionScore,
 		Detections: []ExperimentalDetection{}, CorroboratingCategories: []string{},
-		Observations: map[string]ExperimentalObservation{"animation-consistency-v1": animationObservation(signals)},
+		Observations: map[string]ExperimentalObservation{
+			"animation-consistency-v1": animationObservation(signals),
+			identityPolicy:             identityObservation(signals),
+		},
 	}
 	if blocking {
 		result.Mode = "block"

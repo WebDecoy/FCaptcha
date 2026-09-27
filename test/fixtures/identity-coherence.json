@@ -1,0 +1,571 @@
+{
+  "provenance": "mixed",
+  "notes": "identity-coherence-v1 vectors. provenance per case: measured = copied from a real browser capture in this repo; reference = a publicly documented renderer/UA shape, not captured here; synthetic = constructed to exercise a rule. None of these measure a human false-positive rate.",
+  "cases": [
+    {
+      "name": "chrome-macos-metal",
+      "provenance": "measured",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)"
+          },
+          "fontsInfo": {
+            "supported": true,
+            "count": 40,
+            "hasSegoeUI": false,
+            "hasCalibri": false,
+            "hasSFPro": true,
+            "hasMenlo": true
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "firefox-windows-direct3d",
+      "provenance": "measured",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (NVIDIA, NVIDIA GeForce GTX 980 Direct3D11 vs_5_0 ps_5_0), or similar"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "chrome-windows-direct3d",
+      "provenance": "reference",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+          },
+          "fontsInfo": {
+            "supported": true,
+            "count": 40,
+            "hasSegoeUI": true,
+            "hasCalibri": true,
+            "hasSFPro": false,
+            "hasMenlo": false
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "snapdragon-windows-laptop",
+      "provenance": "reference",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (Qualcomm, Qualcomm(R) Adreno(TM) X1-85 GPU (0x36334330) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "firefox-macos-sanitized",
+      "provenance": "measured",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:153.0) Gecko/20100101 Firefox/153.0",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "Apple M1, or similar"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "firefox-resist-fingerprinting",
+      "provenance": "measured",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:153.0) Gecko/20100101 Firefox/153.0",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "Mozilla"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "firefox-linux",
+      "provenance": "measured",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "Radeon HD 3200 Graphics, or similar"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "chrome-linux-vulkan",
+      "provenance": "reference",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (Intel, Vulkan 1.3.0 (Intel(R) UHD Graphics 620 (0x00005917)), Intel open-source Mesa driver)"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "asahi-linux-apple-gpu",
+      "provenance": "reference",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "Apple M1 (G13G B0)"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "safari-iphone",
+      "provenance": "reference",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+            "maxTouchPoints": 5
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "Apple GPU"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "chrome-iphone",
+      "provenance": "reference",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/153.0.0.0 Mobile/15E148 Safari/604.1",
+            "maxTouchPoints": 5
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "Apple GPU"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "ipad-desktop-mode-metal",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+            "maxTouchPoints": 5
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "chrome-android-adreno",
+      "provenance": "reference",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36",
+            "maxTouchPoints": 5
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "Adreno (TM) 740"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "chromebook-mali-no-touch",
+      "provenance": "reference",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (X11; CrOS aarch64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (ARM, Mali-G57, OpenGL ES 3.2)"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "no-webgl",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "no-claim",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "few-fonts-are-not-evidence",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "Apple M1, or similar"
+          },
+          "fontsInfo": {
+            "supported": true,
+            "count": 2,
+            "hasSegoeUI": true,
+            "hasCalibri": true,
+            "hasSFPro": false,
+            "hasMenlo": false
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "direct3d-under-macos-claim",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "detected",
+        "detections": [
+          {
+            "id": "gpu-backend-os-mismatch",
+            "reason": "WebGL Direct3D backend contradicts claimed OS (macOS)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "metal-under-windows-claim",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "detected",
+        "detections": [
+          {
+            "id": "gpu-backend-os-mismatch",
+            "reason": "WebGL Metal backend contradicts claimed OS (Windows)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "direct3d-under-android-claim",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Mobile Safari/537.36",
+            "maxTouchPoints": 5
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "detected",
+        "detections": [
+          {
+            "id": "gpu-backend-os-mismatch",
+            "reason": "WebGL Direct3D backend contradicts claimed OS (Android)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "windows-fonts-under-macos-claim",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "Apple M1, or similar"
+          },
+          "fontsInfo": {
+            "supported": true,
+            "count": 40,
+            "hasSegoeUI": true,
+            "hasCalibri": true,
+            "hasSFPro": false,
+            "hasMenlo": false
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "detected",
+        "detections": [
+          {
+            "id": "font-set-os-mismatch",
+            "reason": "Font set (Windows faces) contradicts claimed OS (macOS)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "measurements-agree-against-claim",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 (0x00002786) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+          },
+          "fontsInfo": {
+            "supported": true,
+            "count": 40,
+            "hasSegoeUI": true,
+            "hasCalibri": true,
+            "hasSFPro": false,
+            "hasMenlo": false
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "detected",
+        "detections": [
+          {
+            "id": "gpu-backend-os-mismatch",
+            "reason": "WebGL Direct3D backend contradicts claimed OS (Linux)"
+          },
+          {
+            "id": "font-set-os-mismatch",
+            "reason": "Font set (Windows faces) contradicts claimed OS (Linux)"
+          },
+          {
+            "id": "identity-claim-contradicted",
+            "reason": "Several measured properties agree with each other and contradict the claimed OS"
+          }
+        ]
+      }
+    },
+    {
+      "name": "measurements-disagree",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "webglInfo": {
+            "supported": true,
+            "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)"
+          },
+          "fontsInfo": {
+            "supported": true,
+            "count": 40,
+            "hasSegoeUI": true,
+            "hasCalibri": true,
+            "hasSFPro": false,
+            "hasMenlo": false
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "detected",
+        "detections": [
+          {
+            "id": "gpu-backend-os-mismatch",
+            "reason": "WebGL Metal backend contradicts claimed OS (Windows)"
+          },
+          {
+            "id": "identity-axes-disagree",
+            "reason": "Measured properties disagree with each other"
+          }
+        ]
+      }
+    }
+  ]
+}
