@@ -13,7 +13,7 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
-## [Unreleased]
+## [1.42.0] — 2026-09-27
 
 ### Detection
 - Add the monitoring-only `identity-coherence-v1` observation under
