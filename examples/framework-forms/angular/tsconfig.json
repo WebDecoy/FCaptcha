@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "experimentalDecorators": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
+  },
+  "angularCompilerOptions": {
+    "strictTemplates": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "../shared/browser.js"
+  ]
+}

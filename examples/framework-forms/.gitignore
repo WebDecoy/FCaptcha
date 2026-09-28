@@ -1,0 +1,5 @@
+node_modules/
+.next/
+dist/
+.angular/
+next-env.d.ts

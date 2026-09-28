@@ -1,0 +1,13 @@
+{
+  "name": "fcaptcha-framework-forms",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test.mjs",
+    "angular": "node run.mjs angular",
+    "next": "node run.mjs next"
+  },
+  "dependencies": {
+    "express": "5.2.1"
+  }
+}
