@@ -1,0 +1,6 @@
+project_id = "fcaptcha-edge-example"
+
+# This NEW demo function deliberately accepts visitors who are not signed in.
+# It has no DB/service-role access; FCaptcha is an abuse check, not user auth.
+[functions.fcaptcha-contact]
+verify_jwt = false

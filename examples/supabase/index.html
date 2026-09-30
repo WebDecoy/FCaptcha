@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FCaptcha + Supabase Edge Functions</title>
+<style>
+body { max-width: 680px; margin: 8vh auto; padding: 24px; font: 18px/1.6 system-ui; color: #1b2926; background: #f5f7f6; }
+h1 { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.15; }
+textarea { box-sizing: border-box; width: 100%; padding: 14px; margin: 10px 0; font: inherit; border: 1px solid #879391; border-radius: 8px; }
+button { font: inherit; padding: 12px 22px; background: #096452; color: white; border: 0; border-radius: 8px; }
+button:disabled { opacity: .6; }
+:focus-visible { outline: 3px solid #146bc9; outline-offset: 3px; }
+small { display: block; margin-top: 24px; }
+</style>
+</head>
+<body>
+<p>FCaptcha + Supabase Edge Functions</p>
+<h1>A browser can be an AI agent, too.</h1>
+<p>Try an invisible FCaptcha check before a Supabase Edge Function accepts a request. The function verifies the token, hostname, and action on the server.</p>
+<form id="form"><label for="message">Test message</label><textarea id="message" rows="4" required maxlength="2000" placeholder="Write a sample message"></textarea><button id="submit" disabled>Loading…</button></form>
+<p id="status" role="status" aria-live="polite"></p>
+<small>Local demo only. No messages are stored or sent. Use sample text, not personal information.</small>
+<script type="module">
+// These URLs and the site key are public. Never put the verification secret here.
+const captchaOrigin = 'http://127.0.0.1:8793';
+const functionUrl = 'http://127.0.0.1:54321/functions/v1/fcaptcha-contact';
+const button = document.getElementById('submit');
+const status = document.getElementById('status');
+try {
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = `${captchaOrigin}/fcaptcha.js`;
+    script.onload = resolve; script.onerror = reject; document.head.append(script);
+  });
+  FCaptcha.configure({ serverUrl: captchaOrigin });
+  button.disabled = false; button.textContent = 'Verify and submit';
+} catch { status.textContent = 'Could not load FCaptcha. Start the local demo server, then reload.'; }
+document.getElementById('form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (button.disabled) return;
+  button.disabled = true; button.textContent = 'Checking…'; status.textContent = '';
+  try {
+    const result = await FCaptcha.execute('supabase-demo', { action: 'contact' });
+    if (!result.success || !result.token) {
+      status.textContent = 'Verification did not pass. Wait a moment and try again.'; return;
+    }
+    const response = await fetch(functionUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: result.token, message: document.getElementById('message').value }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const body = await response.json();
+    status.textContent = response.ok && body.accepted === true
+      ? 'Edge Function accepted the verified request. No message was stored or sent.'
+      : response.status >= 500 ? 'Verification is unavailable. Try again when the service is back.'
+      : 'The function rejected this request. Check your message and try again.';
+  } catch { status.textContent = 'Request could not finish. Check your local servers and try again.'; }
+  finally { button.disabled = false; button.textContent = 'Verify and submit'; }
+});
+</script>
+</body>
+</html>
