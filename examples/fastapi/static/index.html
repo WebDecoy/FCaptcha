@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FCaptcha + FastAPI</title>
+  <style>
+    body { font: 18px/1.6 system-ui, sans-serif; max-width: 680px; margin: 8vh auto; padding: 24px; color: #172123; background: #f5f7f6; }
+    h1 { line-height: 1.15; font-size: clamp(2rem, 6vw, 3.2rem); }
+    textarea { display: block; box-sizing: border-box; width: 100%; margin: 8px 0 20px; padding: 14px; font: inherit; border: 1px solid #879391; border-radius: 8px; }
+    button { font: inherit; padding: 12px 22px; background: #096452; color: white; border: 0; border-radius: 8px; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    :focus-visible { outline: 3px solid #146bc9; outline-offset: 4px; }
+    small { display: block; margin-top: 22px; }
+    #status { min-height: 3em; }
+  </style>
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <p>FCaptcha + FastAPI</p>
+  <h1>Check the visitor.<br>Then accept the request.</h1>
+  <p>This example uses FCaptcha's invisible mode to assess browser and interaction signals for bots and AI agents. FastAPI verifies the token before accepting your test message.</p>
+  <form id="contact">
+    <label for="message">Test message</label>
+    <textarea id="message" rows="4" maxlength="2000" required placeholder="Write a sample message"></textarea>
+    <button id="submit" disabled>Loading…</button>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+  <small>Local demo. Messages are neither stored nor sent. Use sample text, not personal information. A rejected submission can be retried with a fresh token.</small>
+</body>
+</html>

@@ -17,6 +17,12 @@
 
 FCaptcha is a modern CAPTCHA system designed to detect everything: traditional bots, headless browsers, automation frameworks, CAPTCHA farms, and the new generation of AI agents — from vision models that screenshot-and-click to computer-use agents that drive a real browser over the Chrome DevTools Protocol.
 
+## Runnable examples
+
+- [FastAPI application with server-side FCaptcha verification](examples/fastapi/):
+  invisible-mode browser form, an async verification dependency, and replay/failure tests.
+- [Node.js contact form](examples/contact-form/): Japanese/English local demo.
+
 ## Features
 
 - **Drop-in for Turnstile / reCAPTCHA / hCaptcha** - Serves the same `siteverify` contract on the same paths, so migrating an existing backend is a base-URL change; tokens carry a signed `hostname` and `action` your app can check
