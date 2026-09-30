@@ -19,6 +19,9 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 
 ## Runnable examples
 
+- [Hono middleware with FCaptcha verification](examples/hono/): browser demo,
+  server-side token checks, and replay/failure tests.
+
 - [FastAPI application with server-side FCaptcha verification](examples/fastapi/):
   invisible-mode browser form, an async verification dependency, and replay/failure tests.
 - [Node.js contact form](examples/contact-form/): Japanese/English local demo.

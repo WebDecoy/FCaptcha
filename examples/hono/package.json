@@ -1,0 +1,8 @@
+{
+  "name": "fcaptcha-hono-example",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node start.mjs", "test": "node --test test.mjs" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "hono": "4.13.12", "@hono/node-server": "2.1.3" }
+}
