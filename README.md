@@ -365,18 +365,19 @@ for the full contract, including `hostname`/`action` checking and
 **Or use the native endpoint**, which returns FCaptcha's own shape:
 
 ```go
-// Go
-resp, _ := http.Post("https://your-server.com/api/token/verify",
-    "application/json",
-    strings.NewReader(`{"token": "...", "secret": "your-secret"}`))
+// Go: go get github.com/WebDecoy/FCaptcha
+client := fcaptcha.New("https://your-server.com", "your-secret")
 
-var result map[string]interface{}
-json.NewDecoder(resp.Body).Decode(&result)
-
-if result["valid"].(bool) && result["score"].(float64) < 0.5 {
+result, err := client.Verify(ctx, r.FormValue(fcaptcha.TokenField), "")
+if err == nil && result.Valid && result.Score < 0.5 {
     // Valid request from human
 }
+
+// Or guard a handler: 403 on a bad token, 503 if the server is unreachable.
+mux.Handle("POST /login", client.Middleware(fcaptcha.MiddlewareOptions{Action: "login"})(loginHandler))
 ```
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/WebDecoy/FCaptcha.svg)](https://pkg.go.dev/github.com/WebDecoy/FCaptcha)
 
 ```python
 # Python
