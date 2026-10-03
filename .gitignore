@@ -56,3 +56,6 @@ docs/
 # in that directory.
 bench/*results*.json
 bench/test-results/
+
+# Go coverage profiles (CI uploads them; nothing reads them locally)
+coverage.out
