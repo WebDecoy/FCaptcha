@@ -27,6 +27,8 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
 
 - [Hono middleware with FCaptcha verification](examples/hono/): browser demo,
   server-side token checks, and replay/failure tests.
+- [Supabase Edge Function with FCaptcha verification](examples/supabase/):
+  local browser demo, CORS handling, and single-use token validation.
 
 - [FastAPI application with server-side FCaptcha verification](examples/fastapi/):
   invisible-mode browser form, an async verification dependency, and replay/failure tests.

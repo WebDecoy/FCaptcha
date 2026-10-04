@@ -1,0 +1,7 @@
+{
+  "tasks": {
+    "test": "deno test --allow-run=node --allow-read=../../server-node,./tests --allow-net=127.0.0.1 --allow-env tests/",
+    "check": "deno check supabase/functions/fcaptcha-contact/index.ts tests/handler_test.ts"
+  },
+  "fmt": { "singleQuote": true }
+}
