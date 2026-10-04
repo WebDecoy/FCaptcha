@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/assets/hero.webp" alt="F***Captcha: a duck in a pink hoodie spray-painting the name on a wall" width="880">
+</p>
+
 # F***Captcha
 
 [Prebuilt Docker image](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) · [Docker installation guide](docker/README.md)
