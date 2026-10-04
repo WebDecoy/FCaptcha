@@ -9,6 +9,8 @@
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python)
 ![Node](https://img.shields.io/badge/Node-22+-339933?logo=node.js)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker)](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha)
+[![Go Reference](https://pkg.go.dev/badge/github.com/WebDecoy/FCaptcha.svg)](https://pkg.go.dev/github.com/WebDecoy/FCaptcha)
+[![codecov](https://codecov.io/gh/WebDecoy/FCaptcha/graph/badge.svg)](https://app.codecov.io/gh/WebDecoy/FCaptcha)
 
 **[Try the Live Demo](https://webdecoy.com/product/fcaptcha-demo/)**
 
@@ -376,8 +378,6 @@ if err == nil && result.Valid && result.Score < 0.5 {
 // Or guard a handler: 403 on a bad token, 503 if the server is unreachable.
 mux.Handle("POST /login", client.Middleware(fcaptcha.MiddlewareOptions{Action: "login"})(loginHandler))
 ```
-
-[![Go Reference](https://pkg.go.dev/badge/github.com/WebDecoy/FCaptcha.svg)](https://pkg.go.dev/github.com/WebDecoy/FCaptcha)
 
 ```python
 # Python
