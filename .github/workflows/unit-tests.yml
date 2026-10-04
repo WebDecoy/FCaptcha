@@ -77,13 +77,70 @@ jobs:
 
       - name: Test
         working-directory: server-go
-        run: go test -race ./...
+        run: go test -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        if: matrix.go == '1.27.1'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: server-go/coverage.out
+          flags: server-go
 
       - name: Check reachable vulnerabilities
         working-directory: server-go
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           govulncheck ./...
+
+  go-client:
+    # The importable package at the repository root (github.com/WebDecoy/FCaptcha),
+    # tested on the oldest Go its go.mod admits and on the newest, and then
+    # against a real server-go so the fake server in its unit tests cannot
+    # drift from the contract it stands in for.
+    name: Go client (${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.23', '1.27.1']
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: server-go/go.sum
+
+      - name: Vet
+        run: go vet .
+
+      - name: Start server-go
+        if: matrix.go == '1.27.1'
+        run: |
+          secret=$(openssl rand -hex 32)
+          echo "FCAPTCHA_TEST_SECRET=$secret" >> "$GITHUB_ENV"
+          echo "FCAPTCHA_TEST_URL=http://127.0.0.1:3000" >> "$GITHUB_ENV"
+          (cd server-go && go build -o "$RUNNER_TEMP/fcaptcha-server" .)
+          FCAPTCHA_SECRET=$secret PORT=3000 "$RUNNER_TEMP/fcaptcha-server" &
+          for _ in $(seq 30); do
+            curl -sf http://127.0.0.1:3000/health >/dev/null && exit 0
+            sleep 1
+          done
+          echo "server-go did not become healthy" >&2
+          exit 1
+
+      # With the server up, the integration tests run instead of skipping.
+      - name: Test
+        run: go test -race -coverprofile=coverage.out .
+
+      - name: Upload coverage
+        if: matrix.go == '1.27.1'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.out
+          flags: go-client
 
   python:
     name: Python (${{ matrix.python }})

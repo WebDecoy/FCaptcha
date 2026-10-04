@@ -13,6 +13,17 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [Unreleased]
+
+### Added
+- Go client package at the repository root, `github.com/WebDecoy/FCaptcha`:
+  `Client.Verify` redeems a token against `/api/token/verify`, and
+  `Client.Middleware` wraps an `http.Handler` with optional action, hostname
+  and score checks. Standard library only. It fails closed: an unreachable
+  server or a rejected secret is an error (503 from the middleware), never a
+  pass. IP binding is off unless you supply the visitor address. Install with
+  `go get github.com/WebDecoy/FCaptcha` once this is in a tagged release.
+
 ## [1.42.0] — 2026-09-27
 
 ### Detection
