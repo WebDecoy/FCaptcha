@@ -1041,7 +1041,9 @@ async function start() {
   if (SHARED_STATE) await SHARED_STATE.connect();
   const host = SECRET_KEY === require('./config').INSECURE_DEFAULT_SECRET ? '127.0.0.1' : '0.0.0.0';
   const server = app.listen(PORT, host, () => {
-    console.log(`FCaptcha server running on port ${server.address().port}`);
+    const addr = server.address();
+    const port = addr ? addr.port : PORT;
+    console.log(`FCaptcha server running on port ${port}`);
     console.log(`Trusted proxies: ${PROXY_TRUST.describe()}`);
     console.log(`Site keys: ${SITE_KEYS.describe()}`);
     console.log(`Shared state: ${SHARED_STATE ? 'Redis (PoW)' : 'in-memory'}`);

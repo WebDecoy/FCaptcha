@@ -689,6 +689,7 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	detections = append(detections, e.CheckIPReputation(ip)...)
 	detections = append(detections, e.CheckBrowserConsistency(userAgent, signals)...)
 	detections = append(detections, e.CheckDeclaredAIAgent(userAgent, headers)...)
+	detections = append(detections, e.AnalyzeAdvancedSignals(signals, userAgent)...)
 
 	// HTTP-level detectors
 	if headers != nil {
@@ -1188,7 +1189,7 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 					Reason:     "PoW completed impossibly fast",
 					Details:    map[string]interface{}{"duration": duration, "expected_min": expectedMin},
 				})
-			} else if duration > expectedMax*3 {
+			} else if duration > expectedMax*10 {
 				results = append(results, DetectionResult{
 					Category:   CategoryVisionAI,
 					Score:      0.6,
@@ -1344,7 +1345,7 @@ func (e *ScoringEngine) detectHeadless(signals map[string]interface{}, userAgent
 			})
 		}
 
-		if !getBool(automation, "languages") {
+		if v, ok := automation["languages"].(bool); ok && !v {
 			results = append(results, DetectionResult{
 				Category:   CategoryHeadless,
 				Score:      0.5,
@@ -1356,7 +1357,7 @@ func (e *ScoringEngine) detectHeadless(signals map[string]interface{}, userAgent
 
 	// Headless indicators
 	if headless != nil {
-		if !getBool(headless, "hasOuterDimensions") {
+		if v, ok := headless["hasOuterDimensions"].(bool); ok && !v {
 			results = append(results, DetectionResult{
 				Category:   CategoryHeadless,
 				Score:      0.7,
