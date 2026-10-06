@@ -163,6 +163,258 @@ func (e *ScoringEngine) CheckDeclaredAIAgent(userAgent string, headers map[strin
 	return detections
 }
 
+// =============================================================================
+// Advanced Fingerprint Detection Functions
+// =============================================================================
+
+func analyzeWebRTC(webrtcInfo map[string]interface{}) []DetectionResult {
+	var detections []DetectionResult
+	if webrtcInfo == nil || !getBool(webrtcInfo, "supported") {
+		return detections
+	}
+	mediaDevices := getMap(webrtcInfo, "mediaDevices")
+	if mediaDevices != nil && getBool(mediaDevices, "supported") {
+		totalDevices := int(getFloat(mediaDevices, "totalDevices"))
+		if totalDevices == 0 {
+			detections = append(detections, DetectionResult{
+				Category:   CategoryHeadless,
+				Score:      0.7,
+				Confidence: 0.75,
+				Reason:     "No media devices detected (typical of headless browsers)",
+			})
+		}
+		videoInputs := int(getFloat(mediaDevices, "videoInputs"))
+		audioInputs := int(getFloat(mediaDevices, "audioInputs"))
+		if videoInputs > 0 && audioInputs == 0 {
+			detections = append(detections, DetectionResult{
+				Category:   CategoryBot,
+				Score:      0.4,
+				Confidence: 0.5,
+				Reason:     "Has video devices but no audio devices (unusual configuration)",
+			})
+		}
+	}
+	return detections
+}
+
+func analyzeSpeechAPI(speechInfo map[string]interface{}) []DetectionResult {
+	var detections []DetectionResult
+	if speechInfo == nil || !getBool(speechInfo, "supported") {
+		return detections
+	}
+	totalVoices := int(getFloat(speechInfo, "totalVoices"))
+	localVoices := int(getFloat(speechInfo, "localVoices"))
+	if totalVoices == 0 {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryHeadless,
+			Score:      0.6,
+			Confidence: 0.7,
+			Reason:     "No speech synthesis voices available",
+		})
+	} else if totalVoices < 5 {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryHeadless,
+			Score:      0.3,
+			Confidence: 0.4,
+			Reason:     fmt.Sprintf("Very few speech voices available (%d)", totalVoices),
+		})
+	}
+	if localVoices == 0 && totalVoices > 0 {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryBot,
+			Score:      0.3,
+			Confidence: 0.4,
+			Reason:     "No local speech synthesis voices",
+		})
+	}
+	return detections
+}
+
+func analyzeWorkerConsistency(workerConsistency map[string]interface{}) []DetectionResult {
+	var detections []DetectionResult
+	if workerConsistency == nil || !getBool(workerConsistency, "supported") {
+		return detections
+	}
+	mismatchesRaw, _ := workerConsistency["mismatches"].([]interface{})
+	var mismatches []string
+	for _, m := range mismatchesRaw {
+		if s, ok := m.(string); ok && s != "hardwareConcurrency" {
+			mismatches = append(mismatches, s)
+		}
+	}
+	if !getBool(workerConsistency, "consistent") && len(mismatches) > 0 {
+		score := 0.3 + (float64(len(mismatches)) * 0.15)
+		if score > 0.9 {
+			score = 0.9
+		}
+		detections = append(detections, DetectionResult{
+			Category:   CategoryBot,
+			Score:      score,
+			Confidence: 0.85,
+			Reason:     "Worker/main thread mismatch detected: " + strings.Join(mismatches, ", "),
+		})
+	}
+	return detections
+}
+
+func analyzeCSSMediaQueries(cssMedia map[string]interface{}, signals map[string]interface{}) []DetectionResult {
+	var detections []DetectionResult
+	if cssMedia == nil || !getBool(cssMedia, "supported") {
+		return detections
+	}
+	env := getMap(signals, "environmental")
+	nav := getMap(env, "navigator")
+	var maxTouch float64
+	if nav != nil {
+		maxTouch = getFloat(nav, "maxTouchPoints")
+	}
+	if getString(cssMedia, "pointer") == "coarse" && maxTouch == 0 {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryBot,
+			Score:      0.5,
+			Confidence: 0.6,
+			Reason:     "CSS reports coarse pointer but no touch support",
+		})
+	}
+	if getBool(cssMedia, "hover") == false && getString(cssMedia, "pointer") == "fine" {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryBot,
+			Score:      0.3,
+			Confidence: 0.4,
+			Reason:     "Fine pointer reported but no hover capability",
+		})
+	}
+	return detections
+}
+
+func analyzeFonts(fontsInfo map[string]interface{}, userAgent string) []DetectionResult {
+	var detections []DetectionResult
+	if fontsInfo == nil || !getBool(fontsInfo, "supported") {
+		return detections
+	}
+	count := int(getFloat(fontsInfo, "count"))
+	if count < 3 {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryHeadless,
+			Score:      0.5,
+			Confidence: 0.5,
+			Reason:     fmt.Sprintf("Very few fonts detected (%d)", count),
+		})
+	}
+	ua := strings.ToLower(userAgent)
+	if strings.Contains(ua, "windows") && !getBool(fontsInfo, "hasSegoeUI") && count > 5 {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryBot,
+			Score:      0.5,
+			Confidence: 0.6,
+			Reason:     "Windows UA but Segoe UI font not detected",
+		})
+	}
+	if (strings.Contains(ua, "mac os x") || strings.Contains(ua, "macintosh")) && !getBool(fontsInfo, "hasSFPro") &&
+		!strings.Contains(ua, "10_15") && !strings.Contains(ua, "10_14") && count > 5 {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryBot,
+			Score:      0.3,
+			Confidence: 0.4,
+			Reason:     "Modern macOS UA but SF Pro font not detected",
+		})
+	}
+	if strings.Contains(ua, "linux") && !strings.Contains(ua, "android") && !getBool(fontsInfo, "hasDejaVuSans") && count > 5 {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryBot,
+			Score:      0.4,
+			Confidence: 0.5,
+			Reason:     "Linux UA but DejaVu Sans font not detected",
+		})
+	}
+	return detections
+}
+
+func analyzePermissions(permissionsInfo map[string]interface{}) []DetectionResult {
+	var detections []DetectionResult
+	if permissionsInfo == nil || !getBool(permissionsInfo, "supported") {
+		return detections
+	}
+	apiKeys := []string{
+		"hasPermissionsAPI", "hasClipboard", "hasShare", "hasCredentials",
+		"hasBluetooth", "hasUsb", "hasSerial", "hasHid", "hasXR",
+		"hasGeolocation", "hasMIDI",
+	}
+	availableApis := 0
+	for _, key := range apiKeys {
+		if getBool(permissionsInfo, key) {
+			availableApis++
+		}
+	}
+	if availableApis < 3 {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryHeadless,
+			Score:      0.4,
+			Confidence: 0.5,
+			Reason:     fmt.Sprintf("Very few navigator APIs available (%d)", availableApis),
+		})
+	}
+	return detections
+}
+
+func analyzeDOMRect(domRectInfo map[string]interface{}) []DetectionResult {
+	var detections []DetectionResult
+	if domRectInfo == nil || !getBool(domRectInfo, "supported") {
+		return detections
+	}
+	rectAWidth, okA := domRectInfo["rectAWidth"].(float64)
+	rectBWidth, okB := domRectInfo["rectBWidth"].(float64)
+	rangeWidth, okR := domRectInfo["rangeWidth"].(float64)
+	if (okA && rectAWidth == 0) || (okB && rectBWidth == 0) {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryHeadless,
+			Score:      0.6,
+			Confidence: 0.7,
+			Reason:     "DOMRect rendering returned zero-width elements",
+		})
+	}
+	if okA && okB && okR && rectAWidth == math.Floor(rectAWidth) && rectBWidth == math.Floor(rectBWidth) && rangeWidth == math.Floor(rangeWidth) {
+		detections = append(detections, DetectionResult{
+			Category:   CategoryBot,
+			Score:      0.3,
+			Confidence: 0.4,
+			Reason:     "DOMRect measurements are all exact integers (unusual)",
+		})
+	}
+	return detections
+}
+
+// AnalyzeAdvancedSignals analyzes advanced fingerprint signals (WebRTC, Speech API, Worker consistency, etc.)
+func (e *ScoringEngine) AnalyzeAdvancedSignals(signals map[string]interface{}, userAgent string) []DetectionResult {
+	var detections []DetectionResult
+	env := getMap(signals, "environmental")
+	if env == nil {
+		return detections
+	}
+	if webrtcInfo := getMap(env, "webrtcInfo"); webrtcInfo != nil {
+		detections = append(detections, analyzeWebRTC(webrtcInfo)...)
+	}
+	if speechInfo := getMap(env, "speechInfo"); speechInfo != nil {
+		detections = append(detections, analyzeSpeechAPI(speechInfo)...)
+	}
+	if workerConsistency := getMap(env, "workerConsistency"); workerConsistency != nil {
+		detections = append(detections, analyzeWorkerConsistency(workerConsistency)...)
+	}
+	if cssMediaQueries := getMap(env, "cssMediaQueries"); cssMediaQueries != nil {
+		detections = append(detections, analyzeCSSMediaQueries(cssMediaQueries, signals)...)
+	}
+	if fontsInfo := getMap(env, "fontsInfo"); fontsInfo != nil {
+		detections = append(detections, analyzeFonts(fontsInfo, userAgent)...)
+	}
+	if permissionsInfo := getMap(env, "permissionsInfo"); permissionsInfo != nil {
+		detections = append(detections, analyzePermissions(permissionsInfo)...)
+	}
+	if domRectInfo := getMap(env, "domRectFingerprint"); domRectInfo != nil {
+		detections = append(detections, analyzeDOMRect(domRectInfo)...)
+	}
+	return detections
+}
+
 // CheckIPReputation returns detection results for IP-based threats
 func (e *ScoringEngine) CheckIPReputation(ip string) []DetectionResult {
 	var detections []DetectionResult

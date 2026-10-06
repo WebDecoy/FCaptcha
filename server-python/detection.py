@@ -96,6 +96,203 @@ def check_ip_reputation(ip: str) -> List[Dict]:
 
 
 # =============================================================================
+# Advanced Fingerprint Detection Functions
+# =============================================================================
+
+def analyze_webrtc(webrtc_info: Optional[Dict]) -> List[Dict]:
+    if not webrtc_info or not webrtc_info.get("supported"):
+        return []
+    detections = []
+    media_devices = webrtc_info.get("mediaDevices") or {}
+    if media_devices.get("supported") and media_devices.get("totalDevices") == 0:
+        detections.append({
+            "category": "headless",
+            "score": 0.7,
+            "confidence": 0.75,
+            "reason": "No media devices detected (typical of headless browsers)"
+        })
+    if media_devices.get("supported") and media_devices.get("videoInputs", 0) > 0 and media_devices.get("audioInputs", 0) == 0:
+        detections.append({
+            "category": "bot",
+            "score": 0.4,
+            "confidence": 0.5,
+            "reason": "Has video devices but no audio devices (unusual configuration)"
+        })
+    return detections
+
+
+def analyze_speech_api(speech_info: Optional[Dict]) -> List[Dict]:
+    if not speech_info or not speech_info.get("supported"):
+        return []
+    detections = []
+    total_voices = speech_info.get("totalVoices", 0)
+    local_voices = speech_info.get("localVoices", 0)
+    if total_voices == 0:
+        detections.append({
+            "category": "headless",
+            "score": 0.6,
+            "confidence": 0.7,
+            "reason": "No speech synthesis voices available"
+        })
+    elif 0 < total_voices < 5:
+        detections.append({
+            "category": "headless",
+            "score": 0.3,
+            "confidence": 0.4,
+            "reason": f"Very few speech voices available ({total_voices})"
+        })
+    if local_voices == 0 and total_voices > 0:
+        detections.append({
+            "category": "bot",
+            "score": 0.3,
+            "confidence": 0.4,
+            "reason": "No local speech synthesis voices"
+        })
+    return detections
+
+
+def analyze_worker_consistency(worker_consistency: Optional[Dict]) -> List[Dict]:
+    if not worker_consistency or not worker_consistency.get("supported"):
+        return []
+    detections = []
+    mismatches = [m for m in (worker_consistency.get("mismatches") or []) if m != "hardwareConcurrency"]
+    if not worker_consistency.get("consistent") and len(mismatches) > 0:
+        score = min(0.9, 0.3 + (len(mismatches) * 0.15))
+        detections.append({
+            "category": "bot",
+            "score": score,
+            "confidence": 0.85,
+            "reason": f"Worker/main thread mismatch detected: {', '.join(mismatches)}"
+        })
+    return detections
+
+
+def analyze_css_media_queries(css_media: Optional[Dict], signals: Dict) -> List[Dict]:
+    if not css_media or not css_media.get("supported"):
+        return []
+    detections = []
+    nav = (signals.get("environmental") or {}).get("navigator") or {}
+    max_touch = nav.get("maxTouchPoints", 0) or 0
+    if css_media.get("pointer") == "coarse" and max_touch == 0:
+        detections.append({
+            "category": "bot",
+            "score": 0.5,
+            "confidence": 0.6,
+            "reason": "CSS reports coarse pointer but no touch support"
+        })
+    if css_media.get("hover") is False and css_media.get("pointer") == "fine":
+        detections.append({
+            "category": "bot",
+            "score": 0.3,
+            "confidence": 0.4,
+            "reason": "Fine pointer reported but no hover capability"
+        })
+    return detections
+
+
+def analyze_fonts(fonts_info: Optional[Dict], user_agent: str) -> List[Dict]:
+    if not fonts_info or not fonts_info.get("supported"):
+        return []
+    detections = []
+    count = fonts_info.get("count", 0)
+    if count < 3:
+        detections.append({
+            "category": "headless",
+            "score": 0.5,
+            "confidence": 0.5,
+            "reason": f"Very few fonts detected ({count})"
+        })
+    ua = (user_agent or "").lower()
+    if "windows" in ua and fonts_info.get("hasSegoeUI") is False and count > 5:
+        detections.append({
+            "category": "bot",
+            "score": 0.5,
+            "confidence": 0.6,
+            "reason": "Windows UA but Segoe UI font not detected"
+        })
+    if ("mac os x" in ua or "macintosh" in ua) and fonts_info.get("hasSFPro") is False and "10_15" not in ua and "10_14" not in ua and count > 5:
+        detections.append({
+            "category": "bot",
+            "score": 0.3,
+            "confidence": 0.4,
+            "reason": "Modern macOS UA but SF Pro font not detected"
+        })
+    if "linux" in ua and "android" not in ua and fonts_info.get("hasDejaVuSans") is False and count > 5:
+        detections.append({
+            "category": "bot",
+            "score": 0.4,
+            "confidence": 0.5,
+            "reason": "Linux UA but DejaVu Sans font not detected"
+        })
+    return detections
+
+
+def analyze_permissions(permissions_info: Optional[Dict]) -> List[Dict]:
+    if not permissions_info or not permissions_info.get("supported"):
+        return []
+    detections = []
+    api_keys = [
+        "hasPermissionsAPI", "hasClipboard", "hasShare", "hasCredentials",
+        "hasBluetooth", "hasUsb", "hasSerial", "hasHid", "hasXR",
+        "hasGeolocation", "hasMIDI"
+    ]
+    available_apis = sum(1 for k in api_keys if permissions_info.get(k) is True)
+    if available_apis < 3:
+        detections.append({
+            "category": "headless",
+            "score": 0.4,
+            "confidence": 0.5,
+            "reason": f"Very few navigator APIs available ({available_apis})"
+        })
+    return detections
+
+
+def analyze_dom_rect(dom_rect_info: Optional[Dict]) -> List[Dict]:
+    if not dom_rect_info or not dom_rect_info.get("supported"):
+        return []
+    detections = []
+    rect_a = dom_rect_info.get("rectAWidth")
+    rect_b = dom_rect_info.get("rectBWidth")
+    range_w = dom_rect_info.get("rangeWidth")
+    if rect_a == 0 or rect_b == 0:
+        detections.append({
+            "category": "headless",
+            "score": 0.6,
+            "confidence": 0.7,
+            "reason": "DOMRect rendering returned zero-width elements"
+        })
+    if (rect_a is not None and rect_b is not None and range_w is not None and
+            rect_a == math.floor(rect_a) and rect_b == math.floor(rect_b) and range_w == math.floor(range_w)):
+        detections.append({
+            "category": "bot",
+            "score": 0.3,
+            "confidence": 0.4,
+            "reason": "DOMRect measurements are all exact integers (unusual)"
+        })
+    return detections
+
+
+def analyze_advanced_signals(signals: Dict, user_agent: str) -> List[Dict]:
+    detections = []
+    env = signals.get("environmental", {}) or {}
+    if "webrtcInfo" in env:
+        detections.extend(analyze_webrtc(env.get("webrtcInfo")))
+    if "speechInfo" in env:
+        detections.extend(analyze_speech_api(env.get("speechInfo")))
+    if "workerConsistency" in env:
+        detections.extend(analyze_worker_consistency(env.get("workerConsistency")))
+    if "cssMediaQueries" in env:
+        detections.extend(analyze_css_media_queries(env.get("cssMediaQueries"), signals))
+    if "fontsInfo" in env:
+        detections.extend(analyze_fonts(env.get("fontsInfo"), user_agent))
+    if "permissionsInfo" in env:
+        detections.extend(analyze_permissions(env.get("permissionsInfo")))
+    if "domRectFingerprint" in env:
+        detections.extend(analyze_dom_rect(env.get("domRectFingerprint")))
+    return detections
+
+
+# =============================================================================
 # HTTP Header Analysis
 # =============================================================================
 

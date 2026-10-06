@@ -266,7 +266,7 @@ function detectVisionAI(signals) {
         category: 'vision_ai', score: 0.8, confidence: 0.7,
         reason: 'PoW completed impossibly fast'
       });
-    } else if (pow.duration > expectedMax * 3) {
+    } else if (pow.duration > expectedMax * 10) {
       detections.push({
         category: 'vision_ai', score: 0.6, confidence: 0.5,
         reason: 'PoW timing suggests external processing'

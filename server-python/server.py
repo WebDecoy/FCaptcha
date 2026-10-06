@@ -325,6 +325,8 @@ class ThreatCategory(str, Enum):
     BEHAVIORAL = "behavioral"
     FINGERPRINT = "fingerprint"
     RATE_LIMIT = "rate_limit"
+    DATACENTER = "datacenter"
+    TOR_VPN = "tor_vpn"
     DECLARED_AI = "declared_ai"
 
 
@@ -666,6 +668,8 @@ WEIGHTS = {
     ThreatCategory.BEHAVIORAL: 0.18,
     ThreatCategory.FINGERPRINT: 0.08,
     ThreatCategory.RATE_LIMIT: 0.01,
+    ThreatCategory.DATACENTER: 0.07,
+    ThreatCategory.TOR_VPN: 0.01,
     ThreatCategory.BOT: 0.13,
     ThreatCategory.DECLARED_AI: 0.02,
 }
@@ -924,7 +928,7 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
                     "PoW completed impossibly fast",
                     {"duration": duration, "expected_min": expected_min}
                 ))
-            elif duration > expected_max * 3:
+            elif duration > expected_max * 10:
                 detections.append(Detection(
                     ThreatCategory.VISION_AI, 0.6, 0.5,
                     "PoW timing suggests external processing"
@@ -1027,7 +1031,7 @@ def detect_headless(signals: Dict, user_agent: str) -> List[Detection]:
                 ThreatCategory.HEADLESS, 0.6, 0.6,
                 "No browser plugins detected"
             ))
-        if not automation.get("languages"):
+        if automation.get("languages") is False:
             detections.append(Detection(
                 ThreatCategory.HEADLESS, 0.5, 0.5,
                 "No navigator.languages"
@@ -1035,7 +1039,7 @@ def detect_headless(signals: Dict, user_agent: str) -> List[Detection]:
 
     # Headless indicators
     if headless:
-        if not headless.get("hasOuterDimensions"):
+        if headless.get("hasOuterDimensions") is False:
             detections.append(Detection(
                 ThreatCategory.HEADLESS, 0.7, 0.7,
                 "Window lacks outer dimensions"
@@ -1923,7 +1927,7 @@ def run_verification(
         check_ip_reputation, analyze_headers,
         check_browser_consistency, check_ja3_fingerprint,
         check_ja4_fingerprint, get_trusted_ja4_header_names, read_ja4_from_headers,
-        analyze_form_interaction, check_declared_ai_agent
+        analyze_form_interaction, check_declared_ai_agent, analyze_advanced_signals
     )
 
     detections = []
@@ -2092,6 +2096,14 @@ def run_verification(
             detections.append(Detection(
                 ThreatCategory.BOT, d["score"], d["confidence"], d["reason"]
             ))
+
+    # Advanced fingerprint signals
+    for d in analyze_advanced_signals(signals, user_agent):
+        cat = d["category"]
+        category = ThreatCategory(cat) if cat in [e.value for e in ThreatCategory] else ThreatCategory.BOT
+        detections.append(Detection(
+            category, d["score"], d["confidence"], d["reason"]
+        ))
 
     # TLS fingerprint (JA3) — client-supplied, spoofable
     if ja3_hash:
