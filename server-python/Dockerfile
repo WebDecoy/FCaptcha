@@ -9,7 +9,7 @@
 # resolves the widget at ../client/fcaptcha.js relative to its own directory, so
 # keeping server-python/ and client/ as siblings means it works with no
 # configuration, exactly as it does from a checkout.
-FROM python:3.14.7-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
+FROM python:3.14.7-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d
 
 WORKDIR /app/server-python
 
