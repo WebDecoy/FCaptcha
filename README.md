@@ -9,7 +9,7 @@
 **Open source CAPTCHA that blocks bots, vision AI agents, and automation - with a single click or less.**
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Go](https://img.shields.io/badge/Go-1.26.8+-00ADD8?logo=go)
+![Go](https://img.shields.io/badge/Go-1.26.9+-00ADD8?logo=go)
 ![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python)
 ![Node](https://img.shields.io/badge/Node-22+-339933?logo=node.js)
 [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?logo=docker)](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha)
