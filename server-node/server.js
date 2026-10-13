@@ -165,7 +165,10 @@ const CLIENT_PATH = process.env.FCAPTCHA_CLIENT_PATH
   || path.join(__dirname, '..', 'client', 'fcaptcha.js');
 
 if (process.env.FCAPTCHA_SERVE_CLIENT !== 'false') {
-  app.get('/fcaptcha.js', (req, res) => {
+  // The same file on each provider's script path, where it answers to that
+  // provider's global, so apps that let an admin change a Turnstile, hCaptcha
+  // or reCAPTCHA URL can point it here (see installCompat in the client).
+  app.get(['/fcaptcha.js', '/turnstile/v0/api.js', '/1/api.js', '/recaptcha/api.js'], (req, res) => {
     res.sendFile(CLIENT_PATH);
   });
 }

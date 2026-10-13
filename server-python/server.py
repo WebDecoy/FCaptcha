@@ -261,7 +261,13 @@ if os.getenv("FCAPTCHA_SERVE_CLIENT", "true").lower() != "false":
     # HEAD answers 405. Caching proxies revalidate with HEAD and uptime monitors
     # commonly probe with it, so a 405 here reads as an outage on a working
     # server.
+    # The same file on each provider's script path, where it answers to that
+    # provider's global, so apps that let an admin change a Turnstile, hCaptcha
+    # or reCAPTCHA URL can point it here (see installCompat in the client).
     @app.api_route("/fcaptcha.js", methods=["GET", "HEAD"])
+    @app.api_route("/turnstile/v0/api.js", methods=["GET", "HEAD"])
+    @app.api_route("/1/api.js", methods=["GET", "HEAD"])
+    @app.api_route("/recaptcha/api.js", methods=["GET", "HEAD"])
     async def fcaptcha_js():
         # charset is not optional here. A classic script served without one is
         # decoded using the *document's* encoding, so the widget's translated

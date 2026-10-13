@@ -85,6 +85,42 @@ Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is i
   invisible-mode browser form, an async verification dependency, and replay/failure tests.
 - [Node.js contact form](examples/contact-form/): Japanese/English local demo.
 
+## Integrations
+
+- **Statamic:** the [Captcha addon](https://statamic.com/addons/aryeh-raber/captcha)
+  supports FCaptcha from v1.18.0. Install it with
+  `composer require aryehraber/statamic-captcha`, set `CAPTCHA_SERVICE=Fcaptcha`
+  and `CAPTCHA_SERVER_URL` to your server, and add `{{ captcha }}` to your forms.
+  [Setup guide](https://github.com/aryehraber/statamic-captcha#installation).
+- **Gitea:** use its reCAPTCHA setting, pointed at your FCaptcha server:
+
+  ```ini
+  [service]
+  ENABLE_CAPTCHA    = true
+  CAPTCHA_TYPE      = recaptcha
+  RECAPTCHA_URL     = https://your-fcaptcha-server.com/recaptcha/
+  RECAPTCHA_SITEKEY = your-site-key
+  RECAPTCHA_SECRET  = your FCAPTCHA_VERIFY_SECRET
+  ```
+
+### Apps that support Turnstile, hCaptcha or reCAPTCHA
+
+If an app lets you change both the provider's script URL and its siteverify
+URL, point them at your FCaptcha server. FCaptcha serves its widget on each
+provider's script path, where it answers to that provider's JavaScript API
+(`turnstile.render`, `hcaptcha.getResponse`, `grecaptcha.reset` and so on) and
+fills that provider's form field:
+
+| Provider | Script URL | Siteverify URL | Form field |
+|---|---|---|---|
+| Turnstile | `/turnstile/v0/api.js` | `/turnstile/v0/siteverify` | `cf-turnstile-response` |
+| hCaptcha | `/1/api.js` | `/siteverify` | `h-captcha-response` and `g-recaptcha-response` |
+| reCAPTCHA | `/recaptcha/api.js` | `/recaptcha/api/siteverify` | `g-recaptcha-response` |
+
+`score` in the siteverify response is FCaptcha's, where lower is more human. An
+app that only checks `success` needs nothing else. An app that thresholds a
+reCAPTCHA v3 score, where higher is more human, will reject real visitors.
+
 ## All features
 
 - **Drop-in for Turnstile / reCAPTCHA / hCaptcha** - Serves the same `siteverify` contract on the same paths, so migrating an existing backend is a base-URL change; tokens carry a signed `hostname` and `action` your app can check

@@ -3621,6 +3621,179 @@
     };
   };
 
+  // ============================================================
+  // Provider compatibility (Turnstile / hCaptcha / reCAPTCHA)
+  // ============================================================
+
+  // Apps that support Turnstile, hCaptcha or reCAPTCHA load the provider's
+  // api.js and call its global — turnstile.render, hcaptcha.getResponse,
+  // grecaptcha.execute. Several let an admin change both the script URL and the
+  // siteverify URL, but nothing else, so the server serves this file on each
+  // provider's script path and the file answers to that provider's global.
+  //
+  // Keyed on the path the page loaded us from, never installed otherwise: a page
+  // that loads the real Turnstile next to /fcaptcha.js must keep the real one.
+  const COMPAT_PROVIDERS = [
+    { suffix: '/turnstile/v0/api.js', global: 'turnstile', selector: '.cf-turnstile',
+      fields: ['cf-turnstile-response'], numericIds: false },
+    { suffix: '/1/api.js', global: 'hcaptcha', selector: '.h-captcha',
+      // hCaptcha writes both, for backends written against reCAPTCHA.
+      fields: ['h-captcha-response', 'g-recaptcha-response'], numericIds: false },
+    { suffix: '/recaptcha/api.js', global: 'grecaptcha', selector: '.g-recaptcha',
+      fields: ['g-recaptcha-response'], numericIds: true },
+  ];
+
+  function installCompat(script) {
+    let url;
+    try { url = new URL(script.src, location.href); } catch (e) { return; }
+    const provider = COMPAT_PROVIDERS.find(p => url.pathname.endsWith(p.suffix));
+    if (!provider || window[provider.global]) return;
+
+    // Loaded by path from the FCaptcha server, so that server is the API. An
+    // explicit FCaptcha.configure still wins.
+    if (!FCaptcha.serverUrl) {
+      FCaptcha.serverUrl = url.origin + url.pathname.slice(0, -provider.suffix.length);
+    }
+
+    const params = url.searchParams;
+    const lang = params.get('hl') || params.get('language') || null;
+    const ids = [];   // compat id -> FCaptcha widget id, in render order
+    const expiredIds = new Set();
+    const fallbackSiteKey = () => {
+      const r = params.get('render');
+      return r && r !== 'explicit' && r !== 'onload' ? r : null;
+    };
+
+    const fn = (value) => typeof value === 'function' ? value
+      : (typeof value === 'string' && typeof window[value] === 'function' ? window[value] : null);
+
+    const resolve = (ref) => {
+      if (ref === undefined || ref === null || ref === '') return ids[ids.length - 1];
+      if (typeof ref === 'number') return ids[ref];
+      if (ids.includes(ref)) return ref;
+      const el = typeof ref === 'string' ? document.querySelector(ref) : ref;
+      for (const id of ids) {
+        const w = FCaptcha.widgets.get(id);
+        if (w && w.container === el) return id;
+      }
+      return undefined;
+    };
+
+    const setExtraFields = (container, token) => {
+      for (const name of provider.fields.slice(1)) {
+        let input = container.querySelector(`input[name="${name}"]`);
+        if (!input) {
+          input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          container.appendChild(input);
+        }
+        input.value = token;
+      }
+    };
+
+    const render = (container, opts = {}) => {
+      const el = typeof container === 'string'
+        ? (document.getElementById(container) || document.querySelector(container))
+        : container;
+      if (!el) throw new Error(`${provider.global}: container not found`);
+      const data = el.dataset || {};
+      const pick = (key, dataKey) => opts[key] !== undefined ? opts[key] : data[dataKey];
+
+      const siteKey = pick('sitekey', 'sitekey') || fallbackSiteKey();
+      let theme = pick('theme', 'theme') || 'light';
+      if (theme === 'auto') {
+        theme = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      const callback = fn(pick('callback', 'callback'));
+      const expired = fn(pick('expired-callback', 'expiredCallback'));
+      const error = fn(pick('error-callback', 'errorCallback'));
+      const fieldName = pick('response-field-name', 'responseFieldName') || provider.fields[0];
+
+      const id = FCaptcha.render(el, {
+        siteKey,
+        theme,
+        lang: pick('language', 'language') || pick('hl', 'hl') || lang,
+        responseField: pick('response-field', 'responseField') !== false && data.responseField !== 'false',
+        responseFieldName: fieldName,
+        callback: (token) => {
+          expiredIds.delete(id);
+          setExtraFields(el, token);
+          if (callback) callback(token);
+        },
+        expiredCallback: () => {
+          expiredIds.add(id);
+          setExtraFields(el, '');
+          if (expired) expired();
+        },
+        errorCallback: (reason) => { if (error) error(reason); },
+      });
+      ids.push(id);
+      return provider.numericIds ? ids.length - 1 : id;
+    };
+
+    const api = {
+      render,
+      getResponse: (ref) => FCaptcha.getResponse(resolve(ref)) || '',
+      reset: (ref) => {
+        const id = resolve(ref);
+        const w = FCaptcha.widgets.get(id);
+        if (w) setExtraFields(w.container, '');
+        FCaptcha.reset(id);
+      },
+      remove: (ref) => {
+        const id = resolve(ref);
+        FCaptcha.destroy(id);
+        const i = ids.indexOf(id);
+        if (i !== -1) ids[i] = undefined;
+      },
+      ready: (cb) => {
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cb);
+        else cb();
+      },
+      // There is no programmatic click to make on a checkbox: a synthetic one is
+      // exactly what the widget scores as automation. Invisible-style callers
+      // get an invisible-mode token instead.
+      execute: (ref, opts = {}) => {
+        // grecaptcha v3: execute(siteKey, { action }) -> Promise<token>
+        if (provider.global === 'grecaptcha' && typeof ref === 'string' && !ids.includes(ref) && !document.querySelector('#' + CSS.escape(ref))) {
+          return FCaptcha.execute(ref, { action: opts.action || '' }).then(r => r.token || '');
+        }
+        const id = resolve(ref);
+        const w = FCaptcha.widgets.get(id);
+        const siteKey = w ? w.options.siteKey : fallbackSiteKey();
+        const run = FCaptcha.execute(siteKey, { action: opts.action || '', cdata: opts.cdata || '' }).then(r => {
+          const token = r.token || '';
+          if (w && token) w._showSuccess(token);
+          return token;
+        });
+        // hcaptcha.execute(id, { async: true }) resolves to { response }
+        if (provider.global === 'hcaptcha') return opts.async ? run.then(response => ({ response })) : undefined;
+        if (provider.global === 'turnstile') return undefined;
+        return run;
+      },
+      isExpired: (ref) => expiredIds.has(resolve(ref)),
+    };
+    window[provider.global] = api;
+
+    const start = () => {
+      if (params.get('render') !== 'explicit') {
+        document.querySelectorAll(provider.selector).forEach(el => {
+          if (!el.dataset.fcaptchaRendered) {
+            el.dataset.fcaptchaRendered = '1';
+            render(el);
+          }
+        });
+      }
+      const onload = fn(params.get('onload'));
+      if (onload) onload();
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else setTimeout(start, 0);
+  }
+
+  if (document.currentScript) installCompat(document.currentScript);
+
   // Auto-init
   FCaptcha.autoInit = function() {
     document.querySelectorAll('[data-fcaptcha]').forEach(container => {

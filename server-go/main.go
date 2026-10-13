@@ -316,8 +316,13 @@ func main() {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		http.ServeFile(w, r, clientPath)
 	}
-	r.Get("/fcaptcha.js", serveClient)
-	r.Head("/fcaptcha.js", serveClient)
+	// The same file on each provider's script path, where it answers to that
+	// provider's global, so apps that let an admin change a Turnstile, hCaptcha
+	// or reCAPTCHA URL can point it here (see installCompat in the client).
+	for _, p := range []string{"/fcaptcha.js", "/turnstile/v0/api.js", "/1/api.js", "/recaptcha/api.js"} {
+		r.Get(p, serveClient)
+		r.Head(p, serveClient)
+	}
 	r.Handle("/demo/*", http.StripPrefix("/demo/", http.FileServer(http.Dir("./static/demo"))))
 
 	// Routes
