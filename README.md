@@ -4,8 +4,6 @@
 
 # F***Captcha
 
-[Prebuilt Docker image](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) · [Docker installation guide](docker/README.md)
-
 **Open source CAPTCHA that blocks bots, vision AI agents, and automation - with a single click or less.**
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -23,6 +21,59 @@
 
 FCaptcha is a modern CAPTCHA system designed to detect everything: traditional bots, headless browsers, automation frameworks, CAPTCHA farms, and the new generation of AI agents — from vision models that screenshot-and-click to computer-use agents that drive a real browser over the Chrome DevTools Protocol.
 
+## Try it in 60 seconds
+
+**1. Run the server**
+
+```bash
+export FCAPTCHA_SECRET="$(openssl rand -hex 32)"
+docker run -d -p 127.0.0.1:3000:3000 -e FCAPTCHA_SECRET ghcr.io/webdecoy/fcaptcha:latest
+```
+
+The demo page is now at `http://localhost:3000/demo/`.
+
+**2. Add the widget to a form**
+
+```html
+<form method="post" action="/signup">
+  <input type="hidden" name="fcaptcha_token" id="fcaptcha-token">
+  <div data-fcaptcha="your-site-key" data-endpoint="http://localhost:3000" data-callback="onCaptcha"></div>
+  <button>Sign up</button>
+</form>
+<script>function onCaptcha(token) { document.getElementById('fcaptcha-token').value = token; }</script>
+<script src="http://localhost:3000/fcaptcha.js"></script>
+```
+
+**3. Verify the token on your backend** with the call you already make to Turnstile, reCAPTCHA or hCaptcha, pointed at your own server:
+
+```diff
+- https://challenges.cloudflare.com/turnstile/v0/siteverify
++ http://localhost:3000/turnstile/v0/siteverify
+```
+
+Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is in the [full Quick Start](#quick-start).
+
+## Why FCaptcha
+
+- **It catches AI agents, not just bots.** Vision agents that screenshot and click, and computer-use agents that drive a real browser over CDP, leave input-event traces that FCaptcha scores. [How](#ai-agent-detection)
+- **It replaces Turnstile, reCAPTCHA or hCaptcha by changing a base URL.** It serves the same `siteverify` contract on the same paths.
+- **It runs on your server.** No cookies, no third parties, no phone-home. [COMPLIANCE.md](COMPLIANCE.md) lists every retention window.
+- **No puzzle to fail.** Screen-reader, keyboard-only, tremor and elderly personas run against a false-positive budget in CI that fails the build when exceeded.
+- **The algorithm is open.** Every score is itemised with a reason, and every threshold came from [measured browser traces](bench/).
+
+## How it compares
+
+| | FCaptcha | reCAPTCHA | hCaptcha | Turnstile | ALTCHA | mCaptcha |
+|---|---|---|---|---|---|---|
+| Self-hosted | Yes | No | No | No | Yes | Yes |
+| Open source | MIT | No | No | No | MIT | AGPL |
+| Image or audio puzzle | Never | Sometimes | Sometimes | Never | Never | Never |
+| Visitor data sent to a third party | No | Google | hCaptcha | Cloudflare | No | No |
+| Behavioural and environmental bot detection | Yes, open source | Yes, proprietary | Yes, proprietary | Yes, proprietary | Proof of work only[^altcha] | Proof of work only |
+| Turnstile-compatible `siteverify` | Yes | No | No | Yes | No | No |
+
+[^altcha]: The open-source ALTCHA widget. ALTCHA also sells separate commercial products.
+
 ## Runnable examples
 
 - [Hono middleware with FCaptcha verification](examples/hono/): browser demo,
@@ -34,7 +85,7 @@ FCaptcha is a modern CAPTCHA system designed to detect everything: traditional b
   invisible-mode browser form, an async verification dependency, and replay/failure tests.
 - [Node.js contact form](examples/contact-form/): Japanese/English local demo.
 
-## Features
+## All features
 
 - **Drop-in for Turnstile / reCAPTCHA / hCaptcha** - Serves the same `siteverify` contract on the same paths, so migrating an existing backend is a base-URL change; tokens carry a signed `hostname` and `action` your app can check
 - **Single click or invisible** - Checkbox mode like Turnstile/reCAPTCHA v2, or invisible mode like reCAPTCHA v3
