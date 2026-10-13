@@ -2,7 +2,6 @@ package main
 
 import (
 	"math"
-	"strings"
 	"testing"
 )
 
@@ -128,27 +127,16 @@ func TestNonCorroboratingDetectionsStillScore(t *testing.T) {
 	}
 }
 
-// The mark has to be on the literal the engine emits, or the exclusion above
-// protects nobody.
-func TestConsoleAttachedIsNonCorroborating(t *testing.T) {
+// The console-attach probe fired in every real Chrome and Safari session
+// measured, with no DevTools and no extensions, so it is collected but not scored.
+func TestConsoleAttachedIsNotScored(t *testing.T) {
 	e := NewScoringEngine("test-secret")
 	got := e.detectCDP(map[string]interface{}{
 		"behavioral":    map[string]interface{}{"touchEvents": 0.0},
 		"environmental": map[string]interface{}{"cdpRuntime": map[string]interface{}{"consoleAttached": true}},
 	})
-	found := false
-	for _, d := range got {
-		if strings.Contains(d.Reason, "console consumer attached") {
-			found = true
-			if !d.NonCorroborating {
-				t.Errorf("console-attach probe must be marked NonCorroborating: %+v", d)
-			}
-		} else if d.NonCorroborating {
-			t.Errorf("only the console-attach probe should carry the mark, got %+v", d)
-		}
-	}
-	if !found {
-		t.Fatal("expected the console-attach detection to fire")
+	if len(got) != 0 {
+		t.Errorf("expected no CDP detections from the console probe, got %+v", got)
 	}
 }
 

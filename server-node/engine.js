@@ -585,17 +585,9 @@ function detectCDP(signals) {
     }
   }
 
-  // CDP Runtime/DevTools console consumer attached. Low confidence: a developer
-  // with DevTools open also trips this, so it contributes rather than blocks.
-  if (env.cdpRuntime && env.cdpRuntime.consoleAttached) {
-    detections.push({
-      category: 'cdp', score: 0.6, confidence: 0.5,
-      reason: 'CDP/DevTools console consumer attached (automation protocol or open DevTools)',
-      // A developer with DevTools open produces exactly this signal, so it
-      // cannot be one of the independent views the corroboration floor counts.
-      nonCorroborating: true
-    });
-  }
+  // cdpRuntime.consoleAttached is collected but not scored: measured on real
+  // visitors it fires in every Chrome and Safari session (no DevTools, no
+  // extensions), so it cannot tell a person from an agent.
 
   if (cdp.detected) {
     const signalList = cdp.signals || [];

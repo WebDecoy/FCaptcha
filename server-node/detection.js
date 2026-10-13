@@ -1031,18 +1031,6 @@ function analyzeFonts(fontsInfo, userAgent) {
     });
   }
 
-  // Mac UA but no SF Pro (modern macOS)
-  if ((ua.includes('mac os x') || ua.includes('macintosh')) && fontsInfo.hasSFPro === false &&
-      ua.includes('10_15') === false && ua.includes('10_14') === false && fontsInfo.count > 5) {
-    // SF Pro is on macOS 10.15+ (Catalina and later)
-    detections.push({
-      category: 'bot',
-      score: 0.3,
-      confidence: 0.4,
-      reason: 'Modern macOS UA but SF Pro font not detected'
-    });
-  }
-
   // Linux UA but no DejaVu Sans (very common on Linux)
   if (ua.includes('linux') && !ua.includes('android') &&
       fontsInfo.hasDejaVuSans === false && fontsInfo.count > 5) {

@@ -310,15 +310,6 @@ func analyzeFonts(fontsInfo map[string]interface{}, userAgent string) []Detectio
 			Reason:     "Windows UA but Segoe UI font not detected",
 		})
 	}
-	if (strings.Contains(ua, "mac os x") || strings.Contains(ua, "macintosh")) && !getBool(fontsInfo, "hasSFPro") &&
-		!strings.Contains(ua, "10_15") && !strings.Contains(ua, "10_14") && count > 5 {
-		detections = append(detections, DetectionResult{
-			Category:   CategoryBot,
-			Score:      0.3,
-			Confidence: 0.4,
-			Reason:     "Modern macOS UA but SF Pro font not detected",
-		})
-	}
 	if strings.Contains(ua, "linux") && !strings.Contains(ua, "android") && !getBool(fontsInfo, "hasDejaVuSans") && count > 5 {
 		detections = append(detections, DetectionResult{
 			Category:   CategoryBot,

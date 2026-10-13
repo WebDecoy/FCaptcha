@@ -1618,19 +1618,9 @@ func (e *ScoringEngine) detectCDP(signals map[string]interface{}) []DetectionRes
 		}
 	}
 
-	// CDP Runtime/DevTools console consumer attached. Low confidence: a developer
-	// with DevTools open also trips this, so it contributes rather than blocks.
-	if cdpRuntime := getMap(env, "cdpRuntime"); getBool(cdpRuntime, "consoleAttached") {
-		results = append(results, DetectionResult{
-			Category:   CategoryCDP,
-			Score:      0.6,
-			Confidence: 0.5,
-			Reason:     "CDP/DevTools console consumer attached (automation protocol or open DevTools)",
-			// A developer with DevTools open produces exactly this signal, so it
-			// cannot be one of the independent views the corroboration floor counts.
-			NonCorroborating: true,
-		})
-	}
+	// cdpRuntime.consoleAttached is collected but not scored: measured on real
+	// visitors it fires in every Chrome and Safari session (no DevTools, no
+	// extensions), so it cannot tell a person from an agent.
 
 	cdp := getMap(env, "cdp")
 

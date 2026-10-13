@@ -511,8 +511,8 @@ func TestDetectCDP_InputForensics(t *testing.T) {
 	if !hasReasonContaining(got, "incoherent with position") {
 		t.Errorf("expected movement-incoherence detection, got %+v", got)
 	}
-	if !hasReasonContaining(got, "console consumer attached") {
-		t.Errorf("expected CDP console detection, got %+v", got)
+	if hasReasonContaining(got, "console consumer attached") {
+		t.Errorf("console-attach probe fires for real visitors and must not score, got %+v", got)
 	}
 
 	// Real mouse: moves coalesced normally, movement coherent, no console.

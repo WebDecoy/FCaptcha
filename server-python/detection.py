@@ -210,13 +210,6 @@ def analyze_fonts(fonts_info: Optional[Dict], user_agent: str) -> List[Dict]:
             "confidence": 0.6,
             "reason": "Windows UA but Segoe UI font not detected"
         })
-    if ("mac os x" in ua or "macintosh" in ua) and fonts_info.get("hasSFPro") is False and "10_15" not in ua and "10_14" not in ua and count > 5:
-        detections.append({
-            "category": "bot",
-            "score": 0.3,
-            "confidence": 0.4,
-            "reason": "Modern macOS UA but SF Pro font not detected"
-        })
     if "linux" in ua and "android" not in ua and fonts_info.get("hasDejaVuSans") is False and count > 5:
         detections.append({
             "category": "bot",
