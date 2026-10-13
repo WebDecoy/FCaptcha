@@ -2847,6 +2847,10 @@
         callback: null,
         errorCallback: null,
         expiredCallback: null,
+        // A hidden input carrying the token, so a widget inside a <form>
+        // submits with it and needs no callback (as Turnstile does).
+        responseField: true,
+        responseFieldName: 'fcaptcha_token',
         powDifficulty: 4
       }, options);
 
@@ -2871,6 +2875,7 @@
 
     _init() {
       this._createWidget();
+      this._createResponseField();
       this._attachListeners();
       // Fetch challenge eagerly but defer solving until signals are collected
       this._fetchChallenge();
@@ -2882,6 +2887,23 @@
       } catch (e) {
         console.warn('PoW challenge fetch failed:', e);
       }
+    }
+
+    // Skipped when the form already has a field of that name, which is how
+    // integrations wired the token before this existed: two same-named fields
+    // post as an array on most backends, and the callback-filled one would
+    // then sit beside an empty duplicate.
+    _createResponseField() {
+      this.responseInput = null;
+      if (this.options.responseField === false) return;
+      const name = this.options.responseFieldName || 'fcaptcha_token';
+      const form = this.container.closest('form');
+      if (form && Array.from(form.elements).some(el => el.name === name)) return;
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      this.container.appendChild(input);
+      this.responseInput = input;
     }
 
     _createWidget() {
@@ -3178,6 +3200,7 @@
 
       this._armTokenExpiry();
 
+      if (this.responseInput) this.responseInput.value = token;
       if (this.options.callback) this.options.callback(token);
       this.container.dispatchEvent(new CustomEvent('fcaptcha:verified', { detail: { token } }));
     }
@@ -3254,6 +3277,7 @@
       this._clearTokenExpiry();
       this.verified = false;
       this.token = null;
+      if (this.responseInput) this.responseInput.value = '';
       this.behavioral = new BehavioralCollector();
       this.temporal = new TemporalCollector();
       if (this.sensor) this.sensor.detach();
@@ -3606,10 +3630,12 @@
       const callback = container.dataset.callback ? window[container.dataset.callback] : null;
       // null rather than a default, so detection still runs when unset.
       const lang = container.dataset.lang || null;
+      const responseField = container.dataset.responseField !== 'false';
+      const responseFieldName = container.dataset.responseFieldName || undefined;
 
       if (endpoint) FCaptcha.serverUrl = endpoint;
 
-      FCaptcha.render(container, { siteKey, theme, lang, callback });
+      FCaptcha.render(container, { siteKey, theme, lang, callback, responseField, responseFieldName });
     });
   };
 

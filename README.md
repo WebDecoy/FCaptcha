@@ -194,6 +194,12 @@ The minified bundle is approximately 74 KB, 19 KB over the wire with Brotli. Run
 </script>
 ```
 
+A widget inside a `<form>` also adds a hidden `fcaptcha_token` input, so the
+token is submitted with the form and the callback is optional. Rename it with
+`responseFieldName` (`data-response-field-name`) or turn it off with
+`responseField: false` (`data-response-field="false"`). If the form already has
+a field with that name, the widget leaves it to you and adds none.
+
 **Language**
 
 The widget picks a language automatically: an explicit `lang` option, else
