@@ -1223,16 +1223,9 @@ def detect_cdp(signals: Dict) -> List[Detection]:
                 "Pointer movement deltas incoherent with position (synthetic input)"
             ))
 
-    # CDP Runtime/DevTools console consumer attached. Low confidence: a developer
-    # with DevTools open also trips this, so it contributes rather than blocks.
-    if env.get("cdpRuntime", {}).get("consoleAttached"):
-        detections.append(Detection(
-            ThreatCategory.CDP, 0.6, 0.5,
-            "CDP/DevTools console consumer attached (automation protocol or open DevTools)",
-            # A developer with DevTools open produces exactly this signal, so it
-            # cannot be one of the independent views the corroboration floor counts.
-            non_corroborating=True,
-        ))
+    # cdpRuntime.consoleAttached is collected but not scored: measured on real
+    # visitors it fires in every Chrome and Safari session (no DevTools, no
+    # extensions), so it cannot tell a person from an agent.
 
     if not cdp.get("detected"):
         return detections

@@ -303,11 +303,11 @@ def a_non_corroborating_detection_still_scores_its_category():
 
 
 @test
-def the_console_attach_probe_carries_the_mark_and_only_it():
+def the_console_attach_probe_is_not_scored():
+    # Fired in every real Chrome and Safari session measured, with no DevTools
+    # and no extensions, so it is collected but not scored.
     dets = detect_cdp({"behavioral": {"touchEvents": 0}, "environmental": {"cdpRuntime": {"consoleAttached": True}}})
-    probe = [d for d in dets if "console consumer attached" in d.reason]
-    assert probe and probe[0].non_corroborating, dets
-    assert sum(1 for d in dets if d.non_corroborating) == 1, dets
+    assert dets == [], dets
 
 
 @test

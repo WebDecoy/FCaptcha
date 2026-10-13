@@ -62,12 +62,11 @@ test('a non-corroborating detection still scores its category', () => {
   assert.ok(Math.abs(scores.cdp - 0.3) < 1e-9, `cdp scored ${scores.cdp}`);
 });
 
-test('the console-attach probe carries the mark, and only it', () => {
+// The probe fired in every real Chrome and Safari session measured, with no
+// DevTools and no extensions, so it is collected but not scored.
+test('the console-attach probe is not scored', () => {
   const dets = detectCDP({ behavioral: { touchEvents: 0 }, environmental: { cdpRuntime: { consoleAttached: true } } });
-  const probe = dets.find((d) => /console consumer attached/.test(d.reason));
-  assert.ok(probe, 'expected the console-attach detection to fire');
-  assert.equal(probe.nonCorroborating, true);
-  assert.equal(dets.filter((d) => d.nonCorroborating).length, 1);
+  assert.deepEqual(dets, []);
 });
 
 // Live measurements from the webdecoy.com demo, 2026-09-09, v1.35.0. An
