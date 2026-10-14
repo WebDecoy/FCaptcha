@@ -28,7 +28,8 @@ const {
   sanitizeAction,
   sanitizeCdata,
   secretMatches,
-  siteverifyAsync
+  siteverifyAsync,
+  asRecaptchaScore
 } = require('./siteverify');
 
 const app = express();
@@ -960,17 +961,16 @@ app.post('/api/token/verify', asyncRoute(async (req, res) => {
 // integration at this server should be a base-URL change and nothing else.
 // See siteverify.js for the adapter itself.
 async function siteverifyHandler(req, res) {
-  res.json(
-    await siteverifyAsync({
-      body: req.body,
-      // Bind to this server's token store, so replay state is shared with the
-      // native endpoint rather than kept in a parallel universe.
-      verifyToken,
-      expectedSecret: VERIFY_SECRET,
-      idempotencyStore: IDEMPOTENCY,
-      requireSecret: !LEGACY_UNAUTH_VERIFY
-    })
-  );
+  const out = await siteverifyAsync({
+    body: req.body,
+    // Bind to this server's token store, so replay state is shared with the
+    // native endpoint rather than kept in a parallel universe.
+    verifyToken,
+    expectedSecret: VERIFY_SECRET,
+    idempotencyStore: IDEMPOTENCY,
+    requireSecret: !LEGACY_UNAUTH_VERIFY
+  });
+  res.json(req.path === '/recaptcha/api/siteverify' ? asRecaptchaScore(out) : out);
 }
 
 app.post('/turnstile/v0/siteverify', asyncRoute(siteverifyHandler));

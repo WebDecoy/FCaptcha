@@ -240,6 +240,20 @@ class IdempotencyStore:
         )
 
 
+def as_recaptcha_score(out: Dict[str, Any]) -> Dict[str, Any]:
+    """Restate a response in reCAPTCHA v3's score direction.
+
+    reCAPTCHA scores run 1.0 = human, 0.0 = bot, and every integration compares
+    ``score >= threshold``. FCaptcha's run the other way, so served unchanged on
+    the reCAPTCHA path they would reject people and admit bots. The native score
+    stays available as ``fcaptcha_score``.
+    """
+    score = out.get("score") if isinstance(out, dict) else None
+    if not isinstance(score, (int, float)) or isinstance(score, bool):
+        return out
+    return {**out, "score": round(1 - score, 4), "fcaptcha_score": score}
+
+
 def failure(*codes: str) -> Dict[str, Any]:
     """A failing siteverify response carrying the given codes."""
     return {"success": False, "error-codes": list(codes)}

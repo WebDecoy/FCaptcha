@@ -39,6 +39,7 @@ from siteverify import (
     sanitize_cdata,
     secret_matches,
     siteverify,
+    as_recaptcha_score,
 )
 from inputforensics import detect_input_forensics
 from suspicion import (
@@ -2394,7 +2395,7 @@ async def _read_siteverify_body(request: Request) -> Any:
 
 async def _siteverify_route(request: Request):
     body = await _read_siteverify_body(request)
-    return await run_stateful(siteverify,
+    out = await run_stateful(siteverify,
         body=body,
         # Bind to this server's token store, so replay state is shared with the
         # native endpoint rather than kept in a parallel universe.
@@ -2403,6 +2404,9 @@ async def _siteverify_route(request: Request):
         idempotency_store=IDEMPOTENCY,
         require_secret=REQUIRE_VERIFY_SECRET,
     )
+    if request.url.path == "/recaptcha/api/siteverify":
+        return as_recaptcha_score(out)
+    return out
 
 
 app.post("/turnstile/v0/siteverify")(_siteverify_route)

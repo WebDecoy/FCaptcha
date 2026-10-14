@@ -237,6 +237,19 @@ class IdempotencyStore {
   }
 }
 
+/**
+ * Restate a response in reCAPTCHA v3's score direction.
+ *
+ * reCAPTCHA scores run 1.0 = human, 0.0 = bot, and every integration compares
+ * `score >= threshold`. FCaptcha's run the other way, so served unchanged on the
+ * reCAPTCHA path they would reject people and admit bots. The native score
+ * stays available as `fcaptcha_score`.
+ */
+function asRecaptchaScore(out) {
+  if (!out || typeof out.score !== 'number') return out;
+  return { ...out, score: Math.round((1 - out.score) * 10000) / 10000, fcaptcha_score: out.score };
+}
+
 /** A failing siteverify response carrying the given codes. */
 function failure(...codes) {
   return { success: false, 'error-codes': codes };
@@ -355,6 +368,7 @@ async function siteverifyAsync({
 
 module.exports = {
   ERROR_CODES,
+  asRecaptchaScore,
   HostnameAllowlist,
   IdempotencyStore,
   hostFromUrl,

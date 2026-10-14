@@ -117,9 +117,10 @@ fills that provider's form field:
 | hCaptcha | `/1/api.js` | `/siteverify` | `h-captcha-response` and `g-recaptcha-response` |
 | reCAPTCHA | `/recaptcha/api.js` | `/recaptcha/api/siteverify` | `g-recaptcha-response` |
 
-`score` in the siteverify response is FCaptcha's, where lower is more human. An
-app that only checks `success` needs nothing else. An app that thresholds a
-reCAPTCHA v3 score, where higher is more human, will reject real visitors.
+`score` in the siteverify response is FCaptcha's, where lower is more human.
+On `/recaptcha/api/siteverify` it follows reCAPTCHA v3 instead, where higher is
+more human, so an app's existing threshold keeps working; FCaptcha's own score
+is in `fcaptcha_score` there.
 
 ## All features
 

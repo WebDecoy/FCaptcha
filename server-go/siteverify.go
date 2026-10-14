@@ -41,6 +41,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -118,6 +119,26 @@ type TokenBinding struct {
 // then get a value from two servers and nothing from the third. Building the
 // object explicitly, the way the other two do, keeps them byte-comparable.
 type SiteverifyResponse = map[string]interface{}
+
+// asRecaptchaScore restates a response in reCAPTCHA v3's score direction.
+//
+// reCAPTCHA scores run 1.0 = human, 0.0 = bot, and every integration compares
+// score >= threshold. FCaptcha's run the other way, so served unchanged on the
+// reCAPTCHA path they would reject people and admit bots. The native score
+// stays available as fcaptcha_score. Returns a copy: resp may be cached.
+func asRecaptchaScore(resp SiteverifyResponse) SiteverifyResponse {
+	s, ok := resp["score"].(float64)
+	if !ok {
+		return resp
+	}
+	out := make(SiteverifyResponse, len(resp)+1)
+	for k, v := range resp {
+		out[k] = v
+	}
+	out["score"] = math.Round((1-s)*10000) / 10000
+	out["fcaptcha_score"] = s
+	return out
+}
 
 // siteverifyFailure is the failure shape: success plus codes, nothing else,
 // matching Cloudflare's.
@@ -397,6 +418,9 @@ func siteverifyHandler(engine *ScoringEngine, trust *ProxyTrust, store *Idempote
 			// Callers index into error-codes, so it is never null on the wire.
 			if resp["error-codes"] == nil {
 				resp["error-codes"] = []string{}
+			}
+			if r.URL.Path == "/recaptcha/api/siteverify" {
+				resp = asRecaptchaScore(resp)
 			}
 			json.NewEncoder(w).Encode(resp)
 		}
