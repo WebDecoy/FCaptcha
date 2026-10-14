@@ -497,3 +497,27 @@ func TestTokensAreUnpaddedBase64URL(t *testing.T) {
 		t.Errorf("padded form must still decode: %v / %q", err, decoded)
 	}
 }
+
+// reCAPTCHA v3 integrations allow on score >= threshold, so that path reports
+// 1 - score. The other paths, and a cached response, keep FCaptcha's direction.
+func TestSiteverifyRecaptchaPathInvertsScore(t *testing.T) {
+	e := NewScoringEngine(testSecret)
+	h, _ := newTestHandler(e, true)
+	tok := mintToken(e, "", TokenBinding{})
+	body := "secret=" + testSecret + "&response=" + tok + "&idempotency_key=k1"
+
+	req := httptest.NewRequest(http.MethodPost, "/recaptcha/api/siteverify", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	h(w, req)
+	var rc map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &rc)
+	if rc["success"] != true || rc["score"] != 0.89 || rc["fcaptcha_score"] != 0.11 {
+		t.Fatalf("recaptcha path: want score 0.89 and fcaptcha_score 0.11, got %v", rc)
+	}
+
+	native := postForm(h, body)
+	if native["score"] != 0.11 || native["fcaptcha_score"] != nil {
+		t.Fatalf("turnstile path must keep the native score, got %v", native)
+	}
+}

@@ -20,6 +20,7 @@ from siteverify import (
     MAX_CDATA_LENGTH,
     HostnameAllowlist,
     IdempotencyStore,
+    as_recaptcha_score,
     host_from_url,
     reason_to_error_code,
     request_hostname,
@@ -431,6 +432,17 @@ def tokens_are_unpadded_base64url():
     # and the decoder must still accept the padded form other versions emitted
     padded = base64.urlsafe_b64encode(FIXTURE_PAYLOAD.encode()).decode()
     assert _decode_token_base64(padded).decode() == FIXTURE_PAYLOAD
+
+
+@test
+def the_recaptcha_path_reports_the_score_in_recaptchas_direction():
+    # reCAPTCHA v3 integrations allow on score >= threshold, so that path
+    # reports 1 - score and keeps the native one alongside.
+    native = {"success": True, "error-codes": [], "score": 0.11}
+    assert as_recaptcha_score(native) == {"success": True, "error-codes": [], "score": 0.89, "fcaptcha_score": 0.11}
+    assert native["score"] == 0.11, "a cached response must not be mutated"
+    failed = {"success": False, "error-codes": ["invalid-input-response"]}
+    assert as_recaptcha_score(failed) is failed
 
 
 SiteverifyTests = test.testcase("SiteverifyTests")
