@@ -1,0 +1,2 @@
+# Coverage still uploads and reports as a status check; no PR comments.
+comment: false
