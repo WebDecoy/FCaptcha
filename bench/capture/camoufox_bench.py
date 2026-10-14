@@ -58,7 +58,8 @@ if (options.mode === 'invisible') {
     catch (e) { document.querySelector('#result').textContent = e.message; }
   };
 } else {
-  FCaptcha.render('captcha', {siteKey:options.siteKey, callback:show});
+  // The checkbox callback receives the token string, not a result object.
+  FCaptcha.render('captcha', {siteKey:options.siteKey, callback:(token) => show({success:true, token})});
 }
 document.body.dataset.ready = 'true';
 </script></body></html>"""

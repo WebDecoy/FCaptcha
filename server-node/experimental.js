@@ -8,6 +8,27 @@ const { calculateCategoryScores, BEHAVIOURAL_CATEGORIES, CORROBORATION_AGREE_AT,
 // change. An old selector must never silently opt an operator into a new policy.
 const EXPERIMENTAL_POLICY = 'stealth-corroboration-v1';
 const ANIMATION_POLICY = 'animation-consistency-v1';
+const POINTER_POLICY = 'pointer-movement-v1';
+const POINTER_MIN_SAMPLES = 30;
+const POINTER_ZERO_RATIO_BELOW = 0.05;
+
+// Moves where the pointer position changed but movementX/Y read 0. Measured on
+// real mice and trackpads in Chrome, Safari and Firefox, at 1x and 2x pixel
+// ratio: 14-38% of moves. Stealth CDP-driven Chrome: 0-3%. Observe only until
+// production traffic shows the rate on hardware the bench never saw.
+function pointerObservation(signals) {
+  const b = signals.behavioral || {};
+  const f = b.inputForensics || {};
+  const samples = f.pointerMoveSamples;
+  const ratio = f.pointerMoveZeroRatio;
+  const known = (b.touchEvents ?? 0) < 3 && Number.isFinite(samples) && samples >= POINTER_MIN_SAMPLES &&
+    Number.isFinite(ratio) && ratio >= 0 && ratio <= 1;
+  const status = !known ? 'unknown' : ratio < POINTER_ZERO_RATIO_BELOW ? 'detected' : 'clear';
+  return { mode: 'observe', status, detections: status === 'detected' ? [{
+    id: 'pointer-movement-never-zero',
+    reason: 'Pointer moves always report movement; experimental observation, not proof of automation',
+  }] : [] };
+}
 
 function animationObservation(signals) {
   const probe = signals.environmental?.animationConsistency;
@@ -55,8 +76,9 @@ function evaluateExperimental(signals, productionScore, detections, blocking = f
     observations: {
       [ANIMATION_POLICY]: animationObservation(signals),
       [IDENTITY_POLICY]: identityObservation(signals),
+      [POINTER_POLICY]: pointerObservation(signals),
     },
   };
 }
 
-module.exports = { evaluateExperimental, EXPERIMENTAL_POLICY };
+module.exports = { evaluateExperimental, pointerObservation, EXPERIMENTAL_POLICY, POINTER_POLICY };
