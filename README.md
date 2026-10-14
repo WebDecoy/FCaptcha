@@ -76,6 +76,8 @@ Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is i
 
 ## Runnable examples
 
+- [Next.js App Router form](examples/nextjs/): checkbox widget, server-side
+  verification, and replay/failure tests.
 - [Hono middleware with FCaptcha verification](examples/hono/): browser demo,
   server-side token checks, and replay/failure tests.
 - [Supabase Edge Function with FCaptcha verification](examples/supabase/):
