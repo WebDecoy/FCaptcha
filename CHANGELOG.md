@@ -13,6 +13,28 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.46.0] — 2026-10-15
+
+### Changed
+- **Breaking for `/recaptcha/api/siteverify` callers:** `score` on that path now
+  follows reCAPTCHA v3, where higher is more human (`1 - score`), so an app's
+  existing `score >= threshold` check works. FCaptcha's own score is returned
+  alongside as `fcaptcha_score`. Turnstile and hCaptcha paths are unchanged
+  (#132).
+
+### Fixed
+- Two checks that fired for ordinary visitors no longer add to the score: the
+  console-attach probe (`cdpRuntime.consoleAttached`), which fired in every
+  real Chrome and Safari session measured, and "Modern macOS UA but SF Pro
+  font not detected", which flagged every Firefox on macOS (#130).
+
+### Added
+- `pointer-movement-v1` in `experimental.observations`: reports whether pointer
+  moves ever show zero movement, as real mice and trackpads do. Observe-only;
+  it does not affect the score or the token decision (#134).
+- Next.js App Router example with server-side verification, by
+  [@CreedTech](https://github.com/CreedTech) (#131).
+
 ## [1.45.0] — 2026-10-13
 
 ### Added
