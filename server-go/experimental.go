@@ -94,6 +94,40 @@ func animationObservation(signals map[string]interface{}) ExperimentalObservatio
 	return result
 }
 
+const (
+	pointerPolicy         = "pointer-movement-v1"
+	pointerMinSamples     = 30
+	pointerZeroRatioBelow = 0.05
+)
+
+// pointerObservation counts moves where the pointer position changed but
+// movementX/Y read 0. Measured on real mice and trackpads in Chrome, Safari and
+// Firefox, at 1x and 2x pixel ratio: 14-38% of moves. Stealth CDP-driven
+// Chrome: 0-3%. Observe only until production traffic shows the rate on
+// hardware the bench never saw.
+func pointerObservation(signals map[string]interface{}) ExperimentalObservation {
+	b := getMap(signals, "behavioral")
+	f := getMap(b, "inputForensics")
+	samples, okSamples := f["pointerMoveSamples"].(float64)
+	ratio, okRatio := f["pointerMoveZeroRatio"].(float64)
+	known := getFloat(b, "touchEvents") < 3 && okSamples && samples >= pointerMinSamples &&
+		okRatio && ratio >= 0 && ratio <= 1
+	result := ExperimentalObservation{Mode: "observe", Status: "unknown", Detections: []ExperimentalDetection{}}
+	if !known {
+		return result
+	}
+	if ratio < pointerZeroRatioBelow {
+		result.Status = "detected"
+		result.Detections = append(result.Detections, ExperimentalDetection{
+			ID:     "pointer-movement-never-zero",
+			Reason: "Pointer moves always report movement; experimental observation, not proof of automation",
+		})
+	} else {
+		result.Status = "clear"
+	}
+	return result
+}
+
 type ExperimentalDetection struct {
 	ID     string `json:"id"`
 	Reason string `json:"reason"`
@@ -109,6 +143,7 @@ func evaluateExperimental(signals map[string]interface{}, productionScore float6
 		Observations: map[string]ExperimentalObservation{
 			"animation-consistency-v1": animationObservation(signals),
 			identityPolicy:             identityObservation(signals),
+			pointerPolicy:              pointerObservation(signals),
 		},
 	}
 	if blocking {

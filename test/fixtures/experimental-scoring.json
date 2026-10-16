@@ -54,6 +54,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -110,6 +115,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -149,6 +159,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -201,6 +216,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -232,6 +252,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -280,6 +305,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -319,6 +349,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -364,6 +399,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -415,6 +455,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -462,6 +507,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -567,6 +617,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -661,6 +716,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -761,6 +821,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -830,6 +895,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -905,6 +975,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -971,6 +1046,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -1071,6 +1151,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -1165,6 +1250,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -1265,6 +1355,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -1359,6 +1454,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -1459,6 +1559,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -1553,6 +1658,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -1653,6 +1763,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -1750,6 +1865,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -1843,6 +1963,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -1944,6 +2069,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -2011,6 +2141,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -2088,6 +2223,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -2188,6 +2328,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -2224,6 +2369,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -2266,6 +2416,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -2305,6 +2460,11 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
           }
         }
       }
@@ -2341,6 +2501,11 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -2438,6 +2603,289 @@
             "detections": []
           },
           "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "pointer-human-clear",
+      "signals": {
+        "behavioral": {
+          "touchEvents": 0,
+          "inputForensics": {
+            "pointerMoveSamples": 143,
+            "pointerMoveZeroRatio": 0.16
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "clear",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "pointer-stealth-detected",
+      "signals": {
+        "behavioral": {
+          "touchEvents": 0,
+          "inputForensics": {
+            "pointerMoveSamples": 101,
+            "pointerMoveZeroRatio": 0.0099
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "detected",
+            "detections": [
+              {
+                "id": "pointer-movement-never-zero",
+                "reason": "Pointer moves always report movement; experimental observation, not proof of automation"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "pointer-boundary-clear",
+      "signals": {
+        "behavioral": {
+          "touchEvents": 0,
+          "inputForensics": {
+            "pointerMoveSamples": 30,
+            "pointerMoveZeroRatio": 0.05
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "clear",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "pointer-too-few-samples-unknown",
+      "signals": {
+        "behavioral": {
+          "touchEvents": 0,
+          "inputForensics": {
+            "pointerMoveSamples": 29,
+            "pointerMoveZeroRatio": 0
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "pointer-touch-unknown",
+      "signals": {
+        "behavioral": {
+          "touchEvents": 12,
+          "inputForensics": {
+            "pointerMoveSamples": 80,
+            "pointerMoveZeroRatio": 0
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "pointer-malformed-unknown",
+      "signals": {
+        "behavioral": {
+          "touchEvents": 0,
+          "inputForensics": {
+            "pointerMoveSamples": 80,
+            "pointerMoveZeroRatio": "0"
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          }
+        }
+      }
+    },
+    {
+      "name": "pointer-out-of-range-unknown",
+      "signals": {
+        "behavioral": {
+          "touchEvents": 0,
+          "inputForensics": {
+            "pointerMoveSamples": 80,
+            "pointerMoveZeroRatio": 1.5
+          }
+        }
+      },
+      "detections": [],
+      "productionScore": 0.1,
+      "expected": {
+        "mode": "observe",
+        "policy": "stealth-corroboration-v1",
+        "score": 0.1,
+        "wouldBlock": false,
+        "detections": [],
+        "corroboratingCategories": [],
+        "observations": {
+          "animation-consistency-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "identity-coherence-v1": {
+            "mode": "observe",
+            "status": "unknown",
+            "detections": []
+          },
+          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []

@@ -5,6 +5,7 @@ Run: uvicorn server:app --host 0.0.0.0 --port 3000
 """
 
 import os
+import math
 import time
 import hmac
 import hashlib
@@ -1718,6 +1719,31 @@ def apply_corroboration_floor(score: float, detections: List[Detection]) -> floa
     return score
 
 
+POINTER_POLICY = "pointer-movement-v1"
+POINTER_MIN_SAMPLES = 30
+POINTER_ZERO_RATIO_BELOW = 0.05
+
+
+def pointer_observation(signals: Dict) -> Dict:
+    """Moves where the pointer position changed but movementX/Y read 0.
+
+    Measured on real mice and trackpads in Chrome, Safari and Firefox, at 1x and
+    2x pixel ratio: 14-38% of moves. Stealth CDP-driven Chrome: 0-3%. Observe
+    only until production traffic shows the rate on hardware the bench never saw.
+    """
+    b = signals.get("behavioral") if isinstance(signals.get("behavioral"), dict) else {}
+    f = b.get("inputForensics") if isinstance(b.get("inputForensics"), dict) else {}
+    samples, ratio = f.get("pointerMoveSamples"), f.get("pointerMoveZeroRatio")
+    is_num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    touch = b.get("touchEvents") if is_num(b.get("touchEvents")) else 0
+    known = touch < 3 and is_num(samples) and samples >= POINTER_MIN_SAMPLES and is_num(ratio) and 0 <= ratio <= 1
+    status = "unknown" if not known else "detected" if ratio < POINTER_ZERO_RATIO_BELOW else "clear"
+    return {"mode": "observe", "status": status, "detections": [{
+        "id": "pointer-movement-never-zero",
+        "reason": "Pointer moves always report movement; experimental observation, not proof of automation",
+    }] if status == "detected" else []}
+
+
 def animation_observation(signals: Dict) -> Dict:
     env = signals.get("environmental")
     probe = env.get("animationConsistency") if isinstance(env, dict) else None
@@ -1776,6 +1802,7 @@ def evaluate_experimental(signals: Dict, production_score: float, detections: Li
         "observations": {
             "animation-consistency-v1": animation_observation(signals),
             IDENTITY_POLICY: identity_observation(signals),
+            POINTER_POLICY: pointer_observation(signals),
         },
     }
 
