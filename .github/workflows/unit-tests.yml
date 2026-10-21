@@ -60,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.26.9', '1.27.2']
+        go: ['1.26.10', '1.27.3']
     steps:
       - uses: actions/checkout@v7
 
@@ -80,7 +80,7 @@ jobs:
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        if: matrix.go == '1.27.2'
+        if: matrix.go == '1.27.3'
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -103,7 +103,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.23', '1.27.2']
+        go: ['1.23', '1.27.3']
     steps:
       - uses: actions/checkout@v7
 
@@ -116,7 +116,7 @@ jobs:
         run: go vet .
 
       - name: Start server-go
-        if: matrix.go == '1.27.2'
+        if: matrix.go == '1.27.3'
         run: |
           secret=$(openssl rand -hex 32)
           echo "FCAPTCHA_TEST_SECRET=$secret" >> "$GITHUB_ENV"
@@ -135,7 +135,7 @@ jobs:
         run: go test -race -coverprofile=coverage.out .
 
       - name: Upload coverage
-        if: matrix.go == '1.27.2'
+        if: matrix.go == '1.27.3'
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
