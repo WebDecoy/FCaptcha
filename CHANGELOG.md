@@ -13,6 +13,19 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.46.1] — 2026-10-21
+
+### Security
+- Go builds and the published image move to Go 1.26.10 / 1.27.3, which fix
+  GO-2026-6809 in `crypto/x509`. `govulncheck` reports it as reachable from
+  the Go server. Upgrade if you run the Docker image or build `server-go`
+  (#140).
+
+### Changed
+- Dependency updates: chi 5.5.0 and miniredis 2.40.0 (Go), fastapi 0.143.2
+  and pydantic 2.14.1 (Python), and a newer Node 26 base image (#137, #138,
+  #139).
+
 ## [1.46.0] — 2026-10-15
 
 ### Changed
