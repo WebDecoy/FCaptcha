@@ -13,6 +13,22 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.46.2] — 2026-11-03
+
+### Security
+- `qs` 6.17.1 and `body-parser` 2.4.0 in the Node server fix
+  GHSA-6pq8-jhm2-2vcw (`qs.stringify` DoS). Upgrade if you use
+  `@webdecoy/fcaptcha` (#147).
+- The Next.js example moves to `next` 16.4.5, clearing critical and high
+  advisories in `next` <= 16.4.0. This affects only the example app, not the
+  published packages (#148).
+
+### Changed
+- The Python server image moves from Python 3.14.8 to 3.15.0 (`-slim`).
+- Dependency updates: fastapi 0.162.0 and pydantic 2.14.2 (Python), redis
+  6.3.1 (Node), and Alpine 3.24.3 plus refreshed golang and node base images
+  (#144, #145, #146).
+
 ## [1.46.1] — 2026-10-21
 
 ### Security
