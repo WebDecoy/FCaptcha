@@ -476,6 +476,12 @@ const HUMAN_PERSONAS = {
  * in-browser agent nobody has documented — are handled in personas/agents.js
  * and are labeled synthetic there.
  */
+const STEALTH_LAUNCH = {
+  channel: 'chrome',
+  headless: false,
+  args: ['--disable-blink-features=AutomationControlled'],
+};
+
 const AGENT_PERSONAS = {
   'scripted-typing': {
     normalize: false,
@@ -601,6 +607,59 @@ const AGENT_PERSONAS = {
     async run({ page, target }) {
       await page.waitForTimeout(80);
       await target.evaluate((el) => el.click());
+    },
+  },
+
+  // Installed Chrome, launched headfully by Playwright with the
+  // AutomationControlled blink feature disabled. In this exact configuration
+  // webdriver reads false, plugins and window.chrome come from Chrome, and the
+  // window is not viewport-emulated. Input still arrives over CDP.
+  'stealth-wave': {
+    normalize: false,
+    class: 'stealth-cdp-agent',
+    launch: STEALTH_LAUNCH,
+    context: { viewport: null },
+    evidence:
+      'stealth Chrome (webdriver hidden) with naive scripted input: a sine-wave ' +
+      'sweep, a short typed phrase at a fixed 90ms delay, then a stepped move to ' +
+      'the checkbox. Exact launch: installed Chrome, headful, ' +
+      '--disable-blink-features=AutomationControlled, viewport disabled.',
+    async run({ page, target, rng }) {
+      const box = await page.locator('#message').boundingBox();
+      for (let i = 0; i < 40; i++) {
+        await page.mouse.move(box.x + 20 + i * 8, box.y + 60 + Math.sin(i / 3) * 40, { steps: 2 });
+      }
+      await page.locator('#message').click();
+      await page.keyboard.type('hello there', { delay: 90 });
+      await sleep(rng.range(1200, 1800));
+      const to = await centerOf(target);
+      await page.mouse.move(to.x, to.y, { steps: 15 });
+      await page.mouse.down();
+      await page.mouse.up();
+    },
+  },
+
+  'stealth-humanized': {
+    normalize: false,
+    class: 'stealth-cdp-agent',
+    launch: STEALTH_LAUNCH,
+    context: { viewport: null },
+    evidence:
+      'stealth Chrome (webdriver hidden) driving the same humanized input the ' +
+      'human panel uses: log-normal typing and a curved, tremored, overshooting ' +
+      'approach. Over CDP this is indistinguishable from the panel by ' +
+      'construction, so only signals the panel cannot produce can separate it. ' +
+      'Exact launch: installed Chrome, headful, ' +
+      '--disable-blink-features=AutomationControlled, viewport disabled.',
+    async run(ctx) {
+      const { page, rng } = ctx;
+      await page.locator('#message').click();
+      for (const ch of 'see you at noon') {
+        await page.keyboard.press(ch === ' ' ? 'Space' : ch, { delay: Math.max(25, rng.gaussian(75, 22)) });
+        await sleep(Math.min(600, Math.max(45, Math.exp(rng.gaussian(4.8, 0.45)))));
+      }
+      await sleep(rng.range(300, 900));
+      await desktopMouse(ctx);
     },
   },
 

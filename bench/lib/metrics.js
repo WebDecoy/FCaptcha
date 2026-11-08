@@ -68,15 +68,16 @@ function computeMetrics(results, opts = {}) {
   // reporter is required to keep them apart.
   const evidentialHumans = humans.filter((r) => EVIDENTIAL.has(r.sample.provenance));
 
-  const byGroup = (rows, isHit) => {
+  const byGroup = (rows, isHit, keyFor = (r) => r.sample.group) => {
     const groups = new Map();
     for (const r of rows) {
-      const g = groups.get(r.sample.group) || { group: r.sample.group, total: 0, hits: 0, provenance: new Set(), scores: [] };
+      const key = keyFor(r);
+      const g = groups.get(key) || { group: key, total: 0, hits: 0, provenance: new Set(), scores: [] };
       g.total++;
       if (isHit(r)) g.hits++;
       g.provenance.add(r.sample.provenance);
       g.scores.push(r.score);
-      groups.set(r.sample.group, g);
+      groups.set(key, g);
     }
     return [...groups.values()]
       .map((g) => ({
@@ -173,6 +174,11 @@ function computeMetrics(results, opts = {}) {
     agentCorpus: {
       all: { total: agents.length, hits: agents.filter(isCaught).length, rate: rate(agents.filter(isCaught).length, agents.length) },
       byClass: byGroup(agents, isCaught),
+      byScenario: byGroup(
+        agents,
+        isCaught,
+        (r) => r.sample.scenario || r.sample.id.split('/')[1] || r.sample.group
+      ),
     },
     perSignal,
   };
@@ -188,13 +194,13 @@ function median(xs) {
 /**
  * The CI gate.
  *
- * Deliberately narrow: it fails on a per-signal FP budget breach and on
- * replay errors, and it warns — without failing — on the aggregate FPR and
- * per-class TPR. Those two are population claims, and this corpus is not a
- * population sample. Gating on them would dress a regression check up as
- * evidence about real users. See bench/README.md.
+ * Deliberately narrow: it fails on a per-signal FP budget breach, replay
+ * errors, and explicitly recorded fixed-corpus agent regressions. It warns —
+ * without failing — on the aggregate FPR and absolute per-class TPR target.
+ * Those two are population claims, and this corpus is not a population sample.
+ * See bench/README.md.
  */
-function evaluateGate(metrics, knownArtifacts = []) {
+function evaluateGate(metrics, knownArtifacts = [], agentRegressionFloors = {}) {
   const failures = [];
   const warnings = [];
   const exempted = [];
@@ -238,10 +244,22 @@ function evaluateGate(metrics, knownArtifacts = []) {
 
   for (const c of metrics.agentCorpus.byClass) {
     if (c.rate < cfg.classTprFloor) {
-      warnings.push(
+      const detail =
         `class "${c.group}" TPR ${pct(c.rate)} below the ${pct(cfg.classTprFloor)} target ` +
-          `(${c.hits}/${c.total} caught)`
-      );
+        `(${c.hits}/${c.total} caught)`;
+      const regressionFloor = agentRegressionFloors[c.group];
+      if (regressionFloor !== undefined && c.rate < regressionFloor) {
+        failures.push(
+          `${detail}; below its fixed-corpus regression floor ${pct(regressionFloor)}`
+        );
+      } else {
+        warnings.push(detail);
+      }
+    }
+  }
+  for (const group of Object.keys(agentRegressionFloors)) {
+    if (!metrics.agentCorpus.byClass.some((c) => c.group === group)) {
+      failures.push(`agent regression class "${group}" is missing from the corpus`);
     }
   }
 
