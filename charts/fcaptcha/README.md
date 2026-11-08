@@ -27,16 +27,18 @@ The public development key is available only with explicit insecure development
 mode, whose bundled launcher binds to loopback.
 
 Set `secret`, or point `existingSecret` at a Secret you manage with
-sealed-secrets, External Secrets or SOPS.
+sealed-secrets, External Secrets or SOPS. When using `existingSecret`, also set
+`existingSecretVersion` and change it in the same reconciliation that rotates
+the Secret; the pod-template annotation then forces every replica to reload the
+new signing key.
 
 ## Read this before production
 
 **`config.trustedProxies` decides whose `X-Forwarded-For` is believed**, and it
 matters more in Kubernetes than anywhere else: traffic arrives through an ingress
-controller, which is a proxy. If it is not trusted, every visitor is attributed
-to the controller and rate limiting collapses onto one address — silently. The
-default covers the usual in-cluster pod CIDRs; narrow it to your controller's
-range.
+controller, which is a proxy. The chart fails closed with `none`; set the exact
+ingress or service-mesh source ranges after inspecting the effective network
+path. Never trust all RFC1918 ranges merely because traffic is in-cluster.
 
 The default Go image may run multiple replicas when `redis.url` is configured.
 PoW, token replay, Siteverify idempotency, rate limits, suspicion, fingerprint
@@ -54,8 +56,9 @@ The full list of deployment settings with security consequences is in
 | `secret` | Token signing key. **Required** unless `existingSecret` is set | `""` |
 | `existingSecret` | Name of a Secret you manage, instead of one the chart creates | `""` |
 | `existingSecretKey` | Key within that Secret | `FCAPTCHA_SECRET` |
+| `existingSecretVersion` | Required rollout token for `existingSecret`; change it with every key rotation | `""` |
 | `verifySecret` | Credential a backend presents when verifying a token. Empty means "same as the signing key". Splitting them means a leaked verify credential cannot also mint tokens | `""` |
-| `config.trustedProxies` | Peers allowed to set `X-Forwarded-For` / `X-Real-IP` / TLS-fingerprint headers | in-cluster private ranges |
+| `config.trustedProxies` | Peers allowed to set `X-Forwarded-For` / `X-Real-IP` / TLS-fingerprint headers | `none` |
 | `config.allowedHostnames` | Comma-separated hostnames permitted to mint tokens. Empty accepts any origin | `""` |
 | `config.siteKeys` | Comma-separated allowlist of accepted site keys | `""` |
 | `config.logVerdicts` | One privacy-safe JSON line per verification | `false` |
@@ -65,6 +68,7 @@ The full list of deployment settings with security consequences is in
 | `redis.url` / `redis.existingSecret` | Shared security state; required for multiple replicas | `""` |
 | `service.type` / `service.port` | | `ClusterIP` / `80` |
 | `ingress.enabled` | | `false` |
+| `test.image.repository` / `test.image.digest` | Digest-pinned image used only by `helm test` | `curlimages/curl` / pinned |
 | `resources` | | 100m CPU / 128Mi requested |
 | `autoscaling.enabled` | Off by default — replicas do not share state | `false` |
 | `podDisruptionBudget.enabled` | | `false` |

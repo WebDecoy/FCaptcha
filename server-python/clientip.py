@@ -9,8 +9,8 @@ residential IP and walk past all of it. They are credible only when the peer
 that sent them is a proxy we put there.
 
 TRUSTED_PROXIES holds the peers allowed to speak for someone else, as a
-comma-separated list of CIDRs and bare IPs. Unset means the private and loopback
-defaults below. "*" trusts every peer (only correct when an edge you control
+comma-separated list of CIDRs and bare IPs. Unset trusts loopback only.
+"*" trusts every peer (only correct when an edge you control
 always overwrites the headers). "none" trusts nobody, so the socket address is
 always used.
 """
@@ -19,20 +19,12 @@ import ipaddress
 import os
 from typing import List, Optional
 
-# Fallback trust set: loopback plus the private and link-local ranges. A server
-# exposed directly to the internet sees public peer addresses, which are not in
-# this set, so forged headers are ignored. A server behind a sidecar or
-# in-cluster reverse proxy (nginx, Railway, Fly, Kubernetes ingress) sees a
-# loopback or private peer and behaves as before.
+# Fallback trust is deliberately loopback-only. Private address space is shared
+# by unrelated workloads in common clusters and must be explicitly narrowed to
+# the actual ingress or sidecar ranges.
 DEFAULT_TRUSTED_PROXY_CIDRS = [
     "127.0.0.0/8",
     "::1/128",
-    "10.0.0.0/8",
-    "172.16.0.0/12",
-    "192.168.0.0/16",
-    "169.254.0.0/16",
-    "fe80::/10",
-    "fc00::/7",
 ]
 
 

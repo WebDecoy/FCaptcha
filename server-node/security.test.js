@@ -7,6 +7,7 @@ const { createScoringEngine, createMiddleware } = require('./index');
 const { FingerprintStore } = require('./fingerprint-store');
 const { TokenStore } = require('./token-store');
 const { reasonToErrorCode } = require('./siteverify');
+const { canonicalTokenPayload } = require('./token-canonical');
 
 const signals = () => ({ behavioral: { totalPoints: 60, trajectoryLength: 400,
   microTremorScore: 0.5, velocityVariance: 0.5, approachPoints: 12,
@@ -15,6 +16,17 @@ const signals = () => ({ behavioral: { totalPoints: 60, trajectoryLength: 400,
 const headers = { accept: 'text/html', 'accept-language': 'en-US',
   'accept-encoding': 'gzip, deflate, br', connection: 'keep-alive' };
 const sha = (value) => crypto.createHash('sha256').update(value).digest('hex');
+
+test('v2 token canonicalization is language-neutral', () => {
+  const payload = canonicalTokenPayload({
+    v: 2, site_key: 's', jti: 'id', timestamp: 1700000000, score: 0.11,
+    ip_hash: 'abcd1234', hostname: 'example.com', action: '<login>', cdata: 'a&b'
+  });
+  assert.equal(payload, [
+    'fcaptcha-token-v2', 'cw', 'aWQ', '1700000000', '0.110',
+    'YWJjZDEyMzQ', 'ZXhhbXBsZS5jb20', 'PGxvZ2luPg', 'YSZi'
+  ].join('\n'));
+});
 
 test('independent tokens are unique and each can only be spent once', () => {
   const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
@@ -46,6 +58,52 @@ test('capacity errors are distinct from replays in token verification', () => {
   assert.equal(reasonToErrorCode('token_store_full'), 'internal-error');
 });
 
+test('default replay state is shared by engines in one process', () => {
+  const secret = 'test-secret-0123456789abcdef0123456789abcdef';
+  const first = createScoringEngine({ secret });
+  const second = createScoringEngine({ secret });
+  const token = first._generateToken('203.0.113.1', 'site', 0.1);
+  assert.equal(first.verifyToken(token).valid, true);
+  assert.deepEqual(second.verifyToken(token), { valid: false, reason: 'token_already_used' });
+});
+
+test('library tokens carry signed hostname and action bindings', () => {
+  const engine = createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
+  const token = engine._generateToken('203.0.113.1', 'site', 0.1,
+    { hostname: 'app.example', action: 'login', cdata: 'session-1' });
+  const decoded = JSON.parse(Buffer.from(token, 'base64url').toString());
+  assert.equal(decoded.v, 2);
+  assert.equal(decoded.hostname, 'app.example');
+  assert.equal(decoded.action, 'login');
+  assert.equal(decoded.cdata, 'session-1');
+  const verified = engine.verifyToken(token);
+  assert.equal(verified.valid, true);
+  assert.equal(verified.hostname, 'app.example');
+  assert.equal(verified.action, 'login');
+});
+
+test('middleware token redemption requires the backend verify secret', () => {
+  const middleware = createMiddleware({
+    secret: 'test-secret-0123456789abcdef0123456789abcdef',
+    verifySecret: 'verify-secret-0123456789abcdef0123456789abcdef'
+  });
+  const token = middleware.engine._generateToken('203.0.113.1', 'site', 0.1);
+  const invoke = (body) => {
+    const out = { statusCode: 200, body: null };
+    const res = {
+      status(code) { out.statusCode = code; return this; },
+      json(value) { out.body = value; return this; }
+    };
+    middleware.tokenVerifyHandler({ body }, res);
+    return out;
+  };
+  assert.deepEqual(invoke({ token }),
+    { statusCode: 401, body: { valid: false, reason: 'missing_secret' } });
+  assert.deepEqual(invoke({ token, secret: 'wrong-secret' }),
+    { statusCode: 401, body: { valid: false, reason: 'invalid_secret' } });
+  assert.equal(invoke({ token, secret: 'verify-secret-0123456789abcdef0123456789abcdef' }).body.valid, true);
+});
+
 test('issued nonces are required for both committed and legacy proofs', () => {
   for (const committed of [false, true]) {
     for (const nonceMode of ['correct', 'missing', 'wrong']) {
@@ -71,7 +129,8 @@ test('widget-format proofs pass middleware and cannot be reused or altered', () 
   for (const mode of ['valid', 'mismatch', 'missing', 'early', 'elevated']) {
     const middleware = createMiddleware({ secret: 'test-secret-0123456789abcdef0123456789abcdef', trustedProxies: 'none' });
     const engine = middleware.engine;
-    const req = { query: { siteKey: 'site' }, headers, socket: { remoteAddress: '203.0.113.1' } };
+    const req = { query: { siteKey: 'site' }, headers: { ...headers, origin: 'https://app.example' },
+      socket: { remoteAddress: '203.0.113.1' } };
     let challenge;
     middleware.challengeHandler(req, { json: (value) => { challenge = value; } });
     assert.ok(challenge.nonce);
@@ -87,13 +146,18 @@ test('widget-format proofs pass middleware and cannot be reused or altered', () 
     const hashOfSignals = sha(mode === 'mismatch' ? 'other payload' : raw);
     let nonce = 0;
     while (!sha(`${challenge.prefix}:${hashOfSignals}:${nonce}`).startsWith('0')) nonce++;
-    req.body = { siteKey: 'site', signals: body, signalsJson: mode === 'missing' ? null : raw,
+    req.body = { siteKey: 'site', action: 'login', cdata: 'session-1',
+      signals: body, signalsJson: mode === 'missing' ? null : raw,
       powSolution: { challengeId: challenge.challengeId, nonce, signalsHash: hashOfSignals,
         hash: sha(`${challenge.prefix}:${hashOfSignals}:${nonce}`) } };
     let result;
     middleware.verifyHandler(req, { json: (value) => { result = value; } });
     assert.equal(result.success, mode === 'valid', `${mode}: ${JSON.stringify(result)}`);
     if (mode === 'valid') {
+      const claims = JSON.parse(Buffer.from(result.token, 'base64url').toString());
+      assert.equal(claims.hostname, 'app.example');
+      assert.equal(claims.action, 'login');
+      assert.equal(claims.cdata, 'session-1');
       middleware.verifyHandler(req, { json: (value) => { result = value; } });
       assert.equal(result.success, false, 'spent proof cannot mint another token');
     }

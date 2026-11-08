@@ -34,25 +34,17 @@ func NetworkIdentity(value string) string {
 // credible only when the peer that sent them is a proxy we put there.
 //
 // TRUSTED_PROXIES holds the peers allowed to speak for someone else, as a
-// comma-separated list of CIDRs and bare IPs. Unset means the private and
-// loopback defaults below. "*" trusts every peer (only correct when an edge you
+// comma-separated list of CIDRs and bare IPs. Unset trusts loopback only.
+// "*" trusts every peer (only correct when an edge you
 // control always overwrites the headers). "none" trusts nobody, so the socket
 // address is always used.
 
-// defaultTrustedProxyCIDRs is the fallback trust set: loopback plus the private
-// and link-local ranges. A server exposed directly to the internet sees public
-// peer addresses, which are not in this set, so forged headers are ignored. A
-// server behind a sidecar or in-cluster reverse proxy (nginx, Railway, Fly,
-// Kubernetes ingress) sees a loopback or private peer and behaves as before.
+// defaultTrustedProxyCIDRs is deliberately loopback-only. Private address space
+// is shared by unrelated workloads in common clusters and must be explicitly
+// narrowed to the actual ingress or sidecar ranges.
 var defaultTrustedProxyCIDRs = []string{
 	"127.0.0.0/8",
 	"::1/128",
-	"10.0.0.0/8",
-	"172.16.0.0/12",
-	"192.168.0.0/16",
-	"169.254.0.0/16",
-	"fe80::/10",
-	"fc00::/7",
 }
 
 // maxProxyMisconfigWarnings bounds the misconfiguration hint below. A directly
@@ -105,7 +97,7 @@ func NewProxyTrust(spec string) *ProxyTrust {
 }
 
 // ProxyTrustFromEnv builds the trust set from TRUSTED_PROXIES, falling back to
-// the private/loopback defaults when the variable is not set at all. An
+// the loopback-only defaults when the variable is not set at all. An
 // explicitly empty value means "trust nothing", which is why this distinguishes
 // unset from empty.
 func ProxyTrustFromEnv() *ProxyTrust {

@@ -988,6 +988,90 @@ func (e *ScoringEngine) VerifyToken(token string) map[string]interface{} {
 	return e.VerifyTokenWithIP(token, "")
 }
 
+func tokenV2(data map[string]interface{}) bool {
+	switch v := data["v"].(type) {
+	case int:
+		return v == 2
+	case int64:
+		return v == 2
+	case float64:
+		return v == 2
+	default:
+		return false
+	}
+}
+
+func tokenString(data map[string]interface{}, key string) (string, error) {
+	value, ok := data[key].(string)
+	if !ok {
+		return "", fmt.Errorf("%s must be a string", key)
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(value)), nil
+}
+
+func tokenInt64(value interface{}) (int64, bool) {
+	switch n := value.(type) {
+	case int:
+		return int64(n), true
+	case int64:
+		return n, true
+	case float64:
+		if n != math.Trunc(n) {
+			return 0, false
+		}
+		return int64(n), true
+	default:
+		return 0, false
+	}
+}
+
+func tokenFloat64(value interface{}) (float64, bool) {
+	switch n := value.(type) {
+	case float64:
+		return n, true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	default:
+		return 0, false
+	}
+}
+
+// canonicalTokenPayload v2 signs a language-neutral line format. String fields
+// are UTF-8 base64url and numeric fields have fixed representations. Legacy
+// tokens retain map JSON canonicalization for one rolling-upgrade window.
+func canonicalTokenPayload(data map[string]interface{}) ([]byte, error) {
+	if !tokenV2(data) {
+		return json.Marshal(data)
+	}
+	timestamp, ok := tokenInt64(data["timestamp"])
+	if !ok {
+		return nil, fmt.Errorf("timestamp must be an integer")
+	}
+	score, ok := tokenFloat64(data["score"])
+	if !ok || math.IsNaN(score) || math.IsInf(score, 0) {
+		return nil, fmt.Errorf("score must be finite")
+	}
+	fields := []string{"fcaptcha-token-v2"}
+	for _, key := range []string{"site_key", "jti"} {
+		encoded, err := tokenString(data, key)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, encoded)
+	}
+	fields = append(fields, fmt.Sprintf("%d", timestamp), fmt.Sprintf("%.3f", score))
+	for _, key := range []string{"ip_hash", "hostname", "action", "cdata"} {
+		encoded, err := tokenString(data, key)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, encoded)
+	}
+	return []byte(strings.Join(fields, "\n")), nil
+}
+
 // VerifyTokenWithIP verifies a token and optionally checks IP binding
 func (e *ScoringEngine) VerifyTokenWithIP(token, ip string) map[string]interface{} {
 	result := make(map[string]interface{})
@@ -1023,7 +1107,12 @@ func (e *ScoringEngine) VerifyTokenWithIP(token, ip string) map[string]interface
 	}
 
 	delete(data, "sig")
-	payload, _ := json.Marshal(data)
+	payload, err := canonicalTokenPayload(data)
+	if err != nil {
+		result["valid"] = false
+		result["reason"] = "invalid_token"
+		return result
+	}
 	expectedSig := e.computeSignature(payload)
 
 	if !hmac.Equal([]byte(sig), []byte(expectedSig)) {
@@ -2591,14 +2680,13 @@ func (e *ScoringEngine) calculateFinalScore(categoryScores map[string]float64) f
 // issued for what it is being spent on: an `action=login` token replayed against
 // a password-reset endpoint, or a token minted on a site that lifted the key.
 //
-// Empty strings rather than omitted keys: the signing payload is a sorted-key
-// JSON serialisation, so a token whose key set varied with what the browser
-// happened to send would be a second payload shape to keep in sync across three
-// languages. Fixed shape, empty when unknown.
+// Empty strings rather than omitted keys keep one fixed signed claim set across
+// all three runtimes.
 func (e *ScoringEngine) generateToken(ip, siteKey string, score float64, binding TokenBinding) string {
 	ipHash := e.ipBinding(ip)
 
 	data := map[string]interface{}{
+		"v":         2,
 		"site_key":  siteKey,
 		"jti":       newTokenID(),
 		"timestamp": time.Now().Unix(),
@@ -2609,7 +2697,7 @@ func (e *ScoringEngine) generateToken(ip, siteKey string, score float64, binding
 		"cdata":     binding.CData,
 	}
 
-	payload, _ := json.Marshal(data)
+	payload, _ := canonicalTokenPayload(data)
 	sig := e.computeSignature(payload)
 
 	data["sig"] = sig

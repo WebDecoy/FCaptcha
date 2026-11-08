@@ -7,7 +7,6 @@ IP Reputation, Header Analysis, Browser Consistency, TLS Fingerprinting
 import os
 import re
 import math
-import socket
 import ipaddress
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
@@ -77,20 +76,10 @@ def check_ip_reputation(ip: str) -> List[Dict]:
             "reason": "Request from known datacenter IP range"
         })
 
-    # Reverse DNS check for VPN/proxy patterns
-    try:
-        hostnames = socket.gethostbyaddr(ip)[0]
-        for pattern in VPN_PROXY_PATTERNS:
-            if pattern.search(hostnames):
-                detections.append({
-                    "category": "tor_vpn",
-                    "score": 0.5,
-                    "confidence": 0.6,
-                    "reason": f"Reverse DNS suggests VPN/proxy: {hostnames}"
-                })
-                break
-    except (socket.herror, socket.gaierror):
-        pass
+    # Do not perform reverse DNS on visitor addresses here. It discloses the
+    # address to the configured resolver and a synchronous libc lookup can
+    # consume shared request capacity. Operators that need network reputation
+    # should use a bounded, explicitly configured local database instead.
 
     return detections
 
@@ -358,16 +347,16 @@ def check_declared_ai_agent(user_agent: str, headers: Optional[Dict[str, str]] =
             })
             break
 
-    # Web Bot Auth: presence of HTTP Message Signature headers identifies a
-    # (claimed) verified agent. v1 detects/identifies only; signature verification
-    # against the agent's published JWKS is a follow-up before trusting it.
+    # Python does not yet implement the bounded Web Bot Auth verifier used by
+    # the Go and Node servers. Fail closed: header presence alone must never be
+    # surfaced as an identified agent that a relying policy might trust.
     h = headers or {}
     if h.get("signature") and h.get("signature-input") and h.get("signature-agent"):
         detections.append({
-            "category": "declared_ai",
-            "score": 0.4,
-            "confidence": 0.95,
-            "reason": f"Signed agent request (Web Bot Auth): {h.get('signature-agent')}",
+            "category": "bot",
+            "score": 0.5,
+            "confidence": 0.5,
+            "reason": "Unverified Web Bot Auth signature headers",
             "details": {"signatureAgent": h.get("signature-agent"), "verified": False},
         })
 

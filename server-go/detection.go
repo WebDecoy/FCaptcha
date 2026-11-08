@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"net"
@@ -9,7 +8,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 )
 
 // =============================================================================
@@ -421,26 +419,10 @@ func (e *ScoringEngine) CheckIPReputation(ip string) []DetectionResult {
 		})
 	}
 
-	// Check reverse DNS for VPN/proxy patterns (2s timeout to avoid blocking request handlers)
-	dnsCtx, dnsCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer dnsCancel()
-	names, err := net.DefaultResolver.LookupAddr(dnsCtx, ip)
-	if err == nil {
-		for _, name := range names {
-			for _, pattern := range vpnProxyPatterns {
-				if pattern.MatchString(name) {
-					detections = append(detections, DetectionResult{
-						Category:   CategoryTorVPN,
-						Score:      0.5,
-						Confidence: 0.6,
-						Reason:     "Reverse DNS suggests VPN/proxy",
-						Details:    map[string]interface{}{"hostname": name},
-					})
-					break
-				}
-			}
-		}
-	}
+	// Do not issue visitor-derived PTR queries from the request path. Besides
+	// blocking shared request capacity, the recursive resolver becomes another
+	// reader of visitor IPs. Deployments needing reputation should use a bounded,
+	// explicitly configured local database.
 
 	return detections
 }

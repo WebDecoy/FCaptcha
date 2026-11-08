@@ -20,6 +20,7 @@ const { detectInputForensics } = require('./inputforensics');
 const { RedisState } = require('./redis-state');
 const { FingerprintStore } = require('./fingerprint-store');
 const { TokenStore } = require('./token-store');
+const { canonicalTokenPayload } = require('./token-canonical');
 const { resolveSignals, isObject, invalidRequest } = require('./protocol');
 const {
   HostnameAllowlist,
@@ -457,13 +458,12 @@ async function detectRateAbuse(ip, siteKey) {
 // endpoint or presented from a site that lifted the key — the backend compares
 // what siteverify reports against what it expected.
 //
-// Empty strings rather than omitted keys: the signing payload is a sorted-key
-// JSON serialisation, so a token whose key set varies with what the browser
-// happened to send would be a second payload shape to keep in sync across three
-// languages. Fixed shape, empty when unknown.
+// Empty strings rather than omitted keys keep one fixed signed claim set across
+// all three runtimes.
 function generateToken(ip, siteKey, score, binding = {}) {
   const ipHash = ipBinding(SECRET_KEY, ip);
   const data = {
+    v: 2,
     site_key: siteKey,
     jti: crypto.randomBytes(16).toString('hex'),
     timestamp: Math.floor(Date.now() / 1000),
@@ -474,7 +474,7 @@ function generateToken(ip, siteKey, score, binding = {}) {
     cdata: binding.cdata || ''
   };
 
-  const payload = JSON.stringify(data, Object.keys(data).sort());
+  const payload = canonicalTokenPayload(data);
   data.sig = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex');
 
   return Buffer.from(JSON.stringify(data)).toString('base64url');
@@ -492,7 +492,7 @@ async function verifyToken(token, ip = null) {
     const sig = decoded.sig;
     delete decoded.sig;
 
-    const payload = JSON.stringify(decoded, Object.keys(decoded).sort());
+    const payload = canonicalTokenPayload(decoded);
     const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(payload).digest('hex');
 
     if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {

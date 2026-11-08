@@ -39,7 +39,7 @@ spec:
       type: RuntimeDefault
   containers:
     - name: probe
-      image: curlimages/curl:8.11.1
+      image: "{{ .Values.test.image.repository }}@{{ .Values.test.image.digest }}"
       securityContext:
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true

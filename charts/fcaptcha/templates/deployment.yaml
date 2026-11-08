@@ -22,6 +22,8 @@ spec:
         # on which one answered.
         {{- if not .Values.existingSecret }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- else }}
+        checksum/existing-secret-version: {{ .Values.existingSecretVersion | quote }}
         {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}

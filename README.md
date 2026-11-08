@@ -632,7 +632,7 @@ correlation and should not grow into it.
 ### Declared Agents & Reputation
 - Self-identifying AI-agent user-agents (ClaudeBot, Claude-User, GPTBot, ChatGPT-User, OAI-SearchBot, PerplexityBot, Google-Extended, CCBot, Bytespider, meta-externalagent, Amazonbot, cohere-ai, …)
 - Web Bot Auth (RFC 9421 HTTP Message Signatures) — cryptographic signature verification against the agent's published key directory (verified / forged / unverified), Go + Node
-- Datacenter / VPN / proxy IP reputation and reverse-DNS heuristics (with a 2s lookup timeout so request handlers never block)
+- Local datacenter-range reputation checks; FCaptcha does not perform visitor-derived reverse-DNS lookups
 
 ## AI Agent Detection
 
@@ -945,7 +945,7 @@ Set `action` (and optionally `cdata`) when you request the token —
 | `FCAPTCHA_ALLOWED_HOSTNAMES` | Comma-separated hostnames permitted to mint tokens, matched against the request's `Origin` (then `Referer`). Unset accepts any origin. A request with no derivable origin (native app, server-side call) is always allowed — an attacker who can forge an `Origin` would just forge a listed one | (any) |
 | `PORT` | Server port | 3000 |
 | `REDIS_URL` | Share security state across replicas. Go, Node, and Python share all security stores and support multiple replicas. Configured Redis failures are fail-closed | (unset, process-local state) |
-| `TRUSTED_PROXIES` | Comma-separated CIDRs/IPs of peers allowed to set `X-Forwarded-For`, `X-Real-IP` and the TLS-fingerprint headers. `*` trusts every peer, `none` trusts none. See [Trusted proxies](#trusted-proxies) | loopback + private ranges |
+| `TRUSTED_PROXIES` | Comma-separated CIDRs/IPs of peers allowed to set `X-Forwarded-For`, `X-Real-IP` and the TLS-fingerprint headers. `*` trusts every peer, `none` trusts none. See [Trusted proxies](#trusted-proxies) | loopback only |
 | `FCAPTCHA_SITE_KEYS` | Comma-separated allowlist of accepted site keys. Unset accepts any key (zero-config self-hosting); unlisted keys are folded into a shared overflow bucket rather than allocating their own rate-limit/fingerprint state | (any) |
 | `FCAPTCHA_MAX_SITE_KEYS_PER_IP` | Distinct site keys one IP may allocate state for before the excess is folded into the overflow bucket. The cap itself is unconditional | 8 |
 | `TRUSTED_JA4_HEADERS` | Comma-separated reverse-proxy header names carrying a JA4 TLS fingerprint (e.g. set by nginx/Cloudflare). Only these names are read, and only from a peer in `TRUSTED_PROXIES` | (none) |
@@ -956,7 +956,7 @@ Set `action` (and optionally `cdata`) when you request the token —
 | `FCAPTCHA_PPROF_ADDR` | (Go) Listen address for pprof when enabled — keep it loopback-only | `127.0.0.1:3001` |
 | `FCAPTCHA_LOG_VERDICTS` | Log one privacy-safe JSON line per `/api/verify` and `/api/score` (score, recommendation, category scores, and per-hit category/score/confidence). Omits IP, user agent, raw signals, and free-text detection reasons. For observability/tuning (`1`/`true`/`yes`/`on`) | off |
 | `FCAPTCHA_EXPERIMENTAL_BLOCKING` | Pin experimental blocking to `stealth-corroboration-v1`. Restart to apply. Unset, unknown, or retired names monitor only; may reject developer-tool or anti-fingerprinting users | off |
-| `FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW` | Also include the free-text detection `reason` in verdict logs. **Reasons can contain visitor-derived data** (reverse-DNS hostnames, UA/header fragments, form field ids) — only enable in trusted debugging contexts with no privacy obligations. Requires `FCAPTCHA_LOG_VERDICTS` | off |
+| `FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW` | Also include the free-text detection `reason` in verdict logs. **Reasons can contain visitor-derived data** (UA/header fragments and form field ids) — only enable in trusted debugging contexts with no privacy obligations. Requires `FCAPTCHA_LOG_VERDICTS` | off |
 
 Go and Python HTTP access logs are off by default. Set `FCAPTCHA_LOG_ACCESS=1` to enable
 them; they include client addresses and request URLs. This is separate from
@@ -971,10 +971,10 @@ FCaptcha reads them **only when the peer is in `TRUSTED_PROXIES`**. Any other
 caller is attributed to its socket address, and a forged header is ignored. The
 same gate covers `X-JA3-Hash` and any header named in `TRUSTED_JA4_HEADERS`.
 
-The default — loopback plus the private and link-local ranges — covers nginx on
-`127.0.0.1`, a sidecar proxy, and an in-cluster ingress with no configuration,
-while a server exposed directly to the internet sees public peers and therefore
-ignores their headers.
+The default trusts loopback only. Private and link-local ranges are not trusted
+implicitly because unrelated workloads often share them. Set the exact sidecar
+or ingress ranges you operate; until then non-loopback forwarding headers are
+ignored.
 
 Set it explicitly when your proxy reaches FCaptcha from an address outside those
 ranges — a Cloudflare Tunnel, a load balancer in another VPC, or a PaaS edge

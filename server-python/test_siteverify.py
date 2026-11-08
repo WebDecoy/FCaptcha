@@ -410,6 +410,21 @@ def canonical_payload_is_sorted_and_unspaced():
 
 
 @test
+def v2_canonical_payload_is_language_neutral():
+    from server import _canonical_payload
+
+    claims = {
+        "v": 2, "site_key": "s", "jti": "id", "timestamp": 1700000000,
+        "score": 0.11, "ip_hash": "abcd1234", "hostname": "example.com",
+        "action": "<login>", "cdata": "a&b",
+    }
+    assert _canonical_payload(claims) == "\n".join((
+        "fcaptcha-token-v2", "cw", "aWQ", "1700000000", "0.110",
+        "YWJjZDEyMzQ", "ZXhhbXBsZS5jb20", "PGxvZ2luPg", "YSZi",
+    ))
+
+
+@test
 def fixture_claims_produce_the_shared_signature():
     import hashlib
     import hmac as _hmac

@@ -104,6 +104,7 @@ test('fromEnv distinguishes unset from empty', () => {
   const unset = ProxyTrust.fromEnv({});
   assert.strictEqual(unset.clientIP(request('127.0.0.1', headers)), '73.15.22.100');
   assert.strictEqual(unset.clientIP(request('159.65.1.1', headers)), '159.65.1.1');
+  assert.strictEqual(unset.clientIP(request('10.0.1.5', headers)), '10.0.1.5');
 
   // Explicitly empty: trust nothing.
   const empty = ProxyTrust.fromEnv({ TRUSTED_PROXIES: '' });

@@ -24,7 +24,7 @@ jobs:
     env:
       FCAPTCHA_SECRET: conformance-test-secret-0123456789abcdef0123456789abcdef
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Build production image
         run: docker build -f ${{ matrix.dockerfile }} -t fcaptcha-conformance .
@@ -35,6 +35,7 @@ jobs:
             echo "Testing experimental policy selector: '${policy}'"
             docker run -d --name fcaptcha-conformance -p 3000:3000 \
               -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" \
+              -e TRUSTED_PROXIES="*" \
               -e FCAPTCHA_EXPERIMENTAL_BLOCKING="$policy" fcaptcha-conformance
             ready=false
             for _ in $(seq 1 60); do
