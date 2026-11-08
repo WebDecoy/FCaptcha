@@ -6,7 +6,8 @@
  * Usage:
  *   const fcaptcha = require('@webdecoy/fcaptcha');
  *   const engine = fcaptcha.createScoringEngine({ secret: 'your-secret' });
- *   const result = engine.verify(signals, ip, siteKey, userAgent, headers, powSolution, signalsJson, powTiming);
+ *   const result = engine.verify(signals, ip, siteKey, userAgent, headers,
+ *     powSolution, signalsJson, powTiming, { hostname, action, cdata });
  */
 
 const crypto = require('crypto');
@@ -20,6 +21,13 @@ const { BoundedMap, BoundedSet, SiteKeyGuard } = require('./limits');
 const { FingerprintStore } = require('./fingerprint-store');
 const { TokenStore } = require('./token-store');
 const { resolveSignals } = require('./protocol');
+const { requestHostname, sanitizeAction, sanitizeCdata, secretMatches } = require('./siteverify');
+const { canonicalTokenPayload } = require('./token-canonical');
+
+// Independent engines in one process are equivalent redemption authorities.
+// Sharing the default store prevents a token from being spent once per engine.
+// Multi-process/replica deployments must still inject one atomic shared store.
+const DEFAULT_TOKEN_STORE = new TokenStore();
 
 // =============================================================================
 // PoW Challenge Store (can be extended with Redis)
@@ -205,7 +213,10 @@ class ScoringEngine {
     this.fingerprintStore = options.fingerprintStore || new FingerprintStore();
     this.suspicion = options.suspicion || new SuspicionLedger();
     this.weights = options.weights || WEIGHTS;
-    this.tokenStore = options.tokenStore || new TokenStore();
+    this.tokenStore = options.tokenStore || DEFAULT_TOKEN_STORE;
+    this.verifySecret = options.verifySecret === undefined
+      ? this.secret
+      : signingSecret(options.verifySecret);
   }
 
   // Generate a PoW challenge
@@ -232,7 +243,7 @@ class ScoringEngine {
   }
 
   // Verify signals and return score
-  verify(signals, ip, siteKey, userAgent, headers = {}, powSolution = null, signalsJson = null, powTiming = null) {
+  verify(signals, ip, siteKey, userAgent, headers = {}, powSolution = null, signalsJson = null, powTiming = null, binding = {}) {
     const resolved = resolveSignals(signals, signalsJson, powSolution?.signalsHash);
     signals = resolved.signals;
     if (powTiming) {
@@ -380,7 +391,7 @@ class ScoringEngine {
     // request. Keep this gate independent of scoring so weight changes cannot
     // reopen the bypass.
     const success = finalScore < 0.5 && powSatisfied && !deviceRateExceeded && !experimentalBlocked;
-    const token = success ? this._generateToken(ip, siteKey, finalScore) : null;
+    const token = success ? this._generateToken(ip, siteKey, finalScore, binding) : null;
 
     // Feed the ledger so the next challenge this source asks for is priced on
     // what it just did.
@@ -412,7 +423,7 @@ class ScoringEngine {
       const sig = decoded.sig;
       delete decoded.sig;
 
-      const payload = JSON.stringify(decoded, Object.keys(decoded).sort());
+      const payload = canonicalTokenPayload(decoded);
       const expectedSig = crypto.createHmac('sha256', this.secret).update(payload).digest('hex');
 
       if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
@@ -505,17 +516,21 @@ class ScoringEngine {
     return detections;
   }
 
-  _generateToken(ip, siteKey, score) {
+  _generateToken(ip, siteKey, score, binding = {}) {
     const ipHash = ipBinding(this.secret, ip);
     const data = {
+      v: 2,
       site_key: siteKey,
       jti: crypto.randomBytes(16).toString('hex'),
       timestamp: Math.floor(Date.now() / 1000),
       score: Math.round(score * 1000) / 1000,
-      ip_hash: ipHash
+      ip_hash: ipHash,
+      hostname: typeof binding.hostname === 'string' ? binding.hostname : '',
+      action: sanitizeAction(binding.action),
+      cdata: sanitizeCdata(binding.cdata)
     };
 
-    const payload = JSON.stringify(data, Object.keys(data).sort());
+    const payload = canonicalTokenPayload(data);
     const sig = crypto.createHmac('sha256', this.secret).update(payload).digest('hex');
     data.sig = sig;
 
@@ -540,7 +555,7 @@ function createMiddleware(options = {}) {
 
     // Middleware to extract IP from request. Forwarding headers are honoured
     // only from a peer in the trusted-proxy set (TRUSTED_PROXIES, or the
-    // private/loopback defaults) — otherwise any caller could claim a clean
+    // loopback-only default) — otherwise any caller could claim a clean
     // residential IP and skip the datacenter, Tor/VPN and rate-limit checks.
     // Pass options.trustedProxies to override the env for this instance.
     getIP: (req) => proxyTrust.clientIP(req),
@@ -565,7 +580,7 @@ function createMiddleware(options = {}) {
 
     // Verify route handler
     verifyHandler: (req, res) => {
-      const { siteKey: rawSiteKey, signals, powSolution, signalsJson, powTiming } = req.body;
+      const { siteKey: rawSiteKey, signals, powSolution, signalsJson, powTiming, action, cdata } = req.body;
       const ip = options.getIP ? options.getIP(req) : proxyTrust.clientIP(req);
       const siteKey = siteKeys.normalize(rawSiteKey || 'default', ip);
       const userAgent = req.headers['user-agent'] || '';
@@ -575,13 +590,21 @@ function createMiddleware(options = {}) {
         headers[key.toLowerCase()] = Array.isArray(value) ? value[0] : value;
       }
 
-      const result = engine.verify(signals, ip, siteKey, userAgent, headers, powSolution, signalsJson, powTiming);
+      const result = engine.verify(signals, ip, siteKey, userAgent, headers, powSolution, signalsJson, powTiming, {
+        hostname: requestHostname(headers),
+        action: sanitizeAction(action),
+        cdata: sanitizeCdata(cdata)
+      });
       res.json(result);
     },
 
     // Token verify route handler
     tokenVerifyHandler: (req, res) => {
-      const { token, remoteip } = req.body;
+      const { token, secret, remoteip } = req.body || {};
+      if (!secret) return res.status(401).json({ valid: false, reason: 'missing_secret' });
+      if (!secretMatches(secret, engine.verifySecret)) {
+        return res.status(401).json({ valid: false, reason: 'invalid_secret' });
+      }
       res.json(engine.verifyToken(token, typeof remoteip === 'string' ? remoteip : null));
     }
   };
@@ -597,6 +620,7 @@ module.exports = {
   PoWChallengeStore,
   RateLimiter,
   FingerprintStore,
+  TokenStore,
 
   // Detection module (re-export)
   detection,

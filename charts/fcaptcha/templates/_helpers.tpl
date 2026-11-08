@@ -58,6 +58,9 @@ time so operators see the configuration error before scheduling a pod.
 {{- if and (not .Values.secret) (not .Values.existingSecret) -}}
 {{- fail "fcaptcha: a signing key is required. Use --set secret=$(openssl rand -hex 32) or --set existingSecret=my-fcaptcha-secret. The server rejects missing, short and repetitive keys." -}}
 {{- end -}}
+{{- if and .Values.existingSecret (not .Values.existingSecretVersion) -}}
+{{- fail "fcaptcha: existingSecretVersion is required with existingSecret. Change it whenever the external signing Secret rotates so Kubernetes rolls every pod." -}}
+{{- end -}}
 {{- end -}}
 
 {{/* Multiple Go pods require shared security state. */}}

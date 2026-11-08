@@ -22,6 +22,9 @@ replicaCount: 1
 secret: ""
 existingSecret: ""
 existingSecretKey: FCAPTCHA_SECRET
+## Required rollout token for operator-managed Secrets. Change this value in the
+## same reconciliation that rotates the Secret so every pod reloads the key.
+existingSecretVersion: ""
 
 ## Credential a backend presents when verifying a token. Empty means "same as
 ## the signing key", which is the documented default. Splitting them means a
@@ -34,9 +37,9 @@ config:
   ## This matters more in Kubernetes than anywhere else: traffic arrives via an
   ## Ingress controller, which is a proxy, and if it is not trusted then every
   ## visitor is attributed to it and rate limiting collapses onto one address.
-  ## The default covers the usual in-cluster pod CIDRs; narrow it to your
-  ## ingress controller's range in production.
-  trustedProxies: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  ## Fail closed by default. Set this to the exact ingress/service-mesh source
+  ## ranges after inspecting the effective cluster network path.
+  trustedProxies: "none"
 
   ## Comma-separated hostnames permitted to mint tokens. Empty accepts any
   ## origin, which is the right default for a shared or multi-tenant deployment.
@@ -89,6 +92,13 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
+
+test:
+  image:
+    repository: curlimages/curl
+    # Multi-architecture manifest for curlimages/curl:8.11.1. Update only after
+    # reviewing the replacement image and recording its immutable digest.
+    digest: sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69
 
 resources:
   requests:

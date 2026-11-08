@@ -110,7 +110,7 @@ func pprofEnabled() bool {
 //
 // It deliberately omits IP address, user agent, and raw signal payloads — and by
 // default the free-text detection Reason, which can interpolate visitor-derived
-// data (reverse-DNS hostname, UA/header fragments, client field ids). Only the
+// data (UA/header fragments and client field ids). Only the
 // detection category enum and numeric score/confidence are logged.
 var verdictLoggingEnabled bool
 

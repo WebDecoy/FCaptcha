@@ -477,6 +477,25 @@ func TestCanonicalPayloadIsSortedAndUnspaced(t *testing.T) {
 	}
 }
 
+func TestV2CanonicalPayloadIsLanguageNeutral(t *testing.T) {
+	claims := map[string]interface{}{
+		"v": 2, "site_key": "s", "jti": "id", "timestamp": int64(1700000000),
+		"score": 0.11, "ip_hash": "abcd1234", "hostname": "example.com",
+		"action": "<login>", "cdata": "a&b",
+	}
+	payload, err := canonicalTokenPayload(claims)
+	if err != nil {
+		t.Fatalf("canonical payload: %v", err)
+	}
+	want := strings.Join([]string{
+		"fcaptcha-token-v2", "cw", "aWQ", "1700000000", "0.110",
+		"YWJjZDEyMzQ", "ZXhhbXBsZS5jb20", "PGxvZ2luPg", "YSZi",
+	}, "\n")
+	if string(payload) != want {
+		t.Fatalf("v2 payload diverged:\n got %q\nwant %q", payload, want)
+	}
+}
+
 func TestFixtureClaimsProduceTheSharedSignature(t *testing.T) {
 	e := NewScoringEngine(fixtureSecret)
 	payload, _ := json.Marshal(fixtureClaims())

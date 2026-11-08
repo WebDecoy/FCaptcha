@@ -15,14 +15,21 @@ const { createScoringEngine } = require('@webdecoy/fcaptcha');
 
 // Create a scoring engine
 const engine = createScoringEngine({
-  secret: process.env.FCAPTCHA_SECRET
+  secret: process.env.FCAPTCHA_SECRET,
+  // Required for multiple processes or replicas: provide one implementation
+  // whose claim(signature) operation is atomic and shared (for example Redis).
+  tokenStore: sharedTokenStore
 });
 
 // Generate a PoW challenge
 const challenge = engine.generateChallenge('my-site', clientIP);
 
 // Verify a submission
-const result = engine.verify(signals, clientIP, siteKey, userAgent, headers, powSolution);
+const result = engine.verify(
+  signals, clientIP, siteKey, userAgent, headers, powSolution,
+  signalsJson, powTiming,
+  { hostname: 'app.example.com', action: 'login', cdata: sessionId }
+);
 
 if (result.success) {
   // User passed verification
@@ -30,6 +37,17 @@ if (result.success) {
   console.log('Token:', result.token);
 }
 ```
+
+Engines in one Node process share the default replay store. Multiple processes
+or replicas must inject one shared atomic `tokenStore`; otherwise no in-memory
+implementation can enforce one-time redemption across them.
+
+`createMiddleware()` binds tokens to the request `Origin`/`Referer` and the
+submitted `action`/`cdata`. Its `tokenVerifyHandler` is server-to-server and
+requires `secret` in the request body. Set `verifySecret` in middleware options
+to split that credential from the signing secret. A relying backend must compare
+the returned `hostname` and `action` with the values expected for the protected
+operation before granting it.
 
 ## Features
 
@@ -47,6 +65,7 @@ const {
   PoWChallengeStore,    // Challenge storage
   RateLimiter,          // Rate limiting
   FingerprintStore,     // Fingerprint tracking
+  TokenStore,           // Process-local replay store / custom-store interface
   detection,            // Detection utilities
   createScoringEngine,  // Factory function
   createMiddleware,     // Express middleware factory

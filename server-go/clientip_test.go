@@ -221,6 +221,9 @@ func TestProxyTrustFromEnvDefaults(t *testing.T) {
 	if got := ProxyTrustFromEnv().ClientIP(request("159.65.1.1:44321", map[string]string{"X-Real-IP": "73.15.22.100"})); got != "159.65.1.1" {
 		t.Errorf("unset TRUSTED_PROXIES should not trust a public peer, got %q", got)
 	}
+	if got := ProxyTrustFromEnv().ClientIP(request("10.0.1.5:44321", map[string]string{"X-Real-IP": "73.15.22.100"})); got != "10.0.1.5" {
+		t.Errorf("unset TRUSTED_PROXIES should not trust private peers, got %q", got)
+	}
 }
 
 // The misconfiguration hint: an unlisted reverse proxy and a spoofing client

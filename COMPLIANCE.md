@@ -110,9 +110,9 @@ recommendation, category scores, and per-detection category/score/confidence. It
 deliberately omits IP, User-Agent, and raw signals.
 
 `FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW=1` additionally includes free-text detection
-reasons, which **can contain visitor-derived data** — reverse-DNS hostnames,
-User-Agent fragments, form field ids. Do not enable it where you have privacy
-obligations. It exists for debugging and says so in its own warning at startup.
+reasons, which **can contain visitor-derived data** — User-Agent fragments and
+form field ids. Do not enable it where you have privacy obligations. It exists
+for debugging and says so in its own warning at startup.
 
 ## Automated decision-making
 

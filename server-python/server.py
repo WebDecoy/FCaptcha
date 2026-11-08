@@ -153,7 +153,7 @@ VERIFY_SECRET = os.getenv("FCAPTCHA_VERIFY_SECRET") or SECRET_KEY
 # (score, recommendation, category scores, and per-hit category/score/confidence)
 # for observability and tuning. It deliberately omits IP, user agent, raw
 # signals, and the free-text detection reason, which can interpolate
-# visitor-derived data (reverse-DNS hostname, UA/header fragments, field ids).
+# visitor-derived data (UA/header fragments and field ids).
 #
 # FCAPTCHA_LOG_VERDICTS_INCLUDE_RAW additionally includes that free-text reason.
 # Separate and off by default because reasons can carry visitor-derived data —
@@ -1817,13 +1817,35 @@ def calculate_final_score(category_scores: Dict[str, float]) -> float:
 def _canonical_payload(data: Dict) -> str:
     """The exact bytes a token signature covers.
 
-    Sorted keys and no whitespace, byte-identical to Node's
-    ``JSON.stringify(data, Object.keys(data).sort())`` and Go's
-    ``json.Marshal`` of a map. The three servers sign the same claims, so they
-    must serialise them the same way or a token minted by one is rejected by the
-    others.
+    Version 2 is a language-neutral line format with UTF-8 strings encoded as
+    unpadded base64url and fixed numeric representations. Tokens without v=2
+    retain the legacy sorted compact JSON format during rolling upgrades.
     """
-    return json.dumps(data, sort_keys=True, separators=(",", ":"))
+    if data.get("v") != 2:
+        return json.dumps(data, sort_keys=True, separators=(",", ":"))
+
+    def encoded(value: object, field: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"{field} must be a string")
+        return base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
+
+    timestamp = data.get("timestamp")
+    score = data.get("score")
+    if not isinstance(timestamp, int) or isinstance(timestamp, bool):
+        raise ValueError("timestamp must be an integer")
+    if not isinstance(score, (int, float)) or isinstance(score, bool) or not math.isfinite(score):
+        raise ValueError("score must be finite")
+    return "\n".join((
+        "fcaptcha-token-v2",
+        encoded(data.get("site_key"), "site_key"),
+        encoded(data.get("jti"), "jti"),
+        str(timestamp),
+        f"{float(score):.3f}",
+        encoded(data.get("ip_hash"), "ip_hash"),
+        encoded(data.get("hostname"), "hostname"),
+        encoded(data.get("action"), "action"),
+        encoded(data.get("cdata"), "cdata"),
+    ))
 
 
 def _decode_token_base64(token: str) -> bytes:
@@ -1853,14 +1875,13 @@ def generate_token(
     against a password-reset endpoint, or a token minted on a site that lifted
     the key.
 
-    Empty strings rather than omitted keys: the signing payload is a sorted-key
-    JSON serialisation, so a token whose key set varied with what the browser
-    happened to send would be a second payload shape to keep in sync across three
-    languages. Fixed shape, empty when unknown.
+    Empty strings rather than omitted keys keep one fixed signed claim set
+    across all three runtimes.
     """
     binding = binding or {}
     ip_hash = ip_binding(ip)
     data = {
+        "v": 2,
         "site_key": site_key,
         "jti": secrets.token_hex(16),
         "timestamp": int(time.time()),
@@ -2104,10 +2125,12 @@ def run_verification(
             ThreatCategory.BOT, d["score"], d["confidence"], d["reason"]
         ))
 
-    # Flag declared/verified AI agents (self-identifying UA or Web Bot Auth signature)
+    # Self-identifying UAs are declared agents. Signature headers are treated
+    # as bot evidence until Python has performed cryptographic verification.
     for d in check_declared_ai_agent(user_agent, headers):
+        category = ThreatCategory(d["category"]) if d["category"] in [e.value for e in ThreatCategory] else ThreatCategory.BOT
         detections.append(Detection(
-            ThreatCategory.DECLARED_AI, d["score"], d["confidence"], d["reason"]
+            category, d["score"], d["confidence"], d["reason"], d.get("details")
         ))
 
     # Input forensics v2 (PRD workstream C): typing cadence and modality, the

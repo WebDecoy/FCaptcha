@@ -122,6 +122,7 @@ def from_env_distinguishes_unset_from_empty():
     unset = ProxyTrust.from_env({})
     assert unset.client_ip(FakeRequest("127.0.0.1", headers)) == "73.15.22.100"
     assert unset.client_ip(FakeRequest("159.65.1.1", headers)) == "159.65.1.1"
+    assert unset.client_ip(FakeRequest("10.0.1.5", headers)) == "10.0.1.5"
 
     # Explicitly empty: trust nothing.
     empty = ProxyTrust.from_env({"TRUSTED_PROXIES": ""})

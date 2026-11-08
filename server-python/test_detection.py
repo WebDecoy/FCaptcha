@@ -10,7 +10,7 @@ Run: python test_detection.py
 
 from testkit import TestRegistry
 
-from detection import analyze_headers
+from detection import analyze_headers, check_declared_ai_agent, check_ip_reputation
 from server import (
     Detection,
     ThreatCategory,
@@ -48,6 +48,25 @@ def browser_headers():
 
 def suspicious(dets):
     return [d["reason"] for d in dets if d["reason"].startswith("Suspicious header present")]
+
+
+@test
+def unverified_web_bot_auth_headers_fail_closed():
+    detections = check_declared_ai_agent("Mozilla/5.0", {
+        "signature": "sig1=:ZmFrZQ==:",
+        "signature-input": 'sig1=("@authority" "signature-agent")',
+        "signature-agent": "https://agent.example/.well-known/http-message-signatures-directory",
+    })
+    assert len(detections) == 1
+    assert detections[0]["category"] == "bot"
+    assert detections[0]["details"]["verified"] is False
+
+
+@test
+def ip_reputation_is_local_and_does_not_emit_ptr_derived_details():
+    detections = check_ip_reputation("13.64.0.1")
+    assert detections and detections[0]["category"] == "datacenter"
+    assert all("hostname" not in detection.get("details", {}) for detection in detections)
 
 
 @test

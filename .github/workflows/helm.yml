@@ -29,9 +29,9 @@ jobs:
     name: Lint, render, validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: azure/setup-helm@v5
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.3
 
@@ -47,6 +47,14 @@ jobs:
             exit 1
           fi
           echo "guard holds"
+
+      - name: Requires a rollout token for operator-managed signing Secrets
+        run: |
+          if helm template t charts/fcaptcha --set existingSecret=mine >/dev/null 2>&1; then
+            echo "chart rendered an external Secret without a rollout token"
+            exit 1
+          fi
+          echo "rotation guard holds"
 
       # Multiple replicas without shared state give each pod its own challenge
       # and replay tables, so a challenge issued by one is unknown to the next.
@@ -77,7 +85,7 @@ jobs:
             kubeconform -strict -summary -kubernetes-version 1.30.0 "/tmp/$name.yaml"
           }
           render minimal        --set secret=ci
-          render existing       --set existingSecret=mine
+          render existing       --set existingSecret=mine --set existingSecretVersion=v1
           render ingress        --set secret=ci --set ingress.enabled=true
           render scaling        --set secret=ci --set autoscaling.enabled=true --set podDisruptionBudget.enabled=true \
                                 --set redis.url=redis://r:6379
@@ -91,13 +99,13 @@ jobs:
     name: Install into a cluster
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: azure/setup-helm@v5
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.16.3
 
-      - uses: helm/kind-action@v1
+      - uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1
         with:
           cluster_name: fcaptcha-chart
 
