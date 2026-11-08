@@ -124,6 +124,19 @@ function renderReport(metrics, corpus, gate) {
       { header: 'PROVENANCE', value: (r) => r.provenance },
     ])
   );
+  out.push('');
+  out.push(`${C.dim}  Agent scenarios (capture choreography/configuration):${C.reset}`);
+  out.push(
+    table(metrics.agentCorpus.byScenario, [
+      { header: 'SCENARIO', value: (r) => r.group },
+      { header: 'N', value: (r) => r.total, right: true },
+      { header: 'CAUGHT', value: (r) => r.hits, right: true },
+      { header: 'TPR', value: (r) => pct(r.rate), right: true },
+      { header: 'MED SCORE', value: (r) => r.medianScore?.toFixed(3) ?? '-', right: true },
+      { header: 'MAX SCORE', value: (r) => r.maxScore?.toFixed(3) ?? '-', right: true },
+      { header: 'PROVENANCE', value: (r) => r.provenance },
+    ])
+  );
 
   // ---- Per-signal --------------------------------------------------------
   out.push(heading(`Per-signal false positives (budget ${pct(cfg.perSignalFpBudget)})`));

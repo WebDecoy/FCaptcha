@@ -165,13 +165,18 @@ up as a signal over budget, which is what it should do.
 `--gate` fails the run on:
 
 - **any signal over the 0.3% per-sample FP budget**, and
-- **any replay error** (an incomplete run must not read as a pass).
+- **any replay error** (an incomplete run must not read as a pass), and
+- **a fixed-corpus agent regression** below the class floor recorded in
+  `agent-regression-floors.json`.
 
 It *warns without failing* on aggregate FPR and per-class TPR. Those are
 population claims and this corpus is not a population sample; gating on them
 would dress a regression check up as evidence about real users. The per-signal
 budget is different in kind — it is a regression check on this fixed corpus,
-which is exactly what it can support.
+which is exactly what it can support. The agent regression floors work the same
+way: they preserve detection already demonstrated by this corpus without
+pretending that the observed rate generalizes to a population. Classes with a
+known gap have no regression floor and remain conspicuous warnings.
 
 ---
 
@@ -180,6 +185,8 @@ which is exactly what it can support.
 ```
 bench/
   run-bench.js            replay + report + gate
+  agent-regression-floors.json
+                          minimum rates for classes this corpus already catches
   capture/
     record.js             drives Chromium, intercepts the /api/verify body
     input.js              per-persona input choreography
@@ -287,14 +294,22 @@ Two results worth recording because they changed the design:
   cadence floor looks for. That is why the check requires ten keystrokes, no page
   paste and no field paste before it will look at cadence at all.
 
-### Two classes still score below the bar, and both should
+### Three classes still score below the bar
 
-- **`declared-crawler` (0.419).** A self-identifying ClaudeBot is deliberately
+- **`declared-crawler` (0.600 on the v1.47.0 corpus).** A self-identifying ClaudeBot is deliberately
   low-severity: it is honest about what it is, and whether to serve it is a
   policy decision for the operator, not a block. Scoring under 0.8 is the design.
-- **`source-patched` (0.234).** A patched Chromium with every JS-observable
+- **`source-patched` (0.600 on the v1.47.0 corpus).** A patched Chromium with every JS-observable
   automation flag scrubbed, on a residential IP, whose only tell is that the
   movement is wrong. It trips nothing dispositive, so the floor cannot help, and
   the behavioural layer does not carry the case alone. **This is the real open
   problem**, and the number is here so it stays visible rather than being
   averaged into a headline. Closing it is what workstreams C, D and F are for.
+- **`stealth-cdp-agent` (0.153 median, 0.206 max on the v1.47.0 corpus).**
+  Installed Chrome launched headfully through Playwright with
+  `AutomationControlled` disabled retains its ordinary plugins, `window.chrome`
+  and native viewport while hiding `navigator.webdriver`. Ten real captures —
+  five with a deliberately mechanical wave and five reusing the humanized input
+  model — all remained below the 0.8 blocking threshold. This is a measured
+  open problem, not a synthetic projection. The report keeps the two capture
+  scenarios separate even though they share one threat class.

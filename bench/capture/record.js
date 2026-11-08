@@ -159,7 +159,7 @@ async function capture(browser, name, persona, opts) {
  * already been consumed, and the replayer stamps in a fresh one. Leaving a dead
  * nonce in the corpus would look like a signal and behave like litter.
  */
-function toSample({ id, label, group, payload, notes, headers, clientIp, persona = {} }) {
+function toSample({ id, label, group, scenario, payload, notes, headers, clientIp, persona = {} }) {
   let signals = { ...payload.signals };
   if (signals.meta) {
     signals.meta = { ...signals.meta };
@@ -176,7 +176,7 @@ function toSample({ id, label, group, payload, notes, headers, clientIp, persona
     caveats.push(...repaired.caveats);
   }
 
-  const sample = { id, label, group, provenance: 'captured', notes, signals };
+  const sample = { id, label, group, scenario, provenance: 'captured', notes, signals };
   if (caveats.length) sample.caveats = caveats;
   if (headers) sample.headers = headers;
   if (clientIp) sample.clientIp = clientIp;
@@ -198,7 +198,13 @@ async function main() {
   const res = await fetch(`${opts.server}/health`).catch(() => null);
   if (!res || !res.ok) throw new Error(`no server at ${opts.server} — start one first`);
 
-  const browser = await chromium.launch({ headless: !opts.headed });
+  // Some personas launch an installed browser with their own flags. Do not
+  // require Playwright's bundled Chromium when every selected persona does so.
+  let browser = null;
+  const sharedBrowser = async () => {
+    if (!browser) browser = await chromium.launch({ headless: !opts.headed });
+    return browser;
+  };
   const written = [];
 
   try {
@@ -209,13 +215,21 @@ async function main() {
           const group = persona.class || name;
           const id = `${label}/${name}/${String(r).padStart(4, '0')}`;
           process.stdout.write(`  capturing ${id} ... `);
+          let own = null;
           try {
-            const payload = await capture(browser, name, persona, { ...opts, seed: opts.seed + r });
+            // A persona that needs its own launch (a real Chrome channel,
+            // stealth flags) gets a dedicated browser for each sample.
+            own = persona.launch ? await chromium.launch(persona.launch) : null;
+            const payload = await capture(own || await sharedBrowser(), name, persona, {
+              ...opts,
+              seed: opts.seed + r,
+            });
             samples.push(
               toSample({
                 id,
                 label,
                 group,
+                scenario: name,
                 payload,
                 persona,
                 notes: persona.evidence,
@@ -225,6 +239,8 @@ async function main() {
             console.log('ok');
           } catch (err) {
             console.log(`FAILED: ${err.message}`);
+          } finally {
+            if (own) await own.close();
           }
         }
         if (samples.length) {
@@ -233,7 +249,7 @@ async function main() {
       }
     }
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
   }
 
   console.log(`\nwrote ${written.length} file(s) to ${opts.out}`);

@@ -10,6 +10,7 @@
  *     "id":        "human/keyboard-only/0003",
  *     "label":     "human" | "agent",
  *     "group":     "keyboard-only"            // persona (human) or class (agent)
+ *     "scenario":  "stealth-humanized"        // capture choreography/configuration
  *     "provenance":"captured" | "derived" | "synthetic",
  *     "source":    "human/keyboard-only/0000" // for derived: the capture it came from
  *     "notes":     "...",                     // free text, shown in the report
@@ -158,6 +159,7 @@ function deriveVariant(sample, rng, index, pct = 0.15) {
     id: `${sample.group}/derived/${String(index).padStart(4, '0')}`,
     label: sample.label,
     group: sample.group,
+    scenario: sample.scenario,
     provenance: 'derived',
     source: sample.id,
     notes: `±${Math.round(pct * 100)}% jitter around ${sample.id}, distinct synthetic device`,

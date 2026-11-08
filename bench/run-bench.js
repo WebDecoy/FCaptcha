@@ -145,7 +145,15 @@ async function main() {
     ? JSON.parse(fs.readFileSync(artifactsPath, 'utf8')).artifacts || []
     : [];
 
-  const gate = evaluateGate(metrics, knownArtifacts);
+  // Absolute TPR targets remain advisory because this is not a population
+  // sample. Floors for classes this fixed corpus already catches are regression
+  // assertions, however, and are safe to gate on.
+  const floorsPath = path.join(__dirname, 'agent-regression-floors.json');
+  const agentRegressionFloors = fs.existsSync(floorsPath)
+    ? JSON.parse(fs.readFileSync(floorsPath, 'utf8')).classes || {}
+    : {};
+
+  const gate = evaluateGate(metrics, knownArtifacts, agentRegressionFloors);
 
   console.log(renderReport(metrics, base, gate));
 
