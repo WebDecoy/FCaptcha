@@ -13,6 +13,39 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.47.0] — 2026-11-08
+
+### Security
+- Token signatures now use a language-neutral v2 canonical format across Go,
+  Node, and Python. Verification remains compatible with legacy tokens during
+  rolling upgrades, and signed claims include hostname, action, and cdata.
+- The native Node token verification handler now requires the configured
+  verification secret, and its default replay store is shared by all scoring
+  engines in one process. Multi-process deployments still need a shared atomic
+  token store.
+- Forwarding headers are trusted only from loopback by default. Configure
+  `TRUSTED_PROXIES` with the exact ingress or sidecar ranges in proxied
+  deployments; the Helm chart defaults to trusting none.
+- Python Web Bot Auth signature headers now fail closed when they cannot be
+  verified, and visitor-controlled reverse DNS lookups were removed from the
+  Go and Python request paths.
+- Release workflows and third-party Actions are pinned to immutable revisions;
+  manual package-publish entry points were removed and npm publication is bound
+  to the release tag and package version.
+
+### Changed
+- **Breaking:** callers of the Node library's native `tokenVerifyHandler` must
+  send `secret`. Existing HTTP siteverify compatibility endpoints are
+  unchanged.
+- **Breaking for proxied deployments:** private network peers are no longer
+  implicitly trusted to set client IP headers. Set `TRUSTED_PROXIES` explicitly
+  or visitors will be attributed to the immediate proxy.
+- **Breaking for Helm users of `existingSecret`:** set
+  `existingSecretVersion` whenever secret material changes so the Deployment
+  rolls pods predictably.
+- The bundled demo no longer loads Google Fonts, eliminating an unnecessary
+  third-party request.
+
 ## [1.46.2] — 2026-11-03
 
 ### Security
