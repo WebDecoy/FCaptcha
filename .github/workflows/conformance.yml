@@ -35,6 +35,7 @@ jobs:
             echo "Testing experimental policy selector: '${policy}'"
             docker run -d --name fcaptcha-conformance -p 3000:3000 \
               -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" \
+              -e TRUSTED_PROXIES="*" \
               -e FCAPTCHA_EXPERIMENTAL_BLOCKING="$policy" fcaptcha-conformance
             ready=false
             for _ in $(seq 1 60); do
