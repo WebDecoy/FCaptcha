@@ -11,7 +11,7 @@
  *     "label":     "human" | "agent",
  *     "group":     "keyboard-only"            // persona (human) or class (agent)
  *     "scenario":  "stealth-humanized"        // capture choreography/configuration
- *     "provenance":"captured" | "derived" | "synthetic",
+ *     "provenance":"captured" | "derived" | "self-reported" | "synthetic",
  *     "source":    "human/keyboard-only/0000" // for derived: the capture it came from
  *     "notes":     "...",                     // free text, shown in the report
  *     "headers":   { "User-Agent": "...", ... },
@@ -27,6 +27,10 @@
  *               neighbourhood around a real capture. Supports a claim about
  *               robustness near observed behaviour; does NOT support a
  *               population false-positive rate.
+ *   self-reported — an explicitly consented production trace whose human label
+ *               was supplied by the visitor. It is useful for finding coverage
+ *               gaps, but the label is not trusted ground truth and therefore
+ *               cannot support a false-positive claim or gate.
  *   synthetic — hand-authored from a description in a paper or vendor writeup.
  *               Supports regression detection only. Never a published number.
  *
@@ -39,7 +43,7 @@ const fs = require('fs');
 const path = require('path');
 
 const LABELS = new Set(['human', 'agent']);
-const PROVENANCE = new Set(['captured', 'derived', 'synthetic']);
+const PROVENANCE = new Set(['captured', 'derived', 'self-reported', 'synthetic']);
 
 /** Provenance strong enough to support a false-positive claim. */
 const EVIDENTIAL = new Set(['captured', 'derived']);

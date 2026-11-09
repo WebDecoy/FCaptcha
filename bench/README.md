@@ -55,10 +55,12 @@ every rate for that reason.
 |---|---|---|
 | `captured` | recorded from a real browser; notes identify scripted or manual input | a claim about observed behaviour |
 | `derived` | a capture with its numeric fields jittered ±15% | robustness near observed behaviour |
+| `self-reported` | consented hosted-demo trace labeled human by its visitor | coverage discovery only; never an FP claim or gate |
 | `synthetic` | hand-authored from a paper or vendor writeup | regression detection only |
 
-Headline rates are computed from `captured` + `derived` only. Synthetic samples
-are measured and shown, never folded into a false-positive figure.
+Headline rates and per-signal false-positive gates are computed from `captured`
++ `derived` only. Self-reported and synthetic samples are replayed and shown,
+never folded into a false-positive figure or gate.
 
 **The human panel's environment is partly reconstructed.** This is the harness's
 sharpest limitation and it is structural: the only way to produce repeatable real
@@ -131,6 +133,39 @@ node tools/import-manual-capture.js \
 The importer refuses automated or normalized reports, strips the consumed
 challenge nonce, retains only replay-relevant request headers, records a hash of
 the source report, and will not overwrite an existing corpus file or sample id.
+
+### Replaying consented hosted-demo research
+
+The hosted demo exposes an authenticated NDJSON export of explicitly consented
+research traces. Replay the current export without putting the bearer token in
+shell history:
+
+```bash
+cd bench
+FCAPTCHA_CAPTURE_EXPORT_TOKEN="$(security find-generic-password \
+  -w -s fcaptcha-capture-export)" \
+  node run-bench.js --research-export
+```
+
+For an export already downloaded through an approved secret-handling workflow:
+
+```bash
+node run-bench.js --research-input /path/to/fcaptcha-captures.ndjson
+```
+
+The importer accepts only schema-v1 self-reported human records, caps input at
+64 MiB and 5,000 records, refuses redirects and non-HTTPS export URLs, and never
+accepts the bearer token as a command-line argument. Use `--research-url` for
+another HTTPS FCaptcha deployment. The importer independently removes
+record IDs, rotating subject IDs, capture/expiry timestamps, stored verdicts,
+screen geometry, user agents, challenge/session/site identifiers, and field
+names. The in-memory sample carries browser, OS, input method, and endpoint only, and uses
+`self-reported` provenance so these traces can reveal coverage gaps without
+being mistaken for trusted ground truth. Imported samples exist only in process
+memory: raw samples are never written to `corpus/` or the JSON report, or
+expanded into derived samples. This preserves the demo's seven-day retention
+boundary instead of turning short-lived consent into a permanent repository
+artifact.
 
 ### What the first manual sessions changed
 

@@ -51,3 +51,37 @@ test('a regression-gated class cannot silently disappear from the corpus', () =>
   assert.equal(gate.passed, false);
   assert.match(gate.failures[0], /local-cdp-agent.*missing/);
 });
+
+test('self-reported humans are measured but cannot create false-positive claims or gates', () => {
+  const captured = {
+    sample: {
+      id: 'human/manual/0000',
+      label: 'human',
+      group: 'manual',
+      provenance: 'captured',
+    },
+    score: 0.1,
+    detections: [],
+  };
+  const selfReported = {
+    sample: {
+      id: 'human/hosted/0000',
+      label: 'human',
+      group: 'self-reported-chrome-macos-trackpad',
+      provenance: 'self-reported',
+    },
+    score: 0.9,
+    detections: [{ reason: 'Automation-like movement', category: 'behavioral' }],
+  };
+  const metrics = computeMetrics([captured, selfReported]);
+  const gate = evaluateGate(metrics);
+
+  assert.equal(metrics.humanPanel.all.total, 2);
+  assert.equal(metrics.humanPanel.evidential.total, 1);
+  assert.equal(metrics.humanPanel.excludedByProvenance[0].group, 'self-reported');
+  assert.equal(metrics.perSignal.length, 0);
+  assert.equal(metrics.humanPanel.exploratorySignals[0].signal, 'Automation-like movement');
+  assert.equal(metrics.humanPanel.exploratorySignals[0].hits, 1);
+  assert.equal(gate.passed, true);
+  assert.ok(metrics.humanPanel.byPersona.some((row) => row.group === selfReported.sample.group));
+});

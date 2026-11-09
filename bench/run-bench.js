@@ -11,6 +11,8 @@
  *   node bench/run-bench.js --derive 20              # 20 jittered variants per capture
  *   node bench/run-bench.js --gate                   # exit non-zero on a budget breach
  *   node bench/run-bench.js --json out.json          # machine-readable output
+ *   node bench/run-bench.js --research-export        # ephemeral hosted-demo export
+ *   node bench/run-bench.js --research-input file    # ephemeral local NDJSON export
  *
  * Start a server first — any of the three implementations:
  *   cd server-node && npm start
@@ -27,6 +29,12 @@ const { renderReport } = require('./lib/report');
 const crypto = require('crypto');
 const { replayCorpus } = require('./lib/replay');
 const { makeRng } = require('./lib/rng');
+const {
+  DEFAULT_EXPORT_URL,
+  fetchExport,
+  parseExport,
+  readExportFile,
+} = require('./lib/research-import');
 
 function parseArgs(argv) {
   const args = {
@@ -37,6 +45,8 @@ function parseArgs(argv) {
     gate: false,
     json: null,
     quiet: false,
+    researchInput: null,
+    researchUrl: null,
   };
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
@@ -47,10 +57,30 @@ function parseArgs(argv) {
     else if (a === '--seed') args.seed = Number(argv[++i]);
     else if (a === '--concurrency') args.concurrency = Number(argv[++i]);
     else if (a === '--json') args.json = argv[++i];
+    else if (a === '--research-export') args.researchUrl = DEFAULT_EXPORT_URL;
+    else if (a === '--research-url') {
+      args.researchUrl = argv[++i];
+      if (!args.researchUrl) throw new Error('--research-url requires a value');
+    }
+    else if (a === '--research-input') {
+      args.researchInput = argv[++i];
+      if (!args.researchInput) throw new Error('--research-input requires a value');
+    }
     else if (a === '--help' || a === '-h') args.help = true;
     else throw new Error(`unknown argument: ${a}`);
   }
+  if (args.researchInput && args.researchUrl) {
+    throw new Error('--research-input cannot be combined with --research-export or --research-url');
+  }
   return args;
+}
+
+async function loadResearchSamples(args) {
+  if (!args.researchInput && !args.researchUrl) return [];
+  const bytes = args.researchInput
+    ? readExportFile(path.resolve(args.researchInput))
+    : await fetchExport(args.researchUrl, process.env.FCAPTCHA_CAPTURE_EXPORT_TOKEN);
+  return parseExport(bytes);
 }
 
 /**
@@ -93,7 +123,12 @@ async function main() {
     return 2;
   }
 
-  const base = loadCorpus();
+  const research = await loadResearchSamples(args);
+  const committed = loadCorpus();
+  const committedIds = new Set(committed.map((sample) => sample.id));
+  const collision = research.find((sample) => committedIds.has(sample.id));
+  if (collision) throw new Error(`research sample id collides with committed corpus: ${collision.id}`);
+  const base = [...committed, ...research];
   if (!base.length) {
     console.error('corpus is empty — run `node bench/capture/record.js` first');
     return 2;
@@ -104,6 +139,12 @@ async function main() {
   const corpus = expand(scoreable, args.derive, args.seed);
 
   if (!args.quiet) {
+    if (research.length) {
+      console.log(
+        `loaded ${research.length} ephemeral self-reported research sample(s); ` +
+          'they will not be written to the corpus or JSON report'
+      );
+    }
     console.log(
       `replaying ${corpus.length} samples (${scoreable.length} base + ` +
         `${corpus.length - scoreable.length} derived) against ${args.server}`
@@ -180,9 +221,13 @@ async function main() {
   return args.gate && !gate.passed ? 1 : 0;
 }
 
-main()
-  .then((code) => process.exit(code))
-  .catch((err) => {
-    console.error(err.stack || err.message);
-    process.exit(2);
-  });
+if (require.main === module) {
+  main()
+    .then((code) => process.exit(code))
+    .catch((err) => {
+      console.error(err.stack || err.message);
+      process.exit(2);
+    });
+}
+
+module.exports = { expand, loadResearchSamples, main, parseArgs };
