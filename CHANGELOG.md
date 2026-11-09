@@ -13,6 +13,33 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.47.2] — 2026-11-09
+
+### Measurement
+- The benchmark can replay explicitly consented hosted-demo research exports
+  directly from the authenticated NDJSON endpoint or a local export. Imported
+  traces stay in process memory and are never committed to the corpus or
+  written into benchmark JSON output, preserving the demo's seven-day
+  retention boundary.
+- Self-reported human labels now have their own provenance tier. They remain
+  visible in exploratory browser, OS, input-method, and signal clusters but
+  cannot affect headline false-positive figures, per-signal gates, or derived
+  samples.
+- The research importer fails closed on schema drift, unsafe object keys,
+  redirects, non-HTTPS URLs, unexpected content types, oversized exports, and
+  malformed labels. It independently strips record and subject identifiers,
+  timestamps, verdicts, user agents, screen geometry, challenge/session/site
+  identifiers, and form field names.
+
+### Changed
+- Python deployments move to Pydantic 2.14.3, Pydantic Core 2.50.4, and
+  python-multipart 0.0.33 with refreshed hash locks.
+- Published images rebuild from refreshed pinned Go 1.27.3 Alpine and Node 26
+  Alpine base-image digests.
+- Development tooling moves to Playwright 1.65.0 and helm/kind-action 1.15.2.
+
+No breaking changes.
+
 ## [1.47.1] — 2026-11-08
 
 ### Fixed
