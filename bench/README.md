@@ -37,12 +37,13 @@ on whichever personas were in flight.
 
 This is the part to read before quoting anything from the output.
 
-**The corpus is captured, not sampled.** Traces come from a real Chromium driven
-through real input events, so the signal payloads are exactly what the client
-produces — including fields nobody remembered were there. What it is *not* is a
-sample of the human population. Fourteen personas driven by scripted input are a
-structural stand-in for fourteen kinds of user, not evidence about how often real
-users of each kind get flagged.
+**The corpus is captured, not sampled.** Traces come from real browsers, so the
+signal payloads are exactly what the client produces — including fields nobody
+remembered were there. Most human personas are Chromium driven through scripted
+input; four additional sessions are real Chrome, Safari and Firefox driven by a
+person. What this is *not* is a sample of the human population. Scripted personas
+are structural stand-ins, and four sessions from one person and machine do not
+establish how often real users get flagged.
 
 So: **a 0% FPR here means "no sample in this corpus crossed the threshold". It
 does not mean 0% of real users would.** The report prints sample counts next to
@@ -52,7 +53,7 @@ every rate for that reason.
 
 | | what it is | what it can support |
 |---|---|---|
-| `captured` | recorded from a real browser under real input | a claim about observed behaviour |
+| `captured` | recorded from a real browser; notes identify scripted or manual input | a claim about observed behaviour |
 | `derived` | a capture with its numeric fields jittered ±15% | robustness near observed behaviour |
 | `synthetic` | hand-authored from a paper or vendor writeup | regression detection only |
 
@@ -108,8 +109,52 @@ rate for a pinned property as an artifact of the pinning rather than a result.
 
 **The honest way to close all of this** is captures from real browsers driven by
 real people. The corpus format accepts them directly — drop a `captured` sample
-into `corpus/captured/` and it is measured like any other. Until those exist,
-this is the floor, not the ceiling.
+into `corpus/captured/` and it is measured like any other. The initial manual
+panel covers one macOS machine; more people, hardware and operating systems are
+still needed. This is the floor, not the ceiling.
+
+The manual recorder launches no browser automation. After completing a capture,
+import its request into the corpus with explicit browser and input labels:
+
+```bash
+python3 capture/camoufox_bench.py --manual --modes widget \
+  --environment-label 'Chrome 156, macOS, default settings' \
+  --out test-results/chrome-trackpad
+
+node tools/import-manual-capture.js \
+  --report test-results/chrome-trackpad/report.json \
+  --out corpus/captured/human-chrome-macos-trackpad.json \
+  --group real-trackpad --scenario chrome-macos-trackpad \
+  --input 'built-in trackpad and keyboard'
+```
+
+The importer refuses automated or normalized reports, strips the consumed
+challenge nonce, retains only replay-relevant request headers, records a hash of
+the source report, and will not overwrite an existing corpus file or sample id.
+
+### What the first manual sessions changed
+
+Four trackpad-and-keyboard sessions were recorded without browser automation:
+
+| browser | sessions | coalesced max | direction changes | overshoots | captured score |
+|---|---:|---:|---:|---:|---:|
+| Chrome 156 | 2 | 2, 2 | 44, 55 | 0, 0 | 0.029, 0.029 |
+| Safari 26.6 | 1 | 3 | 33 | 0 | 0.038 |
+| Firefox 158 | 1 | 2 | 49 | 0 | 0.000 |
+
+Every real session coalesced at least two pointer samples; all five
+`stealth-humanized` CDP captures maxed out at one. That supports the coalescing
+signal on these observed configurations, but four sessions from one machine are
+not enough to claim a population false-positive rate or remove the recorder
+artifact exemption from the scripted panel.
+
+The sessions also disproved two behavioural assumptions. All four natural
+trackpad paths reached the checkbox without an overshoot, and Safari produced a
+0.987-direct approach while still carrying saturated tremor and 33 direction
+changes. Overshoot and directness now stand down when independent movement
+markers already indicate a human hand. With one derived variant per capture,
+the corrected corpus reports 0/36 human samples flagged and no signal-budget
+failure.
 
 ---
 

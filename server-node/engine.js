@@ -307,7 +307,8 @@ function detectVisionAI(signals) {
   // Require an actual path before judging its shape, and apply the same
   // exemptions as its neighbours.
   const hasApproachPath = approachPts >= 5;
-  if (hasApproachPath && !isTouchUser && !isKeyboardUser && (b.approachDirectness ?? 0) > 0.95) {
+  if (hasApproachPath && !isTouchUser && !isKeyboardUser &&
+      (b.approachDirectness ?? 0) > 0.95 && !hasHumanMovementMarkers(b)) {
     detections.push({
       category: 'vision_ai', score: 0.5, confidence: 0.5,
       reason: 'Mouse path to target is unnaturally direct'
@@ -664,7 +665,7 @@ function detectBehavioral(signals) {
 
   // Overshoot. Click-derived, so widget-only.
   const overshoots = b.overshootCorrections ?? 0;
-  if (isWidgetInt && overshoots === 0 && trajectory > 200) {
+  if (isWidgetInt && overshoots === 0 && trajectory > 200 && !hasHumanMovementMarkers(b)) {
     detections.push({
       category: 'behavioral', score: 0.4, confidence: 0.4,
       reason: 'No overshoot corrections on long trajectory'

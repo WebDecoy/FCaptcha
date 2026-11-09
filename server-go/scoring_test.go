@@ -665,6 +665,26 @@ func TestInteractionMode_InvisibleSkipsClickDerivedChecks(t *testing.T) {
 	}
 }
 
+func TestBehavioral_HumanTrackpadDoesNotRequireOvershoot(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	signals := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"totalPoints": 174.0, "trajectoryLength": 1868.0,
+			"microTremorScore": 1.0, "directionChanges": 44.0,
+			"overshootCorrections": 0.0, "velocityVariance": 0.2,
+			"approachPoints": 40.0, "approachDirectness": 0.987,
+		},
+	}
+	SetInteractionMode(signals, true)
+	got := append(e.detectVisionAI(signals), e.detectBehavioral(signals)...)
+	if hasReasonContaining(got, "No overshoot corrections on long trajectory") {
+		t.Errorf("human trackpad markers should exempt zero overshoot, got %+v", got)
+	}
+	if hasReasonContaining(got, "Mouse path to target is unnaturally direct") {
+		t.Errorf("human trackpad markers should exempt directness, got %+v", got)
+	}
+}
+
 // TestAnalyzeFormInteraction_ProgrammaticFill covers the fill()-style insertion
 // signal: content with zero keystrokes and zero pastes.
 func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {

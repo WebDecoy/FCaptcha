@@ -85,6 +85,16 @@ test('directness is not judged without an approach path', () => {
   assert.ok(!reasons.includes(DIRECT), 'directness 1 with no points is the no-path sentinel');
 });
 
+test('a direct trackpad approach is not suspicious when hand markers are present', () => {
+  const reasons = visionReasons({
+    ...flatPath,
+    microTremorScore: 1,
+    directionChanges: 33,
+    approachDirectness: 0.987,
+  });
+  assert.ok(!reasons.includes(DIRECT), 'direction changes and tremor corroborate a human hand');
+});
+
 // A slow but unmistakably human pointer: saturated tremor, corrective
 // overshoots and plenty of direction changes.
 const slowHuman = {
@@ -101,6 +111,16 @@ test('a slow human with movement markers is exempt from the slow-pointer checks'
   const reasons = behavioralReasons(slowHuman);
   assert.ok(!reasons.includes(VELOCITY), 'motor-slow visitors move consistently and slowly');
   assert.ok(!reasons.includes(EVENT_RATE), 'elderly and motor-slow visitors emit few events');
+});
+
+test('a human trackpad path need not overshoot when other hand markers are present', () => {
+  const reasons = behavioralReasons({
+    ...slowHuman,
+    microTremorScore: 1,
+    overshootCorrections: 0,
+    directionChanges: 44,
+  });
+  assert.ok(!reasons.includes('No overshoot corrections on long trajectory'));
 });
 
 test('the same slow pointer without movement markers still trips them', () => {

@@ -250,6 +250,19 @@ def invisible_mode_skips_click_derived_checks():
 
 
 @test
+def human_trackpad_does_not_require_overshoot():
+    signals = set_interaction_mode({"behavioral": {
+        "totalPoints": 174, "trajectoryLength": 1868,
+        "microTremorScore": 1, "directionChanges": 44,
+        "overshootCorrections": 0, "velocityVariance": 0.2,
+        "approachPoints": 40, "approachDirectness": 0.987,
+    }}, True)
+    reasons = [d.reason for d in detect_vision_ai(signals) + detect_behavioral(signals)]
+    assert "No overshoot corrections on long trajectory" not in reasons, reasons
+    assert "Mouse path to target is unnaturally direct" not in reasons, reasons
+
+
+@test
 def interaction_mode_defaults_to_widget():
     # Callers that never set it keep the pre-existing behaviour.
     assert has_widget_interaction(_click_derived_session()) is True
