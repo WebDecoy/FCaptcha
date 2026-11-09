@@ -13,6 +13,27 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.47.1] — 2026-11-08
+
+### Fixed
+- Natural trackpad movement no longer receives weak automation detections solely
+  because the pointer reaches the checkbox without overshooting or follows a
+  direct approach. Those checks now stand down when independent tremor and
+  direction-change measurements already indicate a human hand, consistently
+  across the Go, Node, and Python servers.
+
+### Measurement
+- The benchmark now includes ten captured stealth-CDP agent traces and four
+  non-automated human sessions from Chrome, Safari, and Firefox. It reports
+  capture scenarios separately and gates regressions for agent classes the
+  fixed corpus already detects.
+- A new importer validates manual capture reports, removes stale challenge
+  state and transport-only headers, and produces replayable corpus samples with
+  explicit browser and input labels.
+- On the observed macOS sessions, real-browser pointer streams coalesced two or
+  three samples while all five humanized stealth-CDP captures maxed out at one.
+  This is recorded as measured evidence, not a population false-positive claim.
+
 ## [1.47.0] — 2026-11-08
 
 ### Security
