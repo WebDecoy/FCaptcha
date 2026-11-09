@@ -970,7 +970,8 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
     # exemptions as its neighbours.
     approach = b.get("approachDirectness", 0.5)
     has_approach_path = approach_pts >= 5
-    if has_approach_path and not is_touch_user and not is_keyboard_user and approach > 0.95:
+    if (has_approach_path and not is_touch_user and not is_keyboard_user and
+            approach > 0.95 and not _has_human_movement_markers(b)):
         detections.append(Detection(
             ThreatCategory.VISION_AI, 0.5, 0.5,
             "Mouse path to target is unnaturally direct"
@@ -1302,7 +1303,7 @@ def detect_behavioral(signals: Dict) -> List[Detection]:
 
     # Overshoot. Click-derived, so widget-only.
     overshoots = b.get("overshootCorrections", 0)
-    if is_widget and overshoots == 0 and trajectory > 200:
+    if is_widget and overshoots == 0 and trajectory > 200 and not _has_human_movement_markers(b):
         detections.append(Detection(
             ThreatCategory.BEHAVIORAL, 0.4, 0.4,
             "No overshoot corrections on long trajectory"

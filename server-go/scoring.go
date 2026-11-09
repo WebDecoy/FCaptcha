@@ -1327,7 +1327,7 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 	// exemptions as its neighbours.
 	approachDirectness := getFloat(behavioral, "approachDirectness")
 	hasApproachPath := approachPts >= 5
-	if hasApproachPath && !isTouchUser && !isKeyboardUser && approachDirectness > 0.95 {
+	if hasApproachPath && !isTouchUser && !isKeyboardUser && approachDirectness > 0.95 && !hasHumanMovementMarkers(behavioral) {
 		results = append(results, DetectionResult{
 			Category:   CategoryVisionAI,
 			Score:      0.5,
@@ -1830,7 +1830,7 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 
 	// Overshoot corrections. Click-derived, so widget-only.
 	overshoots := getFloat(behavioral, "overshootCorrections")
-	if isWidget && overshoots == 0 && trajectoryLength > 200 {
+	if isWidget && overshoots == 0 && trajectoryLength > 200 && !hasHumanMovementMarkers(behavioral) {
 		results = append(results, DetectionResult{
 			Category:   CategoryBehavioral,
 			Score:      0.4,
