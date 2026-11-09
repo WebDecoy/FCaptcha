@@ -63,10 +63,11 @@ function computeMetrics(results, opts = {}) {
   const humans = ok.filter((r) => r.sample.label === 'human');
   const agents = ok.filter((r) => r.sample.label === 'agent');
 
-  // Only captured and derived samples can support a false-positive claim;
-  // hand-authored ones are regression fixtures. Both are measured, but the
-  // reporter is required to keep them apart.
+  // Only captured and derived samples can support a false-positive claim.
+  // Self-reported and hand-authored labels are still replayed and shown by
+  // persona, but they cannot establish that a detection is a false positive.
   const evidentialHumans = humans.filter((r) => EVIDENTIAL.has(r.sample.provenance));
+  const nonEvidentialHumans = humans.filter((r) => !EVIDENTIAL.has(r.sample.provenance));
 
   const byGroup = (rows, isHit, keyFor = (r) => r.sample.group) => {
     const groups = new Map();
@@ -111,7 +112,7 @@ function computeMetrics(results, opts = {}) {
     return s;
   };
 
-  for (const r of humans) {
+  for (const r of evidentialHumans) {
     const seen = new Set();
     for (const d of r.detections) {
       const key = signalKey(d.reason);
@@ -141,8 +142,8 @@ function computeMetrics(results, opts = {}) {
       signal: s.signal,
       category: s.category,
       humanHits: s.humanHits,
-      humanTotal: humans.length,
-      humanFpr: rate(s.humanHits, humans.length),
+      humanTotal: evidentialHumans.length,
+      humanFpr: rate(s.humanHits, evidentialHumans.length),
       firesOnPersonas: [...s.humanSamples].sort(),
       agentHits: s.agentHits,
       agentTotal: agents.length,
@@ -150,6 +151,38 @@ function computeMetrics(results, opts = {}) {
       overBudget: rate(s.humanHits, humans.length) > cfg.perSignalFpBudget,
     }))
     .sort((a, b) => (b.humanFpr || 0) - (a.humanFpr || 0) || a.signal.localeCompare(b.signal));
+
+  const nonEvidentialSignals = new Map();
+  for (const r of nonEvidentialHumans) {
+    const seen = new Set();
+    for (const d of r.detections) {
+      const key = signalKey(d.reason);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const signal = nonEvidentialSignals.get(key) || {
+        signal: key,
+        category: d.category || null,
+        hits: 0,
+        personas: new Set(),
+        provenance: new Set(),
+      };
+      signal.hits++;
+      signal.personas.add(r.sample.group);
+      signal.provenance.add(r.sample.provenance);
+      nonEvidentialSignals.set(key, signal);
+    }
+  }
+  const exploratorySignals = [...nonEvidentialSignals.values()]
+    .map((signal) => ({
+      signal: signal.signal,
+      category: signal.category,
+      hits: signal.hits,
+      total: nonEvidentialHumans.length,
+      rate: rate(signal.hits, nonEvidentialHumans.length),
+      personas: [...signal.personas].sort(),
+      provenance: [...signal.provenance].sort().join('+'),
+    }))
+    .sort((a, b) => b.rate - a.rate || a.signal.localeCompare(b.signal));
 
   return {
     config: cfg,
@@ -169,6 +202,12 @@ function computeMetrics(results, opts = {}) {
         hits: evidentialHumans.filter(isFalsePositive).length,
         rate: rate(evidentialHumans.filter(isFalsePositive).length, evidentialHumans.length),
       },
+      excludedByProvenance: byGroup(
+        nonEvidentialHumans,
+        isFalsePositive,
+        (r) => r.sample.provenance
+      ),
+      exploratorySignals,
       byPersona: byGroup(humans, isFalsePositive),
     },
     agentCorpus: {

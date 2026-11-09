@@ -11,6 +11,7 @@
  */
 
 const { pct } = require('./metrics');
+const { EVIDENTIAL } = require('./corpus');
 
 const C = {
   reset: '\x1b[0m',
@@ -72,7 +73,9 @@ function renderReport(metrics, corpus, gate) {
   out.push(heading('Human panel — false positives'));
 
   const evid = metrics.humanPanel.evidential;
-  const caveats = summarizeCaveats(corpus.filter((s) => s.label === 'human'));
+  const caveats = summarizeCaveats(
+    corpus.filter((s) => s.label === 'human' && EVIDENTIAL.has(s.provenance))
+  );
   const caveatNote = caveats.size
     ? ` ${C.yellow}[${[...caveats.entries()].map(([k, n]) => `${k} ×${n}`).join(', ')}]${C.reset}`
     : '';
@@ -86,9 +89,12 @@ function renderReport(metrics, corpus, gate) {
         `(${evid.hits}/${evid.total} captured+derived, target < ${pct(cfg.panelFpBudget)})${caveatNote}`
     );
     if (metrics.counts.humans > evid.total) {
+      const excluded = metrics.humanPanel.excludedByProvenance
+        .map((row) => `${row.provenance || row.group} ×${row.total}`)
+        .join(', ');
       out.push(
-        `  ${C.dim}${metrics.counts.humans - evid.total} synthetic human sample(s) measured but excluded ` +
-          `from this figure — see bench/README.md${C.reset}`
+        `  ${C.dim}${metrics.counts.humans - evid.total} non-evidential human sample(s) measured but excluded ` +
+          `from this figure (${excluded}) — see bench/README.md${C.reset}`
       );
     }
   }
@@ -105,6 +111,25 @@ function renderReport(metrics, corpus, gate) {
       { header: 'PROVENANCE', value: (r) => r.provenance },
     ])
   );
+
+  if (metrics.humanPanel.exploratorySignals.length) {
+    out.push(heading('Non-evidential human labels — exploratory only'));
+    out.push(
+      `  ${C.yellow}Self-reported and synthetic labels are not trusted ground truth. ` +
+        `These clusters never affect FPR figures or gates.${C.reset}`
+    );
+    out.push('');
+    out.push(
+      table(metrics.humanPanel.exploratorySignals, [
+        { header: 'SIGNAL', value: (r) => truncate(r.signal, 44) },
+        { header: 'CAT', value: (r) => r.category || '-' },
+        { header: 'LABELED HUMAN', value: (r) => `${r.hits}/${r.total}`, right: true },
+        { header: 'RATE', value: (r) => pct(r.rate), right: true },
+        { header: 'PERSONAS', value: (r) => truncate(r.personas.join(','), 34) },
+        { header: 'PROVENANCE', value: (r) => r.provenance },
+      ])
+    );
+  }
 
   // ---- Agent corpus ------------------------------------------------------
   out.push(heading('Agent corpus — true positives'));
