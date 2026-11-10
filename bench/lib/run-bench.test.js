@@ -46,3 +46,22 @@ test('research export options are explicit and mutually exclusive', () => {
     /requires a value/
   );
 });
+
+test('research-only mode requires an ephemeral source and cannot gate or persist', () => {
+  assert.throws(
+    () => parseArgs(['node', 'run-bench.js', '--research-only']),
+    /requires --research/
+  );
+  assert.equal(
+    parseArgs(['node', 'run-bench.js', '--research-only', '--research-stdin']).researchOnly,
+    true
+  );
+  assert.throws(
+    () => parseArgs(['node', 'run-bench.js', '--research-only', '--research-stdin', '--gate']),
+    /never gate/
+  );
+  assert.throws(
+    () => parseArgs(['node', 'run-bench.js', '--research-only', '--research-stdin', '--json', 'out.json']),
+    /never persisted/
+  );
+});

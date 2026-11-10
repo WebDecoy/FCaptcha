@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { neutralIpAt, neutralIpFor, NEUTRAL_POOL_SIZE } = require('./replay');
+const { neutralIpAt, neutralIpFor, NEUTRAL_POOL_SIZE, siteKeyForSample } = require('./replay');
 
 // These exist because the harness had no tests, and the defect they guard
 // against was invisible for exactly that reason.
@@ -63,4 +63,11 @@ test('the hashed variant is deterministic but may collide', () => {
     collisions > 0,
     'if this stops colliding the pool grew; prefer neutralIpAt for corpora regardless'
   );
+});
+
+test('research-only replay isolates every sample under a distinct site key', () => {
+  const opts = { siteKey: 'research-run', isolateSiteKeys: true };
+  assert.strictEqual(siteKeyForSample(opts, 0), 'research-run-0');
+  assert.strictEqual(siteKeyForSample(opts, 1), 'research-run-1');
+  assert.strictEqual(siteKeyForSample({ siteKey: 'regression-run' }, 1), 'regression-run');
 });

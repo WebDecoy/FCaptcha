@@ -198,7 +198,9 @@ async function replayCorpus(serverUrl, samples, opts = {}) {
     for (;;) {
       const i = next++;
       if (i >= samples.length) return;
-      results[i] = await replaySample(serverUrl, samples[i], opts);
+      const siteKey = siteKeyForSample(opts, i);
+      const sampleOpts = siteKey === opts.siteKey ? opts : { ...opts, siteKey };
+      results[i] = await replaySample(serverUrl, samples[i], sampleOpts);
       done++;
       if (opts.onProgress) opts.onProgress(done, samples.length);
     }
@@ -206,6 +208,10 @@ async function replayCorpus(serverUrl, samples, opts = {}) {
 
   await Promise.all(Array.from({ length: concurrency }, worker));
   return results;
+}
+
+function siteKeyForSample(opts, index) {
+  return opts.isolateSiteKeys ? `${opts.siteKey || 'bench'}-${index}` : opts.siteKey;
 }
 
 module.exports = {
@@ -216,4 +222,5 @@ module.exports = {
   NEUTRAL_POOL_SIZE,
   replayCorpus,
   replaySample,
+  siteKeyForSample,
 };

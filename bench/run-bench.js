@@ -26,7 +26,7 @@ const path = require('path');
 
 const { deriveVariant, loadCorpus } = require('./lib/corpus');
 const { computeMetrics, evaluateGate } = require('./lib/metrics');
-const { renderReport } = require('./lib/report');
+const { renderReport, renderResearchReport } = require('./lib/report');
 const crypto = require('crypto');
 const { replayCorpus } = require('./lib/replay');
 const { makeRng } = require('./lib/rng');
@@ -48,6 +48,7 @@ function parseArgs(argv) {
     json: null,
     quiet: false,
     researchInput: null,
+    researchOnly: false,
     researchStdin: false,
     researchUrl: null,
   };
@@ -70,12 +71,22 @@ function parseArgs(argv) {
       if (!args.researchInput) throw new Error('--research-input requires a value');
     }
     else if (a === '--research-stdin') args.researchStdin = true;
+    else if (a === '--research-only') args.researchOnly = true;
     else if (a === '--help' || a === '-h') args.help = true;
     else throw new Error(`unknown argument: ${a}`);
   }
   const researchSources = [args.researchInput, args.researchStdin, args.researchUrl].filter(Boolean);
   if (researchSources.length > 1) {
     throw new Error('--research-input, --research-stdin, and --research-export/--research-url are mutually exclusive');
+  }
+  if (args.researchOnly && researchSources.length === 0) {
+    throw new Error('--research-only requires --research-input, --research-stdin, --research-export, or --research-url');
+  }
+  if (args.researchOnly && args.gate) {
+    throw new Error('--research-only cannot be combined with --gate because exploratory labels never gate');
+  }
+  if (args.researchOnly && args.json) {
+    throw new Error('--research-only cannot be combined with --json because ephemeral research is never persisted');
   }
   return args;
 }
@@ -131,7 +142,7 @@ async function main() {
   }
 
   const research = await loadResearchSamples(args);
-  const committed = loadCorpus();
+  const committed = args.researchOnly ? [] : loadCorpus();
   const committedIds = new Set(committed.map((sample) => sample.id));
   const collision = research.find((sample) => committedIds.has(sample.id));
   if (collision) throw new Error(`research sample id collides with committed corpus: ${collision.id}`);
@@ -173,6 +184,7 @@ async function main() {
   const started = Date.now();
   const results = await replayCorpus(args.server, corpus, {
     siteKey,
+    isolateSiteKeys: args.researchOnly,
     concurrency: args.concurrency,
     onProgress: args.quiet
       ? null
@@ -185,6 +197,11 @@ async function main() {
   if (!args.quiet) console.log(`\r  ${corpus.length}/${corpus.length} replayed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 
   const metrics = computeMetrics(results);
+
+  if (args.researchOnly) {
+    console.log(renderResearchReport(results, metrics));
+    return metrics.counts.errors > 0 ? 2 : 0;
+  }
 
   // Signals the recorder itself causes, exempt from failing the build but still
   // measured and printed. See bench/corpus/known-artifacts.json.

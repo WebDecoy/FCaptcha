@@ -162,6 +162,15 @@ approved-export-command | node run-bench.js --research-stdin
 Standard input is subject to the same 64 MiB limit and strict schema validation
 as file and HTTPS imports.
 
+For a shared hosted server, add `--research-only`. This replays only the
+ephemeral research records, isolates every sample under its own temporary site
+key, prints a dedicated exploratory report, and refuses `--gate` and `--json`:
+
+```bash
+approved-export-command | node run-bench.js --research-stdin \
+  --research-only --server https://fcaptcha.example.com
+```
+
 The importer accepts only schema-v1 self-reported human records, caps input at
 64 MiB and 5,000 records, refuses redirects and non-HTTPS export URLs, and never
 accepts the bearer token as a command-line argument. Use `--research-url` for
