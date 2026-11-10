@@ -1,0 +1,485 @@
+[
+  {
+    "id": "agent/chrome-auto-browse-widget/0001",
+    "label": "agent",
+    "group": "browser-internal",
+    "scenario": "chrome-auto-browse-widget",
+    "provenance": "captured",
+    "notes": "Chrome Auto Browse (Gemini) in Chrome 156 (UA-reported), macOS, signed-in profile; input: browser-internal pointer and keyboard; mode: widget; no external driver or normalization",
+    "headers": {
+      "sec-ch-ua-platform": "\"macOS\"",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"8\", \"Chromium\";v=\"156\", \"Google Chrome\";v=\"156\"",
+      "sec-ch-ua-mobile": "?0",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Accept-Language": "en-US,en;q=0.9,pt;q=0.8,ko;q=0.7,pt-BR;q=0.6,zh-CN;q=0.5,zh;q=0.4,zh-TW;q=0.3,fr;q=0.2,ru;q=0.1"
+    },
+    "signals": {
+      "behavioral": {
+        "totalPoints": 219,
+        "trajectoryLength": 2864.200352829859,
+        "avgVelocity": 1.4551605529433878,
+        "velocityVariance": 10.153518008436523,
+        "avgAcceleration": 0.002936481658410272,
+        "accelerationChanges": 111,
+        "microTremorScore": 1,
+        "straightLineRatio": 0.511520737327189,
+        "microMovements": 66,
+        "directionChanges": 53,
+        "eventDeltas": [
+          11.400000095367432,
+          32.90000009536743,
+          8.699999809265137,
+          8.900000095367432,
+          8,
+          8.699999809265137,
+          7.400000095367432,
+          8.800000190734863,
+          8.299999713897705,
+          8.400000095367432,
+          8.599999904632568,
+          8.200000286102295,
+          7.899999618530273,
+          9.100000381469727,
+          8.099999904632568,
+          7.699999809265137,
+          8.900000095367432,
+          8.199999809265137,
+          8.700000286102295,
+          13.599999904632568,
+          3,
+          8.400000095367432,
+          13.599999904632568,
+          16.699999809265137,
+          16.600000381469727,
+          27.5,
+          14.299999713897705,
+          8.300000190734863,
+          10.799999713897705,
+          14.100000381469727,
+          8.299999713897705,
+          25.200000286102295,
+          2.6999998092651367,
+          14,
+          2.0999999046325684,
+          14.400000095367432,
+          16.699999809265137,
+          3.3000001907348633,
+          8.199999809265137,
+          16.5,
+          16.300000190734863,
+          13.800000190734863,
+          7.799999713897705,
+          9.200000286102295,
+          8.199999809265137,
+          8.300000190734863,
+          8,
+          8.699999809265137,
+          74.19999980926514,
+          9.100000381469727
+        ],
+        "eventDeltaVariance": 38060.567747105386,
+        "mouseEventRate": 33.465770171149146,
+        "scrollEvents": 14,
+        "scrollMorphology": {
+          "gestures": 2,
+          "instantGestures": 1,
+          "instantRatio": 0.5,
+          "avgDuration": 50.09999990463257,
+          "durationVariance": 2510.009990444183,
+          "avgDistance": 168.5,
+          "distanceVariance": 28392.25,
+          "repeatedEndRatio": 0,
+          "maxStep": 45,
+          "distancePerEvent": 25.923076923076923,
+          "samples": 14
+        },
+        "keyEvents": 29,
+        "keyHoldSamples": 12,
+        "keyHoldAvg": 125.72500002384186,
+        "touchEvents": 0,
+        "focusEvents": 5,
+        "clickData": {
+          "x": 71,
+          "y": 270,
+          "button": 0,
+          "downTime": 6996.60000038147,
+          "upTime": 7084.60000038147,
+          "holdDuration": 88
+        },
+        "interactionDuration": 7030,
+        "inputForensics": {
+          "coalescedSamples": 219,
+          "coalescedEmptyRatio": 0.8949771689497716,
+          "coalescedAvg": 1.1050228310502284,
+          "coalescedMax": 2,
+          "pointerMoveSamples": 217,
+          "pointerMoveZeroRatio": 0.2119815668202765,
+          "cadenceEvents": 489,
+          "cadenceSilentGaps": 0,
+          "cadenceGapCV": 3.3736913766079812,
+          "cadenceSilentRatio": 0,
+          "teleportClicks": 0
+        },
+        "touchTotalPoints": 0,
+        "touchTrajectoryLength": 0,
+        "touchAvgVelocity": 0,
+        "touchVelocityVariance": 0,
+        "touchMicroTremorScore": 0,
+        "touchStraightLineRatio": 0,
+        "touchDirectionChanges": 0,
+        "touchForceMin": 0,
+        "touchForceMax": 0,
+        "touchForceVariance": 0,
+        "touchRadiusMin": 0,
+        "touchRadiusMax": 0,
+        "touchRadiusVariance": 0,
+        "touchMultiTouchSeen": false,
+        "touchUniqueIdentifiers": 0,
+        "touchForceAllZero": false,
+        "touchForceAllOne": false,
+        "pointerEvents": 225,
+        "pointerAvgPressure": 0.02,
+        "pointerPressureVariance": 0.009599999999999977,
+        "pointerMaxTilt": 0,
+        "pointerHasNonMouseType": false,
+        "pointerTypes": [
+          "mouse"
+        ],
+        "clickPrecision": 8.161819368875806,
+        "explorationRatio": 0.9971502420729388,
+        "overshootCorrections": 0,
+        "hoverTime": 191.60000038146973,
+        "approachDirectness": 0.9196190027442867,
+        "approachPoints": 20
+      },
+      "environmental": {
+        "webdriver": false,
+        "automationFlags": {
+          "webdriver": false,
+          "domAutomation": false,
+          "domAutomationController": false,
+          "_selenium": false,
+          "__webdriver_script_fn": false,
+          "__driver_evaluate": false,
+          "__webdriver_evaluate": false,
+          "__fxdriver_evaluate": false,
+          "__driver_unwrapped": false,
+          "__webdriver_unwrapped": false,
+          "__fxdriver_unwrapped": false,
+          "_Selenium_IDE_Recorder": false,
+          "calledSelenium": false,
+          "$chrome_asyncScriptInfo": false,
+          "$cdc_asdjflasutopfhvcZLmcfl_": false,
+          "_phantom": false,
+          "callPhantom": false,
+          "__nightmare": false,
+          "__lastWatirAlert": false,
+          "__lastWatirConfirm": false,
+          "__lastWatirPrompt": false,
+          "plugins": 5,
+          "languages": true,
+          "mimeTypes": 2,
+          "cookieEnabled": true,
+          "doNotTrack": null,
+          "chrome": true,
+          "chromeRuntime": false,
+          "permissionsAPI": true
+        },
+        "cdp": {
+          "detected": false,
+          "signals": []
+        },
+        "cdpRuntime": {
+          "consoleAttached": true
+        },
+        "playwright": {
+          "detected": false,
+          "signals": []
+        },
+        "stealthArtifacts": {
+          "signals": []
+        },
+        "canvasHash": {
+          "hash": "-26b8676d",
+          "dataLength": 3886,
+          "supported": true
+        },
+        "webglInfo": {
+          "supported": true,
+          "vendor": "Google Inc. (Apple)",
+          "renderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Max, Unspecified Version)",
+          "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+          "shadingVersion": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+          "suspiciousRenderer": false
+        },
+        "audioInfo": {
+          "supported": true,
+          "sampleRate": 48000,
+          "state": "running",
+          "baseLatency": 0.005333333333333333
+        },
+        "headlessIndicators": {
+          "hasOuterDimensions": true,
+          "innerEqualsOuter": false,
+          "screenColorDepth": 24,
+          "screenPixelDepth": 24,
+          "connectionRtt": 350,
+          "notificationPermission": "default",
+          "hasBattery": true,
+          "hasCredentials": true,
+          "hasMediaDevices": true
+        },
+        "screen": {
+          "width": 3840,
+          "height": 1620,
+          "colorDepth": 24,
+          "pixelRatio": 2,
+          "availWidth": 3840,
+          "availHeight": 1523,
+          "innerWidth": 1806,
+          "innerHeight": 1250
+        },
+        "navigator": {
+          "language": "en-US",
+          "languageCount": 10,
+          "platform": "MacIntel",
+          "hardwareConcurrency": 14,
+          "deviceMemory": 32,
+          "maxTouchPoints": 0,
+          "vendor": "Google Inc.",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+          "timezone": "America/Chicago",
+          "timezoneOffset": 360
+        },
+        "jsExecutionTime": {
+          "mathOps": 0,
+          "arrayOps": 0,
+          "arrayLen": 1000,
+          "stringOps": 0
+        },
+        "mathFingerprint": {
+          "hash": "6256c877",
+          "sinPi": 1.2246467991473532e-16,
+          "tanLarge": 0.5086861259107568,
+          "supported": true
+        },
+        "errorFingerprint": {
+          "hash": "-37eb980a",
+          "typeError": "Cannot read properties of null (reading 'foo')",
+          "supported": true
+        },
+        "domRectFingerprint": {
+          "hash": "44f4dcd0",
+          "rectAWidth": 180.25,
+          "rectBWidth": 111.4453125,
+          "rangeWidth": 180.25,
+          "supported": true
+        },
+        "cssMediaQueries": {
+          "prefersColorScheme": "dark",
+          "prefersReducedMotion": false,
+          "prefersReducedTransparency": false,
+          "prefersContrast": "no-preference",
+          "anyHover": true,
+          "anyPointer": "fine",
+          "hover": true,
+          "pointer": "fine",
+          "colorGamut": "p3",
+          "displayMode": "browser",
+          "orientation": "landscape",
+          "dynamicRange": "standard",
+          "forcedColors": false,
+          "supported": true
+        },
+        "permissionsInfo": {
+          "hasPermissionsAPI": true,
+          "hasClipboard": true,
+          "hasShare": true,
+          "hasCredentials": true,
+          "hasBluetooth": true,
+          "hasUsb": true,
+          "hasSerial": true,
+          "hasHid": true,
+          "hasXR": true,
+          "hasGeolocation": true,
+          "hasMIDI": true,
+          "supported": true
+        },
+        "fontsInfo": {
+          "hash": "-7aa148b9",
+          "count": 12,
+          "hasArial": true,
+          "hasTimesNewRoman": true,
+          "hasSegoeUI": false,
+          "hasSFPro": false,
+          "hasDejaVuSans": false,
+          "hasCalibri": false,
+          "hasMenlo": true,
+          "supported": true
+        },
+        "animationConsistency": {
+          "version": 1,
+          "main": {
+            "status": "ok",
+            "specified": [
+              1000,
+              1000,
+              1000
+            ],
+            "durations": [
+              [
+                1000,
+                1000,
+                1000,
+                1000
+              ],
+              [
+                1000,
+                1000,
+                1000,
+                1000
+              ],
+              [
+                1000,
+                1000,
+                1000,
+                1000
+              ]
+            ]
+          },
+          "iframe": {
+            "status": "ok",
+            "specified": [
+              1000,
+              1000,
+              1000
+            ],
+            "durations": [
+              [
+                1000,
+                1000,
+                1000,
+                1000
+              ],
+              [
+                1000,
+                1000,
+                1000,
+                1000
+              ],
+              [
+                1000,
+                1000,
+                1000,
+                1000
+              ]
+            ]
+          }
+        },
+        "rafConsistency": {
+          "avgFrameTime": 8.248222222222264,
+          "frameTimeVariance": 0.09553639506157124,
+          "frames": 10
+        },
+        "speechInfo": {
+          "hash": "372c66a2",
+          "totalVoices": 199,
+          "localVoices": 180,
+          "languages": 51,
+          "defaultVoiceLang": "en-US",
+          "hasGoogleVoices": true,
+          "hasMicrosoftVoices": false,
+          "hasAppleVoices": true,
+          "supported": true
+        },
+        "webrtcInfo": {
+          "supported": true,
+          "mediaDevices": {
+            "supported": true,
+            "audioInputs": 1,
+            "audioOutputs": 1,
+            "videoInputs": 1,
+            "totalDevices": 3
+          }
+        },
+        "workerConsistency": {
+          "supported": true,
+          "consistent": true,
+          "mismatches": [],
+          "mismatchCount": 0
+        },
+        "permissionProbe": {
+          "supported": true,
+          "notificationPermission": "default",
+          "queryState": "prompt",
+          "contradiction": false
+        },
+        "sensor": {
+          "motionEventCount": 1,
+          "motionAccelAvg": 0,
+          "motionAccelVariance": 0,
+          "orientationEventCount": 1,
+          "orientationVariance": 0,
+          "hasSensorSupport": true
+        }
+      },
+      "temporal": {
+        "pageLoadToFirstInteraction": 475.80000019073486,
+        "firstInteractionToClick": 6554.099999904633,
+        "totalSessionTime": 7118.900000095367,
+        "performanceTiming": {
+          "dnsLookup": 0,
+          "tcpConnection": 1,
+          "serverResponse": 1,
+          "domLoad": 56,
+          "fullLoad": 73
+        },
+        "pow": null
+      },
+      "formAnalysis": {
+        "pageLoadToFirstInteraction": 1453.6000003814697,
+        "pageLoadToNow": 7118.900000095367,
+        "totalInteractionEvents": 31,
+        "submit": {
+          "method": "none",
+          "eventsBeforeSubmit": 31,
+          "hadTriggerEvent": false
+        },
+        "textareaKeyboard": null,
+        "typing": {
+          "pasteShortcutMeta": 0,
+          "pasteShortcutControl": 0,
+          "selectAllShortcuts": 0,
+          "pasteEvents": 0,
+          "pasteInputs": 0,
+          "inputEvents": 12,
+          "inputsWithoutKeys": 0,
+          "inputsWithoutInputType": 0,
+          "keydownsBeforeInput": 0
+        }
+      },
+      "meta": {
+        "widgetId": "fcaptcha_5zxpjqk1e",
+        "siteKey": "browser-bench-b46659a167104369a7ae1ffdf8f179ce",
+        "timestamp": 1794324814954,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+        "screenSize": "3840x1620",
+        "viewportSize": "1806x1250",
+        "timezone": "America/Chicago"
+      }
+    },
+    "capture": {
+      "browser": "Chrome 156 (UA-reported), macOS, signed-in profile",
+      "agent": "Chrome Auto Browse (Gemini)",
+      "input": "browser-internal pointer and keyboard",
+      "endpoint": "/api/verify",
+      "mode": "widget",
+      "normalization": "none",
+      "reportSha256": "766b909037c3a168facbfef3d3ba6cbe6f55d7a2c8b68dd2426f0bed93cd492c"
+    }
+  }
+]

@@ -701,6 +701,21 @@ func TestBehavioral_EarlyPointerMovementAloneIsNotSuspicious(t *testing.T) {
 	}
 }
 
+func TestVisionAI_PreciseRealTrackpadClickIsNotSuspiciousOnItsOwn(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	signals := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"totalPoints": 227.0, "trajectoryLength": 1792.0,
+			"approachPoints": 20.0, "clickPrecision": 1.6171875,
+			"microTremorScore": 1.0, "directionChanges": 57.0,
+		},
+	}
+	got := e.detectVisionAI(signals)
+	if hasReasonContaining(got, "Click precision is unnaturally accurate") {
+		t.Errorf("precise real trackpad clicks are ordinary human input, got %+v", got)
+	}
+}
+
 // TestAnalyzeFormInteraction_ProgrammaticFill covers the fill()-style insertion
 // signal: content with zero keystrokes and zero pastes.
 func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {

@@ -4,7 +4,7 @@
  * The corpus format, and the provenance rules that go with it.
  *
  * A sample is one labeled signal payload, exactly as a client would POST it to
- * `/api/verify`, plus the metadata needed to score it honestly:
+ * `/api/verify` or `/api/score`, plus the metadata needed to score it honestly:
  *
  *   {
  *     "id":        "human/keyboard-only/0003",
@@ -16,6 +16,7 @@
  *     "notes":     "...",                     // free text, shown in the report
  *     "headers":   { "User-Agent": "...", ... },
  *     "signals":   { behavioral: {...}, environmental: {...}, ... }
+ *     "capture":   { endpoint: "/api/verify" | "/api/score", ... }
  *   }
  *
  * `provenance` is the field that keeps this harness honest, so it is required
@@ -168,6 +169,7 @@ function deriveVariant(sample, rng, index, pct = 0.15) {
     source: sample.id,
     notes: `±${Math.round(pct * 100)}% jitter around ${sample.id}, distinct synthetic device`,
     headers: { ...(sample.headers || {}) },
+    ...(sample.capture ? { capture: { ...sample.capture } } : {}),
     signals,
   };
 }

@@ -126,6 +126,12 @@ const DEFAULT_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+function scoringEndpoint(sample) {
+  return sample && sample.capture && sample.capture.endpoint === '/api/score'
+    ? '/api/score'
+    : '/api/verify';
+}
+
 /**
  * Runs one sample. Returns the verdict plus enough context for the reporter to
  * attribute a failure to a persona and a signal.
@@ -151,12 +157,13 @@ async function replaySample(serverUrl, sample, opts = {}) {
       headers
     );
 
-    const res = await fetch(`${serverUrl}/api/verify`, {
+    const endpoint = scoringEndpoint(sample);
+    const res = await fetch(`${serverUrl}${endpoint}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`verify returned ${res.status}`);
+    if (!res.ok) throw new Error(`${endpoint} returned ${res.status}`);
     const verdict = await res.json();
 
     return {
@@ -226,5 +233,6 @@ module.exports = {
   NEUTRAL_POOL_SIZE,
   replayCorpus,
   replaySample,
+  scoringEndpoint,
   siteKeyForSample,
 };

@@ -280,6 +280,17 @@ def early_pointer_movement_alone_is_not_suspicious():
 
 
 @test
+def precise_real_trackpad_click_is_not_suspicious_on_its_own():
+    signals = {"behavioral": {
+        "totalPoints": 227, "trajectoryLength": 1792,
+        "approachPoints": 20, "clickPrecision": 1.6171875,
+        "microTremorScore": 1, "directionChanges": 57,
+    }}
+    reasons = [d.reason for d in detect_vision_ai(signals)]
+    assert "Click precision is unnaturally accurate" not in reasons, reasons
+
+
+@test
 def interaction_mode_defaults_to_widget():
     # Callers that never set it keep the pre-existing behaviour.
     assert has_widget_interaction(_click_derived_session()) is True

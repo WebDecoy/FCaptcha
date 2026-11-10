@@ -95,3 +95,14 @@ variants.
 Before proposing enforcement, compare every candidate signal against its paired
 manual control and the full human panel. A useful observation is not
 automatically a safe production detector.
+
+## Current measured result
+
+The initial Chrome 156 campaign contains five widget pairs and five invisible
+pairs. All 20 captures produced valid tokens and were allowed. Agent scores
+range from 0.000 to 0.030; paired human controls range from 0.000 to 0.045.
+Their current behavioral and environment signals overlap, so this campaign does
+not support browser-internal enforcement. Retain the samples as a regression
+cohort and require new paired evidence before adding a detector or score floor.
+Each imported sample retains `/api/verify` or `/api/score` as non-secret capture
+metadata so benchmark replay preserves widget versus invisible server context.

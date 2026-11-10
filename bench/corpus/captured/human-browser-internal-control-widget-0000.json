@@ -475,6 +475,7 @@
     "capture": {
       "browser": "Chrome 156 (UA-reported), macOS, signed-in profile",
       "input": "built-in trackpad and keyboard",
+      "endpoint": "/api/verify",
       "mode": "widget",
       "normalization": "none",
       "reportSha256": "ce522c79cdaf0360d39f6074d169b951442bf84915a0fdb22cc49c3c3f1aa04b"
