@@ -1229,6 +1229,7 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 	results := make([]DetectionResult, 0)
 
 	behavioral := getMap(signals, "behavioral")
+	temporal := getMap(signals, "temporal")
 
 	// Zero/minimal mouse movement - strong indicator of AI agent or programmatic click
 	// Exempt: touch users (mobile) and keyboard-only users (accessibility)
@@ -1797,7 +1798,6 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 	results := make([]DetectionResult, 0)
 
 	behavioral := getMap(signals, "behavioral")
-	temporal := getMap(signals, "temporal")
 
 	// Insufficient mouse data - critical check for zero-click bots
 	// Exempt: touch users (mobile) and keyboard-only users (accessibility)
