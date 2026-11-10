@@ -14,7 +14,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/WebDecoy/FCaptcha.svg)](https://pkg.go.dev/github.com/WebDecoy/FCaptcha)
 [![codecov](https://codecov.io/gh/WebDecoy/FCaptcha/graph/badge.svg)](https://app.codecov.io/gh/WebDecoy/FCaptcha)
 
-**[Try the Live Demo](https://fcaptcha.webdecoy.com/demo/)** · [Product overview](https://webdecoy.com/product/fcaptcha-demo/)
+**[Try the Live Demo](https://webdecoy.com/product/fcaptcha-demo/)** · [Product overview](https://webdecoy.com/product/fcaptcha/)
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/WebDecoy/FCaptcha)
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template?referralCode=webdecoy&template=https://github.com/WebDecoy/FCaptcha)
@@ -33,7 +33,7 @@ docker run -d -p 127.0.0.1:3000:3000 -e FCAPTCHA_SECRET ghcr.io/webdecoy/fcaptch
 The demo page is now at `http://localhost:3000/demo/`.
 
 The same page is hosted at
-[`https://fcaptcha.webdecoy.com/demo/`](https://fcaptcha.webdecoy.com/demo/).
+[`https://webdecoy.com/product/fcaptcha-demo/`](https://webdecoy.com/product/fcaptcha-demo/).
 Its optional detection-research contribution is off by default and requires an
 explicit opt-in on every page load. Form values are not sent to FCaptcha or
 retained with research samples.
