@@ -8,6 +8,7 @@ const { parseArgs } = require('../run-bench');
 
 test('research export options are explicit and mutually exclusive', () => {
   assert.equal(parseArgs(['node', 'run-bench.js']).researchUrl, null);
+  assert.equal(parseArgs(['node', 'run-bench.js']).researchStdin, false);
   assert.equal(
     parseArgs(['node', 'run-bench.js', '--research-export']).researchUrl,
     DEFAULT_EXPORT_URL
@@ -24,7 +25,21 @@ test('research export options are explicit and mutually exclusive', () => {
       '--research-input',
       '/tmp/export.ndjson',
     ]),
-    /cannot be combined/
+    /mutually exclusive/
+  );
+  assert.equal(
+    parseArgs(['node', 'run-bench.js', '--research-stdin']).researchStdin,
+    true
+  );
+  assert.throws(
+    () => parseArgs([
+      'node',
+      'run-bench.js',
+      '--research-stdin',
+      '--research-input',
+      '/tmp/export.ndjson',
+    ]),
+    /mutually exclusive/
   );
   assert.throws(
     () => parseArgs(['node', 'run-bench.js', '--research-url']),
