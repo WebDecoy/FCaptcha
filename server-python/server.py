@@ -1228,7 +1228,13 @@ def detect_cdp(signals: Dict) -> List[Detection]:
 
     # cdpRuntime.consoleAttached is collected but not scored: measured on real
     # visitors it fires in every Chrome and Safari session (no DevTools, no
-    # extensions), so it cannot tell a person from an agent.
+    # extensions), so it cannot tell a person from an agent by itself. It is
+    # scored only as part of the measured three-way conjunction below.
+    if stealth_cdp_corroborated(signals):
+        detections.append(Detection(
+            ThreatCategory.CDP, 0.9, 0.9,
+            "CDP-driven pointer input corroborated by impossible reaction timing"
+        ))
 
     if not cdp.get("detected"):
         return detections
@@ -1698,6 +1704,47 @@ CORROBORATION_FLOOR = 0.6
 # Absorbs the few ulps a noisy-OR product lands from a round number (0.75*0.8 is
 # 0.3999999999999999, not 0.4), so agreement does not depend on arithmetic order.
 CORROBORATION_EPSILON = 1e-9
+
+# Production enforcement for the captured stealth-CDP class. Pointer movement
+# alone remains observation-only: the recorder and some real hardware can
+# produce the same ratio. The conjunction catches 10/10 captured stealth-CDP
+# sessions and 0 supported humans. It is not dispositive; an agent can evade it
+# by waiting 250ms.
+STEALTH_CDP_MIN_POINTER_SAMPLES = 30
+STEALTH_CDP_ZERO_RATIO_BELOW = 0.05
+STEALTH_CDP_FIRST_INTERACTION_BELOW_MS = 250
+STEALTH_CDP_FLOOR = 0.8
+
+
+def stealth_cdp_corroborated(signals: Dict) -> bool:
+    b = signals.get("behavioral")
+    f = b.get("inputForensics") if isinstance(b, dict) else None
+    temporal = signals.get("temporal")
+    env = signals.get("environmental")
+    runtime = env.get("cdpRuntime") if isinstance(env, dict) else None
+
+    def finite(value):
+        return (isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value))
+
+    if not isinstance(f, dict) or not isinstance(temporal, dict):
+        return False
+    samples = f.get("pointerMoveSamples")
+    coalesced = f.get("coalescedSamples")
+    ratio = f.get("pointerMoveZeroRatio")
+    first = temporal.get("pageLoadToFirstInteraction")
+    return (
+        not _is_touch_modality(b)
+        and finite(samples) and samples >= STEALTH_CDP_MIN_POINTER_SAMPLES
+        and finite(coalesced) and coalesced >= STEALTH_CDP_MIN_POINTER_SAMPLES
+        and finite(ratio) and 0 <= ratio < STEALTH_CDP_ZERO_RATIO_BELOW
+        and isinstance(runtime, dict) and runtime.get("consoleAttached") is True
+        and finite(first) and 0 < first < STEALTH_CDP_FIRST_INTERACTION_BELOW_MS
+    )
+
+
+def apply_stealth_cdp_floor(score: float, signals: Dict) -> float:
+    return max(score, STEALTH_CDP_FLOOR) if stealth_cdp_corroborated(signals) else score
 
 # Categories a browser trips by how it moves rather than by what it is. A patched
 # binary can hide what it is; it cannot hide that nothing is moving the pointer
@@ -2187,10 +2234,10 @@ def run_verification(
             ))
 
     category_scores = calculate_category_scores(detections)
-    final_score = apply_corroboration_floor(
+    final_score = apply_stealth_cdp_floor(apply_corroboration_floor(
         apply_dispositive_floor(calculate_final_score(category_scores), detections),
         detections,
-    )
+    ), signals)
 
     experimental = evaluate_experimental(signals, final_score, detections, EXPERIMENTAL_BLOCKING_ENABLED)
     experimental_blocked = EXPERIMENTAL_BLOCKING_ENABLED and experimental["wouldBlock"] and final_score < 0.5

@@ -588,7 +588,14 @@ function detectCDP(signals) {
 
   // cdpRuntime.consoleAttached is collected but not scored: measured on real
   // visitors it fires in every Chrome and Safari session (no DevTools, no
-  // extensions), so it cannot tell a person from an agent.
+  // extensions), so it cannot tell a person from an agent by itself. It is
+  // scored only as part of the measured three-way conjunction below.
+  if (stealthCDPCorroborated(signals)) {
+    detections.push({
+      category: 'cdp', score: 0.9, confidence: 0.9,
+      reason: 'CDP-driven pointer input corroborated by impossible reaction timing'
+    });
+  }
 
   if (cdp.detected) {
     const signalList = cdp.signals || [];
@@ -1033,6 +1040,35 @@ const CORROBORATION_FLOOR = 0.6;
 // 0.3999999999999999, not 0.4), so agreement does not depend on arithmetic order.
 const CORROBORATION_EPSILON = 1e-9;
 
+// Production enforcement for the captured stealth-CDP class. Pointer movement
+// alone is intentionally still observation-only: the recorder and some real
+// hardware can produce the same ratio. Across the current captured corpus, the
+// conjunction below catches 10/10 stealth-CDP sessions and 0 supported humans.
+// It is deliberately not dispositive: an agent can evade it by waiting 250ms,
+// and broader hardware coverage may uncover a new legitimate shape.
+const STEALTH_CDP_MIN_POINTER_SAMPLES = 30;
+const STEALTH_CDP_ZERO_RATIO_BELOW = 0.05;
+const STEALTH_CDP_FIRST_INTERACTION_BELOW_MS = 250;
+const STEALTH_CDP_FLOOR = 0.8;
+
+function stealthCDPCorroborated(signals) {
+  const b = signals?.behavioral;
+  const f = b?.inputForensics;
+  const first = signals?.temporal?.pageLoadToFirstInteraction;
+  const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+  return !!b && !!f && !isTouchModality(b) &&
+    finite(f.pointerMoveSamples) && f.pointerMoveSamples >= STEALTH_CDP_MIN_POINTER_SAMPLES &&
+    finite(f.coalescedSamples) && f.coalescedSamples >= STEALTH_CDP_MIN_POINTER_SAMPLES &&
+    finite(f.pointerMoveZeroRatio) && f.pointerMoveZeroRatio >= 0 &&
+      f.pointerMoveZeroRatio < STEALTH_CDP_ZERO_RATIO_BELOW &&
+    signals?.environmental?.cdpRuntime?.consoleAttached === true &&
+    finite(first) && first > 0 && first < STEALTH_CDP_FIRST_INTERACTION_BELOW_MS;
+}
+
+function applyStealthCDPFloor(score, signals) {
+  return stealthCDPCorroborated(signals) ? Math.max(score, STEALTH_CDP_FLOOR) : score;
+}
+
 // Categories a browser trips by how it moves rather than by what it is. A
 // patched binary can hide what it is; it cannot hide that nothing is moving the
 // pointer like a hand.
@@ -1064,6 +1100,10 @@ module.exports = {
   CORROBORATION_AGREE_AT,
   CORROBORATION_MIN_AGREE,
   CORROBORATION_FLOOR,
+  STEALTH_CDP_MIN_POINTER_SAMPLES,
+  STEALTH_CDP_ZERO_RATIO_BELOW,
+  STEALTH_CDP_FIRST_INTERACTION_BELOW_MS,
+  STEALTH_CDP_FLOOR,
   BEHAVIOURAL_CATEGORIES,
 
   // Helpers
@@ -1091,4 +1131,6 @@ module.exports = {
   calculateFinalScore,
   applyDispositiveFloor,
   applyCorroborationFloor,
+  stealthCDPCorroborated,
+  applyStealthCDPFloor,
 };

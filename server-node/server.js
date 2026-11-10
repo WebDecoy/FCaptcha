@@ -380,6 +380,7 @@ const {
   calculateFinalScore,
   applyDispositiveFloor,
   applyCorroborationFloor,
+  applyStealthCDPFloor,
   widgetInstance, deviceRateKey, deviceRateDetection, DEVICE_VERIFICATIONS_PER_MINUTE
 } = require('./engine');
 const { evaluateExperimental } = require('./experimental');
@@ -750,10 +751,10 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
   detections.push(...advancedDetections);
 
   const categoryScores = calculateCategoryScores(detections);
-  const finalScore = applyCorroborationFloor(
+  const finalScore = applyStealthCDPFloor(applyCorroborationFloor(
     applyDispositiveFloor(calculateFinalScore(categoryScores), detections),
     detections
-  );
+  ), signals);
 
   const experimental = evaluateExperimental(signals, finalScore, detections, EXPERIMENTAL_BLOCKING_ENABLED);
   const experimentalBlocked = EXPERIMENTAL_BLOCKING_ENABLED && experimental.wouldBlock && finalScore < 0.5;
