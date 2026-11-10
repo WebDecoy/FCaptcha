@@ -201,6 +201,42 @@ function renderReport(metrics, corpus, gate) {
     }
   }
 
+  // ---- Experimental observations ----------------------------------------
+  if (metrics.experimental.policies.length) {
+    out.push(heading('Experimental observations — non-gating'));
+    out.push(
+      `  ${C.yellow}Base samples only. These versioned observations never affect production scores, ` +
+        `recommendations, signal budgets, or the release gate.${C.reset}`
+    );
+    out.push(`  ${C.dim}Detection rates exclude unknown/unsupported observations.${C.reset}`);
+    out.push('');
+    out.push(
+      table(metrics.experimental.policies, [
+        { header: 'POLICY', value: (r) => r.policy },
+        { header: 'HUMAN', value: (r) => observationRate(r.humans), right: true },
+        { header: 'SELF-REPORTED', value: (r) => observationRate(r.exploratoryHumans), right: true },
+        { header: 'AGENT', value: (r) => observationRate(r.agents), right: true },
+        { header: 'UNKNOWN H/A', value: (r) => `${r.humans.unknown}/${r.agents.unknown}`, right: true },
+      ])
+    );
+
+    for (const policy of metrics.experimental.policies) {
+      const detected = policy.byGroup.filter((row) => row.detected > 0);
+      if (!detected.length) continue;
+      out.push('');
+      out.push(`${C.dim}  ${policy.policy} detections by base-sample group:${C.reset}`);
+      out.push(
+        table(detected, [
+          { header: 'LABEL', value: (r) => r.label },
+          { header: 'GROUP', value: (r) => r.group },
+          { header: 'DETECTED/KNOWN', value: (r) => `${r.detected}/${r.known}`, right: true },
+          { header: 'RATE', value: (r) => pct(r.rate), right: true },
+          { header: 'PROVENANCE', value: (r) => r.provenance },
+        ])
+      );
+    }
+  }
+
   // ---- Known gaps --------------------------------------------------------
   const gaps = corpus.filter((s) => s.unmeasured);
   if (gaps.length) {
@@ -267,6 +303,24 @@ function renderResearchReport(results, metrics) {
     );
   }
 
+  if (metrics.experimental.policies.length) {
+    out.push(heading('Experimental observations — exploratory only'));
+    out.push(
+      `  ${C.yellow}Observe-only browser consistency candidates; no score, recommendation, ` +
+        `FPR claim, or release gate is changed.${C.reset}`
+    );
+    out.push('');
+    out.push(
+      table(metrics.experimental.policies, [
+        { header: 'POLICY', value: (r) => r.policy },
+        { header: 'DETECTED', value: (r) => r.exploratoryHumans.detected, right: true },
+        { header: 'CLEAR', value: (r) => r.exploratoryHumans.clear, right: true },
+        { header: 'UNKNOWN', value: (r) => r.exploratoryHumans.unknown, right: true },
+        { header: 'RATE', value: (r) => pct(r.exploratoryHumans.rate), right: true },
+      ])
+    );
+  }
+
   if (metrics.errors.length) {
     out.push(heading('Replay errors'));
     for (const error of metrics.errors) out.push(`  ${C.red}${error.id}${C.reset}: ${error.error}`);
@@ -277,6 +331,10 @@ function renderResearchReport(results, metrics) {
 
 function truncate(s, n) {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
+}
+
+function observationRate(stats) {
+  return stats.known ? `${stats.detected}/${stats.known} (${pct(stats.rate)})` : `0/0 (n/a)`;
 }
 
 module.exports = { renderReport, renderResearchReport };
