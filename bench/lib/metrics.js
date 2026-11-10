@@ -50,6 +50,68 @@ function rate(hits, total) {
   return total === 0 ? null : hits / total;
 }
 
+function experimentalStats(rows, policy) {
+  const counts = { detected: 0, clear: 0, unknown: 0 };
+  for (const row of rows) {
+    const status = row.experimental?.observations?.[policy]?.status;
+    counts[status === 'detected' || status === 'clear' ? status : 'unknown']++;
+  }
+  const known = counts.detected + counts.clear;
+  return {
+    total: rows.length,
+    ...counts,
+    known,
+    rate: rate(counts.detected, known),
+  };
+}
+
+function computeExperimental(ok) {
+  // Derived samples repeat their parent's browser observation and would make a
+  // single capture look like independent evidence. Keep this panel to base
+  // samples; it is descriptive and never participates in a gate.
+  const base = ok.filter((row) => row.sample.provenance !== 'derived');
+  const policies = new Set();
+  for (const row of base) {
+    for (const policy of Object.keys(row.experimental?.observations || {})) policies.add(policy);
+  }
+
+  return [...policies].sort().map((policy) => {
+    const humans = base.filter((row) => row.sample.label === 'human');
+    const evidentialHumans = humans.filter((row) => EVIDENTIAL.has(row.sample.provenance));
+    const exploratoryHumans = humans.filter((row) => !EVIDENTIAL.has(row.sample.provenance));
+    const agents = base.filter((row) => row.sample.label === 'agent');
+    const groups = new Map();
+
+    for (const row of base) {
+      const key = `${row.sample.label}\0${row.sample.group}`;
+      const group = groups.get(key) || {
+        label: row.sample.label,
+        group: row.sample.group,
+        provenance: new Set(),
+        rows: [],
+      };
+      group.provenance.add(row.sample.provenance);
+      group.rows.push(row);
+      groups.set(key, group);
+    }
+
+    return {
+      policy,
+      humans: experimentalStats(evidentialHumans, policy),
+      exploratoryHumans: experimentalStats(exploratoryHumans, policy),
+      agents: experimentalStats(agents, policy),
+      byGroup: [...groups.values()]
+        .map((group) => ({
+          label: group.label,
+          group: group.group,
+          provenance: [...group.provenance].sort().join('+'),
+          ...experimentalStats(group.rows, policy),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label) || b.rate - a.rate || a.group.localeCompare(b.group)),
+    };
+  });
+}
+
 /**
  * @param {object[]} results  from replayCorpus
  * @param {object}   opts     threshold overrides
@@ -220,6 +282,11 @@ function computeMetrics(results, opts = {}) {
       ),
     },
     perSignal,
+    experimental: {
+      // Observe-only browser consistency candidates. This is deliberately
+      // outside humanPanel, agentCorpus, perSignal, and evaluateGate.
+      policies: computeExperimental(ok),
+    },
   };
 }
 

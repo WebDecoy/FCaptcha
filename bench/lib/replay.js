@@ -167,6 +167,10 @@ async function replaySample(serverUrl, sample, opts = {}) {
       recommendation: verdict.recommendation,
       detections: verdict.detections || [],
       categoryScores: verdict.categoryScores || {},
+      // Versioned, observe-only detector output. Keeping this beside the
+      // production verdict lets the benchmark measure candidates without
+      // letting them affect scores, recommendations, or the release gate.
+      experimental: verdict.experimental || null,
     };
   } catch (err) {
     return { sample, clientIp, error: err.message };

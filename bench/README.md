@@ -164,7 +164,8 @@ as file and HTTPS imports.
 
 For a shared hosted server, add `--research-only`. This replays only the
 ephemeral research records, isolates every sample under its own temporary site
-key, prints a dedicated exploratory report, and refuses `--gate` and `--json`:
+key, prints a dedicated exploratory report (including versioned experimental
+observations), and refuses `--gate` and `--json`:
 
 ```bash
 approved-export-command | node run-bench.js --research-stdin \
@@ -200,6 +201,14 @@ Every real session coalesced at least two pointer samples; all five
 signal on these observed configurations, but four sessions from one machine are
 not enough to claim a population false-positive rate or remove the recorder
 artifact exemption from the scripted panel.
+
+The benchmark prints those observe-only candidates in a separate
+`Experimental observations` panel. It uses base samples only, keeps trusted and
+self-reported humans separate, excludes unknown/unsupported observations from
+the displayed detection rate, and never feeds the result into production
+scores, signal budgets, or the release gate. This is the measurement path for
+deciding whether a candidate such as `pointer-movement-v1` has enough real
+hardware coverage to graduate; a high agent rate by itself is not sufficient.
 
 The sessions also disproved two behavioural assumptions. All four natural
 trackpad paths reached the checkbox without an overshoot, and Safari produced a
