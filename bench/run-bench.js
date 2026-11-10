@@ -13,6 +13,7 @@
  *   node bench/run-bench.js --json out.json          # machine-readable output
  *   node bench/run-bench.js --research-export        # ephemeral hosted-demo export
  *   node bench/run-bench.js --research-input file    # ephemeral local NDJSON export
+ *   command-producing-ndjson | node bench/run-bench.js --research-stdin
  *
  * Start a server first — any of the three implementations:
  *   cd server-node && npm start
@@ -34,6 +35,7 @@ const {
   fetchExport,
   parseExport,
   readExportFile,
+  readExportStream,
 } = require('./lib/research-import');
 
 function parseArgs(argv) {
@@ -46,6 +48,7 @@ function parseArgs(argv) {
     json: null,
     quiet: false,
     researchInput: null,
+    researchStdin: false,
     researchUrl: null,
   };
   for (let i = 2; i < argv.length; i++) {
@@ -66,20 +69,24 @@ function parseArgs(argv) {
       args.researchInput = argv[++i];
       if (!args.researchInput) throw new Error('--research-input requires a value');
     }
+    else if (a === '--research-stdin') args.researchStdin = true;
     else if (a === '--help' || a === '-h') args.help = true;
     else throw new Error(`unknown argument: ${a}`);
   }
-  if (args.researchInput && args.researchUrl) {
-    throw new Error('--research-input cannot be combined with --research-export or --research-url');
+  const researchSources = [args.researchInput, args.researchStdin, args.researchUrl].filter(Boolean);
+  if (researchSources.length > 1) {
+    throw new Error('--research-input, --research-stdin, and --research-export/--research-url are mutually exclusive');
   }
   return args;
 }
 
 async function loadResearchSamples(args) {
-  if (!args.researchInput && !args.researchUrl) return [];
+  if (!args.researchInput && !args.researchStdin && !args.researchUrl) return [];
   const bytes = args.researchInput
     ? readExportFile(path.resolve(args.researchInput))
-    : await fetchExport(args.researchUrl, process.env.FCAPTCHA_CAPTURE_EXPORT_TOKEN);
+    : args.researchStdin
+      ? await readExportStream(process.stdin)
+      : await fetchExport(args.researchUrl, process.env.FCAPTCHA_CAPTURE_EXPORT_TOKEN);
   return parseExport(bytes);
 }
 

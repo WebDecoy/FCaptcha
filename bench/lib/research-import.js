@@ -244,6 +244,22 @@ function readExportFile(file, options = {}) {
   }
 }
 
+async function readExportStream(stream, options = {}) {
+  const maxBytes = options.maxBytes || MAX_EXPORT_BYTES;
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of stream) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += bytes.length;
+    if (total > maxBytes) {
+      if (typeof stream.destroy === 'function') stream.destroy();
+      fail(`export exceeds ${maxBytes} bytes`);
+    }
+    chunks.push(bytes);
+  }
+  return Buffer.concat(chunks, total);
+}
+
 async function readBoundedResponse(response, maxBytes) {
   const declared = Number(response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > maxBytes) fail(`export exceeds ${maxBytes} bytes`);
@@ -318,6 +334,7 @@ module.exports = {
   fetchExport,
   parseExport,
   readExportFile,
+  readExportStream,
   sanitizeSignals,
   toCorpusSample,
   validateRecord,

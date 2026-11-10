@@ -153,6 +153,15 @@ For an export already downloaded through an approved secret-handling workflow:
 node run-bench.js --research-input /path/to/fcaptcha-captures.ndjson
 ```
 
+To stream an export directly into the benchmark without writing it to disk:
+
+```bash
+approved-export-command | node run-bench.js --research-stdin
+```
+
+Standard input is subject to the same 64 MiB limit and strict schema validation
+as file and HTTPS imports.
+
 The importer accepts only schema-v1 self-reported human records, caps input at
 64 MiB and 5,000 records, refuses redirects and non-HTTPS export URLs, and never
 accepts the bearer token as a command-line argument. Use `--research-url` for

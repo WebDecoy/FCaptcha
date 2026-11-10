@@ -1,11 +1,13 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { Readable } = require('node:stream');
 const test = require('node:test');
 
 const {
   fetchExport,
   parseExport,
+  readExportStream,
   toCorpusSample,
   validateRecord,
 } = require('./research-import');
@@ -89,6 +91,16 @@ test('parses NDJSON deterministically and refuses duplicate or empty exports', (
   assert.throws(() => parseExport(Buffer.from('{nope}\n')), /not valid JSON/);
   assert.throws(
     () => parseExport(Buffer.from(`${line}\n`), { maxBytes: 8 }),
+    /exceeds 8 bytes/
+  );
+});
+
+test('reads bounded NDJSON streams without writing an intermediate file', async () => {
+  const payload = Buffer.from(`${JSON.stringify(record())}\n`);
+  const bytes = await readExportStream(Readable.from([payload.subarray(0, 17), payload.subarray(17)]));
+  assert.deepEqual(bytes, payload);
+  await assert.rejects(
+    readExportStream(Readable.from([payload]), { maxBytes: 8 }),
     /exceeds 8 bytes/
   );
 });
