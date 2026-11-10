@@ -1274,7 +1274,6 @@ def detect_cdp(signals: Dict) -> List[Detection]:
 def detect_behavioral(signals: Dict) -> List[Detection]:
     detections = []
     b = signals.get("behavioral", {})
-    t = signals.get("temporal", {})
 
     # Insufficient mouse data - critical check for zero-click bots
     # Exempt: touch users (mobile) and keyboard-only users (accessibility)
@@ -1327,14 +1326,6 @@ def detect_behavioral(signals: Dict) -> List[Detection]:
         detections.append(Detection(
             ThreatCategory.CAPTCHA_FARM, 0.3, 0.3,
             "Unusually long interaction time"
-        ))
-
-    # First interaction timing
-    first_int = t.get("pageLoadToFirstInteraction")
-    if first_int is not None and 0 < first_int < 100:
-        detections.append(Detection(
-            ThreatCategory.BEHAVIORAL, 0.5, 0.5,
-            "First interaction too soon after page load"
         ))
 
     # Mouse event rate

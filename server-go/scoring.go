@@ -1798,7 +1798,6 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 	results := make([]DetectionResult, 0)
 
 	behavioral := getMap(signals, "behavioral")
-	temporal := getMap(signals, "temporal")
 
 	// Insufficient mouse data - critical check for zero-click bots
 	// Exempt: touch users (mobile) and keyboard-only users (accessibility)
@@ -1867,18 +1866,6 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 			Score:      0.3,
 			Confidence: 0.3,
 			Reason:     "Unusually long interaction time",
-		})
-	}
-
-	// Page load to first interaction
-	firstInteraction := getFloat(temporal, "pageLoadToFirstInteraction")
-	if firstInteraction > 0 && firstInteraction < 100 {
-		results = append(results, DetectionResult{
-			Category:   CategoryBehavioral,
-			Score:      0.5,
-			Confidence: 0.5,
-			Reason:     "First interaction too soon after page load",
-			Details:    map[string]interface{}{"pageLoadToFirstInteraction": firstInteraction},
 		})
 	}
 
