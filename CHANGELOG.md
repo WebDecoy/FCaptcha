@@ -13,6 +13,26 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.48.0] — 2026-11-09
+
+### Security
+- Fast-start stealth-CDP sessions now receive a production score floor of 0.8
+  when four measured conditions agree: at least 30 pointer and coalescing
+  samples, fewer than 5% zero movement deltas, a CDP console consumer, and a
+  first interaction under 250 ms. Node, Go, and Python enforce the same rule.
+- The release benchmark catches 10/10 independent captured stealth-CDP sessions
+  (90/90 including derived regressions) while the supported human panel remains
+  at 0/162 flagged. Pointer movement alone remains observation-only because the
+  recorder and some legitimate hardware can produce the same shape.
+
+### Measurement
+- Experimental browser observations are retained and reported separately from
+  production detections, including base-capture coverage for each observation.
+
+This is a verdict behavior change, not a claim of universal stealth detection.
+An agent can evade this rule by delaying its first interaction, and browser or
+hardware classes absent from the captured panel remain unproven. No API changes.
+
 ## [1.47.3] — 2026-11-09
 
 ### Fixed
