@@ -6,8 +6,8 @@ For separate browser measurements with Camoufox, automated Firefox controls,
 and manual browser sessions, see [the browser recorder](capture/CAMOUFOX.md).
 Those research outputs are kept outside the committed human corpus.
 Browser-internal agents have a separate
-[driver-free paired protocol](capture/BROWSER_INTERNAL.md); the known-gap marker
-stays in the corpus until that protocol produces a real capture.
+[driver-free paired protocol](capture/BROWSER_INTERNAL.md). Results remain
+capture-specific until that protocol covers multiple sessions and modes.
 
 FCaptcha has always made claims about false positives — that keyboard-only users
 are exempt, that privacy extensions are safe, that touch users are not treated as
@@ -426,8 +426,13 @@ Two results worth recording because they changed the design:
   250ms. That conjunction is intentionally narrow: waiting at least 250ms
   evades it, and broadening it without new evidence would risk real DevTools
   users.
-- **`browser-internal` remains explicitly unmeasured.** Chrome Auto Browse and
-  similar features may use browser-internal input paths that do not resemble
-  CDP. The synthetic gap marker is not a sample and contributes to no rate. Use
-  the driver-free paired protocol above; remove the marker only when the first
-  real capture is committed.
+- **`browser-internal` has one measured pair, not a detector.** A driver-free
+  Chrome Auto Browse widget capture scored 0.030; its same-browser, same-profile
+  manual control scored 0.045. Both produced valid tokens and stayed below the
+  human threshold. Their pointer streams overlap on the current candidate
+  features: micro-tremor 1.0 in both, empty-coalescing ratio 90.5% vs 89.7%, and
+  zero-coalescing ratio 25.8% vs 25.3% (agent vs control). This first observation
+  is evidence that the class exists in the corpus, so the synthetic no-data
+  marker is gone. It is not evidence of a population rate or a safe separating
+  signal. Four more widget pairs and five invisible pairs remain before any
+  enforcement proposal; no regression floor is set from one pair.

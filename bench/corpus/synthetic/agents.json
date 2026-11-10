@@ -116,13 +116,5 @@
         "canvasHash": { "hash": "7d3f1a9c5e2b8046f1a3c9e7d5b2a408" }
       }
     }
-  },
-  {
-    "id": "gap/browser-internal/0000",
-    "label": "agent",
-    "group": "browser-internal",
-    "provenance": "synthetic",
-    "unmeasured": true,
-    "notes": "Chrome auto browse (Gemini in Chrome) and the browser-internal agent class generally. NO DATA — no vendor or researcher has published what isTrusted, event coalescing or input cadence look like under Chrome's internal injection, and this project has not captured it either. Deliberately left as a declared gap rather than a fabricated sample: inventing a trace for a class nobody has measured would put invented numbers into a benchmark, which is the exact failure this harness exists to prevent. It is excluded from every rate. Closing it means capturing the real thing — see the extensions PRD §6.2, which names it the priority capture target."
   }
 ]

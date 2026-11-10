@@ -87,10 +87,10 @@ importer rejects human, externally driven, normalized, incomplete, and unlabeled
 reports. Both importers strip stale challenge state, retain replay-relevant
 headers, and hash the source report.
 
-Run the ordinary benchmark. Once the first real agent sample is committed, the
-existing `gap/browser-internal/0000` marker must be removed in the same change;
-otherwise the report would claim both “captured” and “no data.” Report base
-captures separately from correlated derived variants.
+Run the ordinary benchmark. The first real agent sample removed the former
+`gap/browser-internal/0000` marker; do not reintroduce a no-data marker while
+captured samples exist. Report base captures separately from correlated derived
+variants.
 
 Before proposing enforcement, compare every candidate signal against its paired
 manual control and the full human panel. A useful observation is not
