@@ -369,6 +369,32 @@ def manual_capture(args):
     return sample
 
 
+def browser_internal_capture(args):
+    """Serve a page for a browser-internal agent without attaching a driver."""
+    sample = {'browser': args.environment_label, 'agent': args.agent_label,
+              'label': 'agent',
+              'inputSource': 'operator-declared browser-internal automation',
+              'provenance': 'captured', 'headless': False, 'humanize': False,
+              'privacy': 'operator-described', 'mode': args.modes[0],
+              'normalization': 'none'}
+    with capture_server(args.server, args.modes[0], args.observations) as (server, url):
+        print(f'Open {url} in {args.environment_label}, then ask {args.agent_label} '
+              f'to complete the page. Waiting {args.timeout}s.', flush=True)
+        if not server.finished.wait(args.timeout):
+            sample['error'] = 'No browser-internal submission received; class remains unmeasured'
+        else:
+            try:
+                sample['capture'] = finish_capture(server, args.secret)
+                attach_verdict_log(sample, args.verdict_log)
+                if args.observations:
+                    server.observations_finished.wait(25)
+                    sample['observations'] = server.observations or {'status': 'timeout'}
+                    sample['probeSha256'] = hashlib.sha256(server.probe_source).hexdigest()
+            except Exception as error:
+                sample['error'] = str(error)
+    return sample
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--server', default='http://127.0.0.1:18881')
@@ -380,8 +406,11 @@ def main():
     parser.add_argument('--seed', type=int, default=87)
     parser.add_argument('--timeout', type=int, default=90)
     parser.add_argument('--out', type=Path, default=ROOT/'bench/test-results/camoufox')
-    parser.add_argument('--manual', action='store_true', help='Record one person using their own browser; launches no browser automation')
-    parser.add_argument('--environment-label', help='Required with --manual, e.g. Firefox 153 default or Firefox 153 RFP')
+    capture_mode = parser.add_mutually_exclusive_group()
+    capture_mode.add_argument('--manual', action='store_true', help='Record one person using their own browser; launches no browser automation')
+    capture_mode.add_argument('--external-agent', action='store_true', help='Record a browser-internal agent in an operator-opened browser; attaches no automation driver')
+    parser.add_argument('--environment-label', help='Required with --manual or --external-agent; describe the exact browser and environment')
+    parser.add_argument('--agent-label', help='Required with --external-agent, e.g. Chrome Auto Browse (Gemini)')
     parser.add_argument('--verdict-log', type=Path, help='Local server verdict log; joins diagnostics missing from /api/score responses')
     parser.add_argument('--observations', action='store_true', help='Collect research probes after scoring; never submitted to FCaptcha')
     parser.add_argument('--control-settings', nargs='+', choices=['default', 'privacy', 'reduced-motion', 'privacy-reduced-motion'],
@@ -397,8 +426,10 @@ def main():
         parser.error('--server must be a loopback HTTP test server')
     if args.repeats < 1 or args.timeout < 1:
         parser.error('--repeats and --timeout must be positive')
-    if args.manual and (not args.environment_label or len(args.modes) != 1):
-        parser.error('--manual requires --environment-label and exactly one --modes value')
+    if (args.manual or args.external_agent) and (not args.environment_label or len(args.modes) != 1):
+        parser.error('--manual/--external-agent requires --environment-label and exactly one --modes value')
+    if args.external_agent and not args.agent_label:
+        parser.error('--external-agent requires --agent-label')
     args.secret = os.environ.get('FCAPTCHA_VERIFY_SECRET') or os.environ.get('FCAPTCHA_SECRET')
     if not args.secret:
         parser.error('Set FCAPTCHA_SECRET (or FCAPTCHA_VERIFY_SECRET) to validate issued tokens')
@@ -422,7 +453,7 @@ def main():
         try:
             packages[package] = version(package)
         except PackageNotFoundError:
-            if not args.manual:
+            if not args.manual and not args.external_agent:
                 raise
     report = {
         'schemaVersion': 1, 'startedAt': datetime.now(timezone.utc).isoformat(),
@@ -446,6 +477,19 @@ def main():
             'Loopback proxy isolates state and removes transport fingerprinting.',
         ]
         report['samples'] = [manual_capture(args)]
+        report['summary'] = summarize(report['samples'])
+        write_json(args.out/'report.json', report)
+        print(f'Report: {args.out / "report.json"}', flush=True)
+        return int('error' in report['samples'][0])
+    if args.external_agent:
+        report['camoufoxBuild'] = None
+        report['limitations'] = [
+            'Browser configuration and browser-internal agent identity are operator-declared.',
+            'No external automation protocol is attached by this recorder.',
+            'Loopback proxy isolates state and removes transport fingerprinting.',
+            'One capture measures one session, not an agent population.',
+        ]
+        report['samples'] = [browser_internal_capture(args)]
         report['summary'] = summarize(report['samples'])
         write_json(args.out/'report.json', report)
         print(f'Report: {args.out / "report.json"}', flush=True)

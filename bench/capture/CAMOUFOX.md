@@ -81,6 +81,11 @@ with fresh output directories for other browsers, privacy settings, and input
 methods. The environment description is operator-declared; a few manual sessions
 still do not establish a population false-positive rate.
 
+To record a browser-internal feature without attaching Playwright, WebDriver,
+CDP, or DevTools, use `--external-agent`. The paired capture protocol, minimum
+sample count, provenance rules, and dedicated importer are documented in
+[BROWSER_INTERNAL.md](BROWSER_INTERNAL.md).
+
 ## Optional research observations
 
 Add `--observations` to automated or manual runs to collect a separate set of

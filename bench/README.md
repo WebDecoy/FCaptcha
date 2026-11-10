@@ -5,6 +5,9 @@ A labeled corpus, a replayer, and per-signal false-positive accounting.
 For separate browser measurements with Camoufox, automated Firefox controls,
 and manual browser sessions, see [the browser recorder](capture/CAMOUFOX.md).
 Those research outputs are kept outside the committed human corpus.
+Browser-internal agents have a separate
+[driver-free paired protocol](capture/BROWSER_INTERNAL.md); the known-gap marker
+stays in the corpus until that protocol produces a real capture.
 
 FCaptcha has always made claims about false positives — that keyboard-only users
 are exempt, that privacy extensions are safe, that touch users are not treated as
@@ -298,6 +301,7 @@ bench/
     record.js             drives Chromium, intercepts the /api/verify body
     input.js              per-persona input choreography
     normalize.js          undoes automation artifacts (documented, auditable)
+    BROWSER_INTERNAL.md   driver-free paired browser-internal capture protocol
   lib/
     corpus.js             sample schema, provenance rules, jitter
     pow.js                browser-paced proof-of-work client
@@ -307,6 +311,8 @@ bench/
     rng.js                seeded PRNG — same seed, same corpus
   tools/
     compare-aggregation.js  score-composition schemes measured side by side
+    import-browser-internal-capture.js
+                            validates and imports driver-free agent captures
   corpus/captured/        committed traces
 ```
 
@@ -401,22 +407,27 @@ Two results worth recording because they changed the design:
   cadence floor looks for. That is why the check requires ten keystrokes, no page
   paste and no field paste before it will look at cadence at all.
 
-### Three classes still score below the bar
+### Remaining classes and the v1.48.0 stealth-CDP result
 
-- **`declared-crawler` (0.600 on the v1.47.0 corpus).** A self-identifying ClaudeBot is deliberately
+- **`declared-crawler` (0.600 on the v1.48.0 corpus).** A self-identifying ClaudeBot is deliberately
   low-severity: it is honest about what it is, and whether to serve it is a
   policy decision for the operator, not a block. Scoring under 0.8 is the design.
-- **`source-patched` (0.600 on the v1.47.0 corpus).** A patched Chromium with every JS-observable
+- **`source-patched` (0.600 on the v1.48.0 corpus).** A patched Chromium with every JS-observable
   automation flag scrubbed, on a residential IP, whose only tell is that the
   movement is wrong. It trips nothing dispositive, so the floor cannot help, and
   the behavioural layer does not carry the case alone. **This is the real open
   problem**, and the number is here so it stays visible rather than being
   averaged into a headline. Closing it is what workstreams C, D and F are for.
-- **`stealth-cdp-agent` (0.153 median, 0.206 max on the v1.47.0 corpus).**
-  Installed Chrome launched headfully through Playwright with
-  `AutomationControlled` disabled retains its ordinary plugins, `window.chrome`
-  and native viewport while hiding `navigator.webdriver`. Ten real captures —
-  five with a deliberately mechanical wave and five reusing the humanized input
-  model — all remained below the 0.8 blocking threshold. This is a measured
-  open problem, not a synthetic projection. The report keeps the two capture
-  scenarios separate even though they share one threat class.
+- **`stealth-cdp-agent` now reaches the 0.800 floor on v1.48.0.** All 10
+  independent captures, and all 90 correlated derived variants, are caught;
+  none of 162 captured+derived human samples cross the human threshold. The
+  detector requires 30+ pointer samples, 30+ coalescing observations, under 5%
+  coalesced events, an attached console consumer, and first interaction under
+  250ms. That conjunction is intentionally narrow: waiting at least 250ms
+  evades it, and broadening it without new evidence would risk real DevTools
+  users.
+- **`browser-internal` remains explicitly unmeasured.** Chrome Auto Browse and
+  similar features may use browser-internal input paths that do not resemble
+  CDP. The synthetic gap marker is not a sample and contributes to no rate. Use
+  the driver-free paired protocol above; remove the marker only when the first
+  real capture is committed.
