@@ -2115,8 +2115,8 @@ func (e *ScoringEngine) detectFingerprint(signals map[string]interface{}, ip, si
 	}
 
 	// Canvas hash anomalies
-	canvasHash := getString(env, "canvasHash")
-	if canvasHash == "error" || canvasHash == "" {
+	canvas := getMap(env, "canvasHash")
+	if getBool(canvas, "error") || !getBool(canvas, "supported") {
 		results = append(results, DetectionResult{
 			Category:   CategoryFingerprint,
 			Score:      0.4,
@@ -2154,7 +2154,7 @@ func deviceFingerprint(signals map[string]interface{}) string {
 	env := getMap(signals, "environmental")
 	automation := getMap(env, "automationFlags")
 	components := []string{
-		getString(env, "canvasHash"),
+		getString(getMap(env, "canvasHash"), "hash"),
 		getString(getMap(env, "webglInfo"), "renderer"),
 		getString(automation, "platform"),
 		getString(automation, "hardwareConcurrency"),
