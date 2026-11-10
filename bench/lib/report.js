@@ -231,8 +231,52 @@ function renderReport(metrics, corpus, gate) {
   return `${out.join('\n')}\n`;
 }
 
+function renderResearchReport(results, metrics) {
+  const out = [];
+  out.push(`${C.bold}FCaptcha research replay${C.reset}`);
+  out.push(
+    `${C.yellow}Exploratory only: labels are self-reported. ` +
+      `No FPR, TPR, signal budget, or release gate is computed.${C.reset}`
+  );
+  out.push(
+    `${C.dim}${metrics.counts.scored} scored / ${metrics.counts.errors} error(s); ` +
+      `samples remain ephemeral and are not written to the corpus or JSON.${C.reset}`
+  );
+
+  out.push(heading('Research samples'));
+  out.push(
+    table(results, [
+      { header: 'BROWSER/OS', value: (r) => `${r.sample.capture?.browser || '-'}/${r.sample.capture?.os || '-'}` },
+      { header: 'INPUT', value: (r) => r.sample.capture?.input || '-' },
+      { header: 'ENDPOINT', value: (r) => r.sample.capture?.endpoint || '-' },
+      { header: 'SCORE', value: (r) => r.error ? '-' : r.score?.toFixed(3) ?? '-', right: true },
+      { header: 'RECOMMENDATION', value: (r) => r.error ? 'error' : r.recommendation || '-' },
+      { header: 'SIGNALS', value: (r) => r.error ? '-' : (r.detections || []).length, right: true },
+    ])
+  );
+
+  if (metrics.humanPanel.exploratorySignals.length) {
+    out.push(heading('Observed signals — exploratory only'));
+    out.push(
+      table(metrics.humanPanel.exploratorySignals, [
+        { header: 'SIGNAL', value: (r) => truncate(r.signal, 48) },
+        { header: 'CAT', value: (r) => r.category || '-' },
+        { header: 'SAMPLES', value: (r) => `${r.hits}/${r.total}`, right: true },
+        { header: 'RATE', value: (r) => pct(r.rate), right: true },
+      ])
+    );
+  }
+
+  if (metrics.errors.length) {
+    out.push(heading('Replay errors'));
+    for (const error of metrics.errors) out.push(`  ${C.red}${error.id}${C.reset}: ${error.error}`);
+  }
+
+  return `${out.join('\n')}\n`;
+}
+
 function truncate(s, n) {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
 }
 
-module.exports = { renderReport };
+module.exports = { renderReport, renderResearchReport };
