@@ -315,14 +315,9 @@ function detectVisionAI(signals) {
     });
   }
 
-  // Click precision
-  const precision = b.clickPrecision ?? 10;
-  if (precision > 0 && precision < 2) {
-    detections.push({
-      category: 'vision_ai', score: 0.4, confidence: 0.5,
-      reason: 'Click precision is unnaturally accurate'
-    });
-  }
+  // Click precision is intentionally not scored on its own. A paired real
+  // trackpad control landed 1.62px from center, inside the former threshold;
+  // precise clicks are ordinary human input without independent corroboration.
 
   // Exploration. Click-derived, so widget-only.
   const exploration = b.explorationRatio ?? 0.3;

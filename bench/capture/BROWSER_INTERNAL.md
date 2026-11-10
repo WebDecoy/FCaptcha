@@ -104,3 +104,5 @@ range from 0.000 to 0.030; paired human controls range from 0.000 to 0.045.
 Their current behavioral and environment signals overlap, so this campaign does
 not support browser-internal enforcement. Retain the samples as a regression
 cohort and require new paired evidence before adding a detector or score floor.
+Each imported sample retains `/api/verify` or `/api/score` as non-secret capture
+metadata so benchmark replay preserves widget versus invisible server context.

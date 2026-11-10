@@ -472,6 +472,7 @@
     "capture": {
       "browser": "Chrome 156 (UA-reported), macOS, signed-in profile",
       "input": "built-in trackpad and keyboard",
+      "endpoint": "/api/score",
       "mode": "invisible",
       "normalization": "none",
       "reportSha256": "8c7355971d4a2426a956c5f85684183d9bdf274b3eb10529cbd7ba8f061dbc5c"

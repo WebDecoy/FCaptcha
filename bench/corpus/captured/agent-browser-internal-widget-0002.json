@@ -476,6 +476,7 @@
       "browser": "Chrome 156 (UA-reported), macOS, signed-in profile",
       "agent": "Chrome Auto Browse (Gemini)",
       "input": "browser-internal pointer and keyboard",
+      "endpoint": "/api/verify",
       "mode": "widget",
       "normalization": "none",
       "reportSha256": "51c3104ba46edc6edb33b5171bb1ab102a4ead1295a5d398d47b981f2b102f5b"

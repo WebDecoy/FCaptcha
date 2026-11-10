@@ -3,7 +3,14 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { neutralIpAt, neutralIpFor, NEUTRAL_POOL_SIZE, siteKeyForSample } = require('./replay');
+const {
+  neutralIpAt,
+  neutralIpFor,
+  NEUTRAL_POOL_SIZE,
+  scoringEndpoint,
+  siteKeyForSample,
+} = require('./replay');
+const { deriveVariant } = require('./corpus');
 
 // These exist because the harness had no tests, and the defect they guard
 // against was invisible for exactly that reason.
@@ -70,4 +77,25 @@ test('research-only replay isolates every sample under a distinct site key', () 
   assert.strictEqual(siteKeyForSample(opts, 0), 'research-run-0');
   assert.strictEqual(siteKeyForSample(opts, 1), 'research-run-1');
   assert.strictEqual(siteKeyForSample({ siteKey: 'regression-run' }, 1), 'regression-run');
+});
+
+test('replay preserves the captured scoring endpoint', () => {
+  assert.strictEqual(scoringEndpoint({ capture: { endpoint: '/api/score' } }), '/api/score');
+  assert.strictEqual(scoringEndpoint({ capture: { endpoint: '/api/verify' } }), '/api/verify');
+  assert.strictEqual(scoringEndpoint({}), '/api/verify');
+});
+
+test('derived variants preserve invisible scoring context', () => {
+  const source = {
+    id: 'agent/browser-internal/0000',
+    label: 'agent',
+    group: 'browser-internal',
+    scenario: 'chrome-auto-browse-invisible',
+    provenance: 'captured',
+    capture: { endpoint: '/api/score', mode: 'invisible' },
+    signals: { behavioral: { totalPoints: 10 } },
+  };
+  const derived = deriveVariant(source, { jitter: (value) => value }, 0);
+  assert.deepStrictEqual(derived.capture, source.capture);
+  assert.strictEqual(scoringEndpoint(derived), '/api/score');
 });

@@ -128,6 +128,11 @@ test('early pointer movement alone is not suspicious', () => {
   assert.ok(!reasons.includes('First interaction too soon after page load'));
 });
 
+test('a precise real trackpad click is not suspicious on its own', () => {
+  const reasons = visionReasons({ ...flatPath, clickPrecision: 1.6171875 });
+  assert.ok(!reasons.includes('Click precision is unnaturally accurate'));
+});
+
 test('the same slow pointer without movement markers still trips them', () => {
   // Slowness alone cannot separate a human from an agent — the markers do.
   const reasons = behavioralReasons({

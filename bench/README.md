@@ -439,6 +439,14 @@ Two results worth recording because they changed the design:
   separating signal, so no browser-internal regression floor or production
   enforcement is set from it.
 
+  Expanding the cohort also exposed two false-positive paths. The replayer had
+  treated every corpus entry as `/api/verify`; it now retains and replays the
+  reviewed capture endpoint so invisible samples stay on `/api/score`. A real
+  trackpad control also clicked 1.62px from target center, inside the former
+  standalone “unnaturally accurate” threshold. That weak click-precision signal
+  was removed from all three servers because precise human clicks require no
+  automation and the signal had no independent corroboration.
+
   The first paired control also invalidated the standalone “First interaction too
   soon after page load” heuristic: the person moved at 30.7ms while Auto Browse
   first interacted at 244.7ms. That signal separated in the wrong direction and

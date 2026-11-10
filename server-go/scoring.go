@@ -1338,17 +1338,9 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 		})
 	}
 
-	// Check click precision
-	clickPrecision := getFloat(behavioral, "clickPrecision")
-	if clickPrecision < 2 && clickPrecision > 0 {
-		results = append(results, DetectionResult{
-			Category:   CategoryVisionAI,
-			Score:      0.4,
-			Confidence: 0.5,
-			Reason:     "Click precision is unnaturally accurate",
-			Details:    map[string]interface{}{"clickPrecision": clickPrecision},
-		})
-	}
+	// Click precision is intentionally not scored on its own. A paired real
+	// trackpad control landed 1.62px from center, inside the former threshold;
+	// precise clicks are ordinary human input without independent corroboration.
 
 	// No exploration before click.
 	//

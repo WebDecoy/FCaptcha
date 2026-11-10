@@ -71,6 +71,7 @@ function toCorpusSample(report, options, reportBytes = null) {
     capture: {
       browser,
       input,
+      endpoint: capture.endpoint,
       mode: source.mode || null,
       normalization: source.normalization,
       reportSha256: reportBytes
@@ -126,6 +127,7 @@ function toBrowserInternalSample(report, options, reportBytes = null) {
       browser,
       agent,
       input,
+      endpoint: capture.endpoint,
       mode: source.mode || null,
       normalization: source.normalization,
       reportSha256: reportBytes

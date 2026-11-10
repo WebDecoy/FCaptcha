@@ -46,6 +46,7 @@ test('imports manual signals without stale challenge state or transport litter',
   assert.equal(sample.headers['User-Agent'], 'captured browser');
   assert.equal(sample.headers.Host, undefined);
   assert.equal(sample.headers.Origin, undefined);
+  assert.equal(sample.capture.endpoint, '/api/verify');
   assert.match(sample.capture.reportSha256, /^[a-f0-9]{64}$/);
 });
 
@@ -84,6 +85,7 @@ test('imports a driver-free browser-internal capture as an agent', () => {
   assert.equal(sample.label, 'agent');
   assert.equal(sample.group, 'browser-internal');
   assert.equal(sample.capture.agent, 'Chrome Auto Browse (Gemini)');
+  assert.equal(sample.capture.endpoint, '/api/verify');
   assert.equal(sample.signals.meta.challengeNonce, undefined);
   assert.equal(sample.headers.Host, undefined);
   assert.match(sample.capture.reportSha256, /^[a-f0-9]{64}$/);

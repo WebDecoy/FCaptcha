@@ -473,6 +473,7 @@
       "browser": "Chrome 156 (UA-reported), macOS, signed-in profile",
       "agent": "Chrome Auto Browse (Gemini)",
       "input": "browser-internal pointer and keyboard",
+      "endpoint": "/api/score",
       "mode": "invisible",
       "normalization": "none",
       "reportSha256": "50faf4b62a92b96c45854ecb32e0c751c79565d4849ae942d894b579c2ccd2bb"
