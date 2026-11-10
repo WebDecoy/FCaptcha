@@ -13,6 +13,26 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.48.1] — 2026-11-10
+
+### Fixed
+- Precise clicks are no longer scored as automation on their own. A paired real
+  trackpad control landed 1.62px from target center, inside the former threshold,
+  proving the standalone signal could flag normal human input. Node, Go, and
+  Python now apply the same corrected behavior.
+- Benchmark replays retain the reviewed capture endpoint, including through
+  derived variants, so invisible `/api/score` sessions are no longer replayed as
+  widget `/api/verify` sessions with fabricated missing-click detections.
+
+### Measurement
+- The browser-internal corpus now contains five Chrome Auto Browse widget pairs
+  and five invisible pairs: 20 captured samples total. Every capture produced a
+  valid token and an allow verdict. Agent scores overlap their same-browser,
+  same-profile human controls, so no browser-internal enforcement rule or score
+  floor is introduced.
+
+No API changes.
+
 ## [1.48.0] — 2026-11-09
 
 ### Security
