@@ -20,8 +20,8 @@ const test = (name, fn) => tests.push({ name, fn });
 
 const visionReasons = (behavioral) =>
   detectVisionAI({ behavioral }).map((d) => d.reason);
-const behavioralReasons = (behavioral) =>
-  detectBehavioral({ behavioral }).map((d) => d.reason);
+const behavioralReasons = (behavioral, temporal = {}) =>
+  detectBehavioral({ behavioral, temporal }).map((d) => d.reason);
 
 const TREMOR = 'Mouse movement lacks natural micro-tremor';
 const DIRECT = 'Mouse path to target is unnaturally direct';
@@ -121,6 +121,11 @@ test('a human trackpad path need not overshoot when other hand markers are prese
     directionChanges: 44,
   });
   assert.ok(!reasons.includes('No overshoot corrections on long trajectory'));
+});
+
+test('early pointer movement alone is not suspicious', () => {
+  const reasons = behavioralReasons(slowHuman, { pageLoadToFirstInteraction: 30.7 });
+  assert.ok(!reasons.includes('First interaction too soon after page load'));
 });
 
 test('the same slow pointer without movement markers still trips them', () => {

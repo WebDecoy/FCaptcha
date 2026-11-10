@@ -266,6 +266,20 @@ def human_trackpad_does_not_require_overshoot():
 
 
 @test
+def early_pointer_movement_alone_is_not_suspicious():
+    signals = {
+        "behavioral": {
+            "totalPoints": 290, "trajectoryLength": 2168,
+            "microTremorScore": 1, "directionChanges": 75,
+            "velocityVariance": 2.6, "mouseEventRate": 41,
+        },
+        "temporal": {"pageLoadToFirstInteraction": 30.7},
+    }
+    reasons = [d.reason for d in detect_behavioral(signals)]
+    assert "First interaction too soon after page load" not in reasons, reasons
+
+
+@test
 def interaction_mode_defaults_to_widget():
     # Callers that never set it keep the pre-existing behaviour.
     assert has_widget_interaction(_click_derived_session()) is True

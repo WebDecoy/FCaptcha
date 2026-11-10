@@ -636,7 +636,6 @@ function detectCDP(signals) {
 function detectBehavioral(signals) {
   const detections = [];
   const b = signals.behavioral || {};
-  const t = signals.temporal || {};
 
   // Insufficient mouse data - critical check for zero-click bots
   // Exempt: touch users (mobile) and keyboard-only users (accessibility)
@@ -691,15 +690,6 @@ function detectBehavioral(signals) {
     detections.push({
       category: 'captcha_farm', score: 0.3, confidence: 0.3,
       reason: 'Unusually long interaction time'
-    });
-  }
-
-  // First interaction
-  const firstInt = t.pageLoadToFirstInteraction;
-  if (firstInt !== null && firstInt > 0 && firstInt < 100) {
-    detections.push({
-      category: 'behavioral', score: 0.5, confidence: 0.5,
-      reason: 'First interaction too soon after page load'
     });
   }
 

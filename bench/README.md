@@ -436,3 +436,9 @@ Two results worth recording because they changed the design:
   marker is gone. It is not evidence of a population rate or a safe separating
   signal. Four more widget pairs and five invisible pairs remain before any
   enforcement proposal; no regression floor is set from one pair.
+
+  The paired control also invalidated the standalone “First interaction too
+  soon after page load” heuristic: the person moved at 30.7ms while Auto Browse
+  first interacted at 244.7ms. That signal separated in the wrong direction and
+  was removed from all three servers. Contextual form timing checks and the
+  multi-signal stealth-CDP conjunction still use timing where it is corroborated.

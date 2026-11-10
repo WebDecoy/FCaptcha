@@ -685,6 +685,22 @@ func TestBehavioral_HumanTrackpadDoesNotRequireOvershoot(t *testing.T) {
 	}
 }
 
+func TestBehavioral_EarlyPointerMovementAloneIsNotSuspicious(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	signals := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"totalPoints": 290.0, "trajectoryLength": 2168.0,
+			"microTremorScore": 1.0, "directionChanges": 75.0,
+			"velocityVariance": 2.6, "mouseEventRate": 41.0,
+		},
+		"temporal": map[string]interface{}{"pageLoadToFirstInteraction": 30.7},
+	}
+	got := e.detectBehavioral(signals)
+	if hasReasonContaining(got, "First interaction too soon after page load") {
+		t.Errorf("early pointer movement alone is ordinary human input, got %+v", got)
+	}
+}
+
 // TestAnalyzeFormInteraction_ProgrammaticFill covers the fill()-style insertion
 // signal: content with zero keystrokes and zero pastes.
 func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {
