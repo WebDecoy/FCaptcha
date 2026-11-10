@@ -26,6 +26,9 @@ from server import (
     apply_corroboration_floor,
     detect_cdp,
     detect_stealth_artifacts,
+    stealth_cdp_corroborated,
+    apply_stealth_cdp_floor,
+    STEALTH_CDP_FLOOR,
     BEHAVIOURAL_CATEGORIES,
     CORROBORATION_AGREE_AT,
     CORROBORATION_FLOOR,
@@ -340,6 +343,50 @@ def the_console_attach_probe_is_not_scored():
     # and no extensions, so it is collected but not scored.
     dets = detect_cdp({"behavioral": {"touchEvents": 0}, "environmental": {"cdpRuntime": {"consoleAttached": True}}})
     assert dets == [], dets
+
+
+def stealth_cdp_signals():
+    return {
+        "behavioral": {
+            "touchEvents": 0,
+            "inputForensics": {
+                "pointerMoveSamples": 30,
+                "coalescedSamples": 30,
+                "pointerMoveZeroRatio": 0.049,
+            },
+        },
+        "environmental": {"cdpRuntime": {"consoleAttached": True}},
+        "temporal": {"pageLoadToFirstInteraction": 249},
+    }
+
+
+@test
+def captured_stealth_cdp_conjunction_floors_at_the_catch_threshold():
+    signals = stealth_cdp_signals()
+    assert stealth_cdp_corroborated(signals) is True
+    assert apply_stealth_cdp_floor(0.18, signals) == STEALTH_CDP_FLOOR
+    assert apply_stealth_cdp_floor(0.91, signals) == 0.91
+    assert any(
+        d.reason == "CDP-driven pointer input corroborated by impossible reaction timing"
+        for d in detect_cdp(signals)
+    )
+
+
+@test
+def stealth_cdp_enforcement_requires_every_boundary_condition():
+    mutations = [
+        lambda s: s["environmental"]["cdpRuntime"].update(consoleAttached=False),
+        lambda s: s["behavioral"]["inputForensics"].update(pointerMoveSamples=29),
+        lambda s: s["behavioral"]["inputForensics"].update(coalescedSamples=29),
+        lambda s: s["behavioral"]["inputForensics"].update(pointerMoveZeroRatio=0.05),
+        lambda s: s["temporal"].update(pageLoadToFirstInteraction=250),
+        lambda s: s["behavioral"].update(touchEvents=3),
+    ]
+    for mutate in mutations:
+        signals = stealth_cdp_signals()
+        mutate(signals)
+        assert stealth_cdp_corroborated(signals) is False
+        assert apply_stealth_cdp_floor(0.18, signals) == 0.18
 
 
 @test
