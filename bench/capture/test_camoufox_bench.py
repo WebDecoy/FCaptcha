@@ -9,7 +9,13 @@ import unittest
 from unittest.mock import patch
 import urllib.request
 
-from camoufox_bench import attach_verdict_log, capture_server, finish_capture, summarize
+from camoufox_bench import (
+    attach_failed_captures,
+    attach_verdict_log,
+    capture_server,
+    finish_capture,
+    summarize,
+)
 
 
 def sample():
@@ -128,6 +134,21 @@ class MeasurementTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'valid token'):
                 finish_capture(server, 'test-secret')
         self.assertNotIn('token', record['response'])
+
+    def test_failed_capture_retains_verification_reason_without_token(self):
+        record = sample()['capture']
+        record['response']['token'] = 'issued-token'
+        record['tokenVerification'] = {'valid': False, 'reason': 'ip_mismatch'}
+        captured = {}
+
+        attach_failed_captures(captured, SimpleNamespace(records=[record]))
+
+        self.assertTrue(captured['failedCaptures'][0]['tokenIssued'])
+        self.assertEqual(
+            captured['failedCaptures'][0]['tokenVerification']['reason'],
+            'ip_mismatch',
+        )
+        self.assertNotIn('issued-token', json.dumps(captured))
 
     def test_log_diagnostics_are_joined_by_sample_not_position(self):
         captured = sample()

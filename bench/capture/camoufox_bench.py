@@ -263,6 +263,17 @@ def attach_verdict_log(sample, path):
     raise RuntimeError(f'No verdict log matched sample {site_key}')
 
 
+def attach_failed_captures(sample, server):
+    """Retain diagnostics for failed submissions without ever persisting tokens."""
+    if not server.records:
+        return
+    for record in server.records:
+        response = record.get('response') or {}
+        record['tokenIssued'] = record.get('tokenIssued', bool(response.get('token')))
+        response.pop('token', None)
+    sample['failedCaptures'] = server.records
+
+
 def run_case(args, case, index):
     sample = {**case, 'label': 'agent', 'provenance': 'captured',
               'seed': args.seed + index, 'normalization': 'none',
@@ -310,11 +321,7 @@ def run_case(args, case, index):
         except Exception as error:
             sample['error'] = str(error)
             # Preserve failures as failures, not detected bots. Never persist tokens.
-            if server.records:
-                for record in server.records:
-                    record['tokenIssued'] = record.get('tokenIssued', bool(record['response'].get('token')))
-                    record['response'].pop('token', None)
-                sample['failedCaptures'] = server.records
+            attach_failed_captures(sample, server)
         sample['httpRequests'] = server.requests
     sample['durationSeconds'] = round(time.monotonic() - started, 3)
     return sample
@@ -366,6 +373,7 @@ def manual_capture(args):
                     sample['probeSha256'] = hashlib.sha256(server.probe_source).hexdigest()
             except Exception as error:
                 sample['error'] = str(error)
+                attach_failed_captures(sample, server)
     return sample
 
 
@@ -392,6 +400,7 @@ def browser_internal_capture(args):
                     sample['probeSha256'] = hashlib.sha256(server.probe_source).hexdigest()
             except Exception as error:
                 sample['error'] = str(error)
+                attach_failed_captures(sample, server)
     return sample
 
 
