@@ -13,6 +13,23 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.47.3] — 2026-11-09
+
+### Fixed
+- The Go server now reads the client's structured canvas fingerprint correctly,
+  matching the Node and Python implementations. Valid canvas captures no longer
+  produce a false "Canvas fingerprinting blocked or failed" detection, and the
+  nested canvas hash once again contributes to Go device identity.
+
+### Measurement
+- Research exports can stream into the benchmark through bounded standard input
+  without creating an intermediate file.
+- A dedicated `--research-only` mode replays only ephemeral self-reported
+  samples, isolates each sample under a temporary site key, prints exploratory
+  scores and signals, and refuses release gates or persistent JSON output.
+
+No breaking changes.
+
 ## [1.47.2] — 2026-11-09
 
 ### Measurement
