@@ -1,3 +1,16 @@
+import { test, expect, vi, afterEach } from 'vitest';
+import { render, cleanup } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { FCaptcha } from './index.jsx';
+afterEach(cleanup);
+test('mount, verify, unmount', async () => {
+  const destroy = vi.fn(), onVerify = vi.fn();
+  window.FCaptcha = { render: vi.fn((el, opts) => { opts.callback('token'); return 'w1'; }), destroy };
+  const { unmount } = render(<StrictMode><FCaptcha siteKey="k" onVerify={onVerify} /></StrictMode>);
+  await vi.waitFor(() => expect(onVerify).toHaveBeenCalledWith('token'));
+  unmount();
+  expect(destroy).toHaveBeenCalledWith('w1');
+});
 'use strict';
 
 const assert = require('assert');
