@@ -766,6 +766,13 @@ when the policy below is configured to block. They do not change either score,
 report `unknown`; a detection is not proof of automation. Do not use these
 observations for access decisions.
 
+`identity-coherence-v1` compares the browser and OS claimed by the User-Agent
+with independently measured WebGL backend, font-set, JavaScript error, math,
+and engine-probe evidence. An engine family is reported only when at least two
+measurements agree; missing, unfamiliar, or conflicting measurements remain
+`unknown`. All browsers on iOS are treated as WebKit, including Chrome and
+Firefox. This observation never changes the production score.
+
 Experimental checks **default to monitoring only** (`experimental.mode: "observe"`).
 To opt into blocking, set
 `FCAPTCHA_EXPERIMENTAL_BLOCKING=stealth-corroboration-v1` and restart the server. The name must match the shipped policy; unset, unknown, or retired names
