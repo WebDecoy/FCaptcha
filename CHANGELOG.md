@@ -13,7 +13,7 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
-## [Unreleased]
+## [1.48.2] — 2026-11-11
 
 ### Security
 - Go source builds and CI move to Go 1.26.11 / 1.27.4, which fix GO-2026-6859

@@ -5,7 +5,7 @@ type: application
 # Chart version moves independently of the app: a fix to a template is a chart
 # release, not an FCaptcha release.
 version: 0.1.31
-appVersion: "1.48.1"
+appVersion: "1.48.2"
 home: https://github.com/WebDecoy/FCaptcha
 sources:
   - https://github.com/WebDecoy/FCaptcha
