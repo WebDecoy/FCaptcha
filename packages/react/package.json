@@ -1,0 +1,35 @@
+{
+  "name": "@webdecoy/fcaptcha-react",
+  "version": "0.0.0",
+  "description": "Official React component for the FCaptcha browser widget",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "files": ["index.js", "index.d.ts", "README.md"],
+  "sideEffects": false,
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "jsdom": "^27.2.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "vitest": "^4.0.0"
+  },
+  "scripts": {
+    "test": "vitest run --environment jsdom"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WebDecoy/FCaptcha",
+    "directory": "packages/react"
+  },
+  "license": "MIT"
+}

@@ -374,82 +374,34 @@ release listeners, sensors, timers, and workers. Invisible sessions expose
 </script>
 ```
 
-**React (no library required)**
+**React**
 
-The widget exposes a global API, so a small hook is all you need — no wrapper package to install or maintain.
+The official React 18/19 wrapper lives in [`packages/react`](packages/react).
+Publishing it to npm is a separate release step; the package source and tests
+are maintained in this repository.
 
 ```jsx
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { FCaptcha } from '@webdecoy/fcaptcha-react';
 
-function useFCaptcha({ serverUrl, siteKey }) {
-  const [ready, setReady] = useState(typeof window !== 'undefined' && !!window.FCaptcha);
-
-  useEffect(() => {
-    if (window.FCaptcha) {
-      window.FCaptcha.configure({ serverUrl });
-      setReady(true);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = `${serverUrl}/fcaptcha.js`;
-    script.async = true;
-    script.onload = () => {
-      window.FCaptcha.configure({ serverUrl });
-      setReady(true);
-    };
-    document.head.appendChild(script);
-    return () => { script.remove(); };
-  }, [serverUrl]);
-
-  const execute = useCallback(
-    (action) => window.FCaptcha.execute(siteKey, { action }),
-    [siteKey]
-  );
-
-  return { ready, execute };
-}
-
-// Invisible mode — get a token at submit time
-function LoginForm() {
-  const { ready, execute } = useFCaptcha({
-    serverUrl: 'https://your-server.com',
-    siteKey: 'your-site-key',
-  });
-
-  async function onSubmit(e) {
-    e.preventDefault();
-    const { token } = await execute('login');
-    await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: e.target.email.value, fcaptchaToken: token }),
-    });
-  }
-
+function ContactProtection() {
   return (
-    <form onSubmit={onSubmit}>
-      <input name="email" type="email" required />
-      <button disabled={!ready}>Sign in</button>
-    </form>
+    <FCaptcha
+      siteKey="contact-form"
+      serverUrl="https://captcha.example.com"
+      scriptSrc="https://captcha.example.com/fcaptcha.js"
+      onVerify={(token) => sendTokenToYourBackend(token)}
+    />
   );
-}
-
-// Checkbox mode — render the interactive widget
-function FCaptchaCheckbox({ siteKey, serverUrl, onVerify }) {
-  const ref = useRef(null);
-  const { ready } = useFCaptcha({ serverUrl, siteKey });
-
-  useEffect(() => {
-    if (!ready || !ref.current) return;
-    const widgetId = window.FCaptcha.render(ref.current, { siteKey, callback: onVerify });
-    return () => window.FCaptcha.destroy(widgetId);
-  }, [ready, siteKey, onVerify]);
-
-  return <div ref={ref} />;
 }
 ```
 
-The same pattern works in Vue, Svelte, Solid, and Angular — the widget is framework-agnostic. If you'd rather not write the glue, opening an issue describing how you want to consume it helps us decide whether to ship an official wrapper.
+The token must be verified by your backend before the protected action runs;
+see [Verify on Your Backend](#3-verify-on-your-backend). The wrapper is safe to
+import during SSR, shares one script load across component instances, rejects
+conflicting global `serverUrl` values, and destroys its widget on unmount.
+
+The widget remains framework-agnostic, so the global API works with Vue,
+Svelte, Solid, Angular, or plain JavaScript as well.
 
 ### 3. Verify on Your Backend
 

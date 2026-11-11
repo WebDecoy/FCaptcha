@@ -54,6 +54,31 @@ jobs:
       - run: npm test
         working-directory: test/browser
 
+  react:
+    name: React wrapper (React ${{ matrix.react }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        react: ['18', '19']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+      - name: Install package dependencies
+        working-directory: packages/react
+        run: npm ci
+      - name: Select React version
+        working-directory: packages/react
+        run: npm install --no-save --no-package-lock react@${{ matrix.react }} react-dom@${{ matrix.react }}
+      - name: Test package
+        working-directory: packages/react
+        run: npm test
+      - name: Verify package contents
+        working-directory: packages/react
+        run: npm pack --dry-run
+
   go:
     name: Go (${{ matrix.go }})
     runs-on: ubuntu-latest
