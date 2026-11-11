@@ -25,13 +25,23 @@ var identityOSLabels = map[string]string{
 	"android": "Android", "chromeos": "ChromeOS", "linux": "Linux",
 }
 
+var identityEngineOrder = []string{"blink", "gecko", "webkit"}
+
+var identityEngineLabels = map[string]string{
+	"blink": "Blink", "gecko": "Gecko", "webkit": "WebKit",
+}
+
 var (
 	// ANGLE names its backend in the renderer string. Direct3D exists only on
 	// Windows and Metal only on Apple platforms. Deliberately absent: GPU model
 	// names. An Apple GPU runs Linux under Asahi, and Adreno/Mali ship in Windows
 	// laptops and Chromebooks, so a model name says nothing certain about the OS.
-	identityDirect3D = regexp.MustCompile(`(?i)direct3d|\bd3d(9|11|12)\b`)
-	identityMetal    = regexp.MustCompile(`(?i)\bmetal\b`)
+	identityDirect3D  = regexp.MustCompile(`(?i)direct3d|\bd3d(9|11|12)\b`)
+	identityMetal     = regexp.MustCompile(`(?i)\bmetal\b`)
+	identityBlinkUA   = regexp.MustCompile(`(?:Chrome|Chromium|CriOS|Edg|EdgiOS|OPR|SamsungBrowser)/`)
+	identityBlinkErr  = regexp.MustCompile(`(?i)Cannot read propert(?:y|ies) of null`)
+	identityGeckoErr  = regexp.MustCompile(`(?i)null has no properties|can't access property ["']foo["'] of null`)
+	identityWebKitErr = regexp.MustCompile(`(?i)null is not an object`)
 )
 
 // claimedOS returns the OS families the User-Agent is consistent with, or nil.
@@ -55,6 +65,26 @@ func claimedOS(ua string, maxTouchPoints float64) []string {
 		return []string{"macos"}
 	case strings.Contains(ua, "Linux") || strings.Contains(ua, "X11"):
 		return []string{"linux"}
+	}
+	return nil
+}
+
+// claimedEngine returns the browser engine implied by the UA. All iOS
+// browsers use WebKit, including CriOS/FxiOS/EdgiOS.
+func claimedEngine(ua string, maxTouchPoints float64) []string {
+	switch {
+	case ua == "":
+		return nil
+	case strings.Contains(ua, "iPhone") || strings.Contains(ua, "iPad") || strings.Contains(ua, "iPod"):
+		return []string{"webkit"}
+	case (strings.Contains(ua, "Macintosh") || strings.Contains(ua, "Mac OS X")) && maxTouchPoints > 1:
+		return []string{"webkit"}
+	case strings.Contains(ua, "Firefox/"):
+		return []string{"gecko"}
+	case identityBlinkUA.MatchString(ua):
+		return []string{"blink"}
+	case strings.Contains(ua, "AppleWebKit/") && strings.Contains(ua, "Safari/"):
+		return []string{"webkit"}
 	}
 	return nil
 }
@@ -103,6 +133,74 @@ func fontSetAxis(env map[string]interface{}) identityAxis {
 	return axis
 }
 
+func errorEngine(env map[string]interface{}) string {
+	fingerprint := getMap(env, "errorFingerprint")
+	if fingerprint == nil || fingerprint["supported"] == false {
+		return ""
+	}
+	message, _ := fingerprint["typeError"].(string)
+	switch {
+	case identityBlinkErr.MatchString(message):
+		return "blink"
+	case identityGeckoErr.MatchString(message):
+		return "gecko"
+	case identityWebKitErr.MatchString(message):
+		return "webkit"
+	}
+	return ""
+}
+
+func mathEngine(env map[string]interface{}) string {
+	fingerprint := getMap(env, "mathFingerprint")
+	if fingerprint == nil || fingerprint["supported"] == false {
+		return ""
+	}
+	hash, _ := fingerprint["hash"].(string)
+	return map[string]string{"6256c877": "blink", "97ad9": "gecko", "-1128d0aa": "webkit"}[hash]
+}
+
+func probeEngine(env map[string]interface{}) string {
+	probes := getMap(env, "engineProbes")
+	if probes == nil || probes["supported"] == false {
+		return ""
+	}
+	candidates := []string{}
+	if probes["errorCaptureStackTrace"] == true {
+		candidates = append(candidates, "blink")
+	}
+	if probes["mozAppearance"] == true {
+		candidates = append(candidates, "gecko")
+	}
+	if probes["webkitTouchCallout"] == true {
+		candidates = append(candidates, "webkit")
+	}
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+	return ""
+}
+
+func jsEngineAxis(env map[string]interface{}) identityAxis {
+	axis := identityAxis{id: "js-engine-mismatch", dimension: "engine"}
+	measured := []string{}
+	for _, engine := range []string{errorEngine(env), mathEngine(env), probeEngine(env)} {
+		if engine != "" {
+			measured = append(measured, engine)
+		}
+	}
+	if len(measured) < 2 {
+		return axis
+	}
+	for _, engine := range measured[1:] {
+		if engine != measured[0] {
+			return axis
+		}
+	}
+	axis.observed = []string{measured[0]}
+	axis.subject = "JavaScript engine (" + identityEngineLabels[measured[0]] + ")"
+	return axis
+}
+
 func identityOverlap(a, b []string) bool {
 	for _, x := range a {
 		for _, y := range b {
@@ -114,12 +212,16 @@ func identityOverlap(a, b []string) bool {
 	return false
 }
 
-func identityLabel(set []string) string {
+func identityLabel(dimension string, set []string) string {
+	order, names := identityOSOrder, identityOSLabels
+	if dimension == "engine" {
+		order, names = identityEngineOrder, identityEngineLabels
+	}
 	labels := make([]string, 0, len(set))
-	for _, os := range identityOSOrder {
+	for _, value := range order {
 		for _, s := range set {
-			if s == os {
-				labels = append(labels, identityOSLabels[os])
+			if s == value {
+				labels = append(labels, names[value])
 			}
 		}
 	}
@@ -132,14 +234,11 @@ func identityObservation(signals map[string]interface{}) ExperimentalObservation
 	nav := getMap(env, "navigator")
 	ua, _ := nav["userAgent"].(string)
 	touch, _ := nav["maxTouchPoints"].(float64)
-	claim := claimedOS(ua, touch)
-	if claim == nil {
-		return result
-	}
+	claims := map[string][]string{"os": claimedOS(ua, touch), "engine": claimedEngine(ua, touch)}
 
-	known := make([]identityAxis, 0, 2)
-	for _, axis := range []identityAxis{gpuBackendAxis(env), fontSetAxis(env)} {
-		if axis.observed != nil {
+	known := make([]identityAxis, 0, 3)
+	for _, axis := range []identityAxis{gpuBackendAxis(env), fontSetAxis(env), jsEngineAxis(env)} {
+		if axis.observed != nil && claims[axis.dimension] != nil {
 			known = append(known, axis)
 		}
 	}
@@ -147,13 +246,18 @@ func identityObservation(signals map[string]interface{}) ExperimentalObservation
 		return result
 	}
 
-	contradicting := 0
+	contradicting := make([]identityAxis, 0, len(known))
 	for _, axis := range known {
+		claim := claims[axis.dimension]
 		if !identityOverlap(axis.observed, claim) {
-			contradicting++
+			contradicting = append(contradicting, axis)
+			claimedSubject := "OS"
+			if axis.dimension == "engine" {
+				claimedSubject = "browser engine"
+			}
 			result.Detections = append(result.Detections, ExperimentalDetection{
 				ID:     axis.id,
-				Reason: axis.subject + " contradicts claimed OS (" + identityLabel(claim) + ")",
+				Reason: axis.subject + " contradicts claimed " + claimedSubject + " (" + identityLabel(axis.dimension, claim) + ")",
 			})
 		}
 	}
@@ -170,7 +274,7 @@ func identityObservation(signals map[string]interface{}) ExperimentalObservation
 		result.Detections = append(result.Detections, ExperimentalDetection{
 			ID: "identity-axes-disagree", Reason: "Measured properties disagree with each other",
 		})
-	case contradicting >= 2:
+	case identityContradictionsAgree(contradicting):
 		result.Detections = append(result.Detections, ExperimentalDetection{
 			ID:     "identity-claim-contradicted",
 			Reason: "Several measured properties agree with each other and contradict the claimed OS",
@@ -182,4 +286,15 @@ func identityObservation(signals map[string]interface{}) ExperimentalObservation
 		result.Status = "detected"
 	}
 	return result
+}
+
+func identityContradictionsAgree(axes []identityAxis) bool {
+	for i := range axes {
+		for j := i + 1; j < len(axes); j++ {
+			if axes[i].dimension == axes[j].dimension && identityOverlap(axes[i].observed, axes[j].observed) {
+				return true
+			}
+		}
+	}
+	return false
 }

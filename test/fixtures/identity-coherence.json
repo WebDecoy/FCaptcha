@@ -566,6 +566,231 @@
           }
         ]
       }
+    },
+    {
+      "name": "chrome-blink-engine-agrees",
+      "provenance": "measured",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "errorFingerprint": {
+            "supported": true,
+            "hash": "-37eb980a",
+            "typeError": "Cannot read properties of null (reading 'foo')"
+          },
+          "mathFingerprint": {
+            "supported": true,
+            "hash": "6256c877"
+          },
+          "engineProbes": {
+            "supported": true,
+            "errorCaptureStackTrace": true,
+            "mozAppearance": false,
+            "webkitTouchCallout": false
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "firefox-gecko-engine-agrees",
+      "provenance": "measured",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0",
+            "maxTouchPoints": 0
+          },
+          "errorFingerprint": {
+            "supported": true,
+            "hash": "65553b38",
+            "typeError": "can't access property \"foo\" of null"
+          },
+          "mathFingerprint": {
+            "supported": true,
+            "hash": "97ad9"
+          },
+          "engineProbes": {
+            "supported": true,
+            "errorCaptureStackTrace": false,
+            "mozAppearance": true,
+            "webkitTouchCallout": false
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "safari-webkit-engine-agrees",
+      "provenance": "measured",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+            "maxTouchPoints": 0
+          },
+          "errorFingerprint": {
+            "supported": true,
+            "hash": "700bb255",
+            "typeError": "null is not an object (evaluating 'null.foo')"
+          },
+          "mathFingerprint": {
+            "supported": true,
+            "hash": "-1128d0aa"
+          },
+          "engineProbes": {
+            "supported": true,
+            "errorCaptureStackTrace": false,
+            "mozAppearance": false,
+            "webkitTouchCallout": true
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "chrome-ua-with-webkit-engine",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "errorFingerprint": {
+            "supported": true,
+            "typeError": "null is not an object (evaluating 'null.foo')"
+          },
+          "mathFingerprint": {
+            "supported": true,
+            "hash": "-1128d0aa"
+          },
+          "engineProbes": {
+            "supported": true,
+            "errorCaptureStackTrace": false,
+            "mozAppearance": false,
+            "webkitTouchCallout": true
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "detected",
+        "detections": [
+          {
+            "id": "js-engine-mismatch",
+            "reason": "JavaScript engine (WebKit) contradicts claimed browser engine (Blink)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "chrome-ios-webkit-is-honest",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/156.0.0.0 Mobile/15E148 Safari/604.1",
+            "maxTouchPoints": 5
+          },
+          "errorFingerprint": {
+            "supported": true,
+            "typeError": "null is not an object (evaluating 'null.foo')"
+          },
+          "mathFingerprint": {
+            "supported": true,
+            "hash": "-1128d0aa"
+          },
+          "engineProbes": {
+            "supported": true,
+            "errorCaptureStackTrace": false,
+            "mozAppearance": false,
+            "webkitTouchCallout": true
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "chrome-ipad-desktop-webkit-is-honest",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/156.0.0.0 Safari/604.1",
+            "maxTouchPoints": 5
+          },
+          "errorFingerprint": {
+            "supported": true,
+            "typeError": "null is not an object (evaluating 'null.foo')"
+          },
+          "mathFingerprint": {
+            "supported": true,
+            "hash": "-1128d0aa"
+          },
+          "engineProbes": {
+            "supported": true,
+            "errorCaptureStackTrace": false,
+            "mozAppearance": false,
+            "webkitTouchCallout": true
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "conflicting-engine-measurements-are-unknown",
+      "provenance": "synthetic",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "errorFingerprint": {
+            "supported": true,
+            "typeError": "Cannot read properties of null (reading 'foo')"
+          },
+          "mathFingerprint": {
+            "supported": true,
+            "hash": "-1128d0aa"
+          },
+          "engineProbes": {
+            "supported": true,
+            "errorCaptureStackTrace": true,
+            "mozAppearance": false,
+            "webkitTouchCallout": false
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
     }
   ]
 }
