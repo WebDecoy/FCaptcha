@@ -1,9 +1,10 @@
 name: Publish to npm
 
-# Two packages ship from this repo:
+# Three packages ship from this repo:
 #
 #   @webdecoy/fcaptcha         the Node server / scoring engine  (server-node/)
 #   @webdecoy/fcaptcha-client  the browser widget                (client/)
+#   @webdecoy/fcaptcha-react   the React 18/19 widget wrapper     (packages/react/)
 #
 # The client package exists so the widget has a CDN URL. Self-hosting it stays
 # the privacy-preserving default and is what every server serves same-origin,
@@ -99,3 +100,44 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           cat dist/integrity.json >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  react:
+    name: "@webdecoy/fcaptcha-react"
+    if: startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/react
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: "refs/tags/${{ github.event.release.tag_name }}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify release tag matches package
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          PACKAGE_VERSION=$(node -p 'require("./package.json").version')
+          test "${RELEASE_TAG#v}" = "$PACKAGE_VERSION"
+
+      - name: Test package
+        run: npm test
+
+      - name: Verify package contents
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

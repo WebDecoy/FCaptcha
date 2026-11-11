@@ -154,7 +154,7 @@ is in `fcaptcha_score` there.
 
 ### Docker (recommended)
 
-A **prebuilt public image** is available at [`ghcr.io/webdecoy/fcaptcha`](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) for **Linux AMD64 and ARM64**. No GitHub login or source build is required. Use `:latest` to try the current image, or pin a release tag (for example, `:1.48.2`) or digest for reproducible deployments.
+A **prebuilt public image** is available at [`ghcr.io/webdecoy/fcaptcha`](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) for **Linux AMD64 and ARM64**. No GitHub login or source build is required. Use `:latest` to try the current image, or pin a release tag (for example, `:1.49.0`) or digest for reproducible deployments.
 
 See the [Docker guide](docker/README.md) for local startup, Compose, version pinning, and upgrades.
 
@@ -254,7 +254,7 @@ Two options, and the tradeoff is real:
 
 <!-- CDN widget: still requires a running FCaptcha API. -->
 <script
-  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.48.2/dist/fcaptcha.min.js"
+  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.49.0/dist/fcaptcha.min.js"
   integrity="sha384-…"
   crossorigin="anonymous"></script>
 ```
@@ -377,8 +377,10 @@ release listeners, sensors, timers, and workers. Invisible sessions expose
 **React**
 
 The official React 18/19 wrapper lives in [`packages/react`](packages/react).
-Publishing it to npm is a separate release step; the package source and tests
-are maintained in this repository.
+
+```bash
+npm install @webdecoy/fcaptcha-react
+```
 
 ```jsx
 import { FCaptcha } from '@webdecoy/fcaptcha-react';
