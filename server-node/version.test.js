@@ -1,6 +1,6 @@
 'use strict';
 
-// The version string lives in eight places (run: `node version.test.js`).
+// The version string lives in ten places (run: `node version.test.js`).
 //
 // Nothing checked they agreed, and they did not: the CDN snippet in README.md
 // sat at 1.24.0 while the packages were at 1.28.1 — five minor versions of
@@ -31,6 +31,8 @@ const LOCATIONS = [
   ['server-node/package-lock.json', /"name": "@webdecoy\/fcaptcha",\s*\n\s*"version": "([^"]+)"/],
   ['client/package.json', /"version": "([^"]+)"/],
   ['client/package-lock.json', /"name": "@webdecoy\/fcaptcha-client",\s*\n\s*"version": "([^"]+)"/],
+  ['packages/react/package.json', /"version": "([^"]+)"/],
+  ['packages/react/package-lock.json', /"name": "@webdecoy\/fcaptcha-react",\s*\n\s*"version": "([^"]+)"/],
   ['client/fcaptcha.js', /version: '([^']+)'/],
   ['server-python/server.py', /FastAPI\(title="FCaptcha", version="([^"]+)"\)/],
   ['charts/fcaptcha/Chart.yaml', /^appVersion: "([^"]+)"/m],

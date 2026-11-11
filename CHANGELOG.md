@@ -13,6 +13,24 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.49.0] — 2026-11-11
+
+### Added
+- An official `@webdecoy/fcaptcha-react` package provides an SSR-safe React
+  18/19 component for the interactive widget. It deduplicates resolved script
+  URLs, destroys widgets on unmount, keeps callbacks current without rerendering
+  the widget, retries failed script loads, and rejects conflicting global
+  verifier configuration.
+- The wrapper ships TypeScript declarations, backend-verification guidance, and
+  lifecycle coverage for StrictMode, simultaneous instances, early unmount,
+  retries, callback changes, and server-side imports.
+
+### Packaging
+- GitHub releases now publish the React wrapper alongside the Node server and
+  browser client, with the same release version across all three npm packages.
+
+No scoring, server API, or detector behavior changes.
+
 ## [1.48.2] — 2026-11-11
 
 ### Security

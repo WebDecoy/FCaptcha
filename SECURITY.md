@@ -34,8 +34,9 @@ What there is, is a genuine interest in being told.
 ## Scope
 
 In scope: anything in this repository — the three servers, the browser widget,
-the benchmark harness, and the published `@webdecoy/fcaptcha` and
-`@webdecoy/fcaptcha-client` packages and container images.
+the benchmark harness, and the published `@webdecoy/fcaptcha`,
+`@webdecoy/fcaptcha-client`, and `@webdecoy/fcaptcha-react` packages and
+container images.
 
 Particularly interesting:
 
@@ -81,8 +82,8 @@ is, older lines are not maintained — upgrade rather than expect a backport.
 
 | Version | Supported |
 |---------|-----------|
-| 1.48.x  | Yes       |
-| < 1.48  | No        |
+| 1.49.x  | Yes       |
+| < 1.49  | No        |
 
 ## Deployment notes that are security-relevant
 
