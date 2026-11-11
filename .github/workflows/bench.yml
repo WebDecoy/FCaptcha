@@ -90,6 +90,12 @@ jobs:
         working-directory: bench
         run: npm test
 
+      # Keeps paired browser-internal/control analysis reproducible and catches
+      # broken pair metadata without turning research candidates into a gate.
+      - name: Paired observation analysis
+        working-directory: bench
+        run: node tools/analyze-paired-observations.js --json paired-observations.json
+
       # Replays the committed corpus. No browser needed: capture is a separate,
       # manual step whose output lives in bench/corpus/.
       - name: Benchmark gate
@@ -101,5 +107,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: bench-results
-          path: bench/bench-results.json
+          path: |
+            bench/bench-results.json
+            bench/paired-observations.json
           if-no-files-found: ignore

@@ -5,6 +5,7 @@
   "description": "Measurement harness: labeled corpus, replay, and per-signal false-positive reporting for FCaptcha",
   "scripts": {
     "bench": "node run-bench.js",
+    "analyze:pairs": "node tools/analyze-paired-observations.js",
     "capture": "node capture/record.js",
     "install-browsers": "playwright install chromium",
     "test": "node --test lib/*.test.js"

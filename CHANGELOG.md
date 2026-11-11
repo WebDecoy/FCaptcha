@@ -13,6 +13,22 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [Unreleased]
+
+### Security
+- Go source builds and CI move to Go 1.26.11 / 1.27.4, which fix GO-2026-6859
+  in the standard library's HTTP/1 server. The minimum supported Go patch
+  version is now 1.26.11, and published Go images build from 1.27.4.
+
+### Measurement
+- A paired-observation analyzer compares browser-internal captures with their
+  same-mode human controls, screens candidates against every captured human,
+  and requires consistent direction plus leave-one-pair-out detection before
+  marking a signal for promotion review. Operational identifiers, derived
+  variants, and self-reported samples cannot become candidates.
+
+No API changes.
+
 ## [1.48.1] — 2026-11-10
 
 ### Fixed
