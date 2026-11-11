@@ -1,0 +1,9 @@
+{
+  "name": "@webdecoy/fcaptcha-react",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "index.jsx",
+  "peerDependencies": { "react": ">=18" },
+  "devDependencies": { "@testing-library/dom": "^10", "@testing-library/react": "^16", "jsdom": "^25", "react": "^19", "react-dom": "^19", "vitest": "^2" },
+  "scripts": { "test": "vitest run --environment jsdom" }
+}
