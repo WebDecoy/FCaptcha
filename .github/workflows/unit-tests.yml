@@ -60,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.26.11', '1.27.3']
+        go: ['1.26.11', '1.27.4']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -80,7 +80,7 @@ jobs:
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage
-        if: github.event_name != 'pull_request' && matrix.go == '1.27.3'
+        if: github.event_name != 'pull_request' && matrix.go == '1.27.4'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -103,7 +103,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ['1.23', '1.27.3']
+        go: ['1.23', '1.27.4']
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -116,7 +116,7 @@ jobs:
         run: go vet .
 
       - name: Start server-go
-        if: matrix.go == '1.27.3'
+        if: matrix.go == '1.27.4'
         run: |
           secret=$(openssl rand -hex 32)
           echo "FCAPTCHA_TEST_SECRET=$secret" >> "$GITHUB_ENV"
@@ -135,7 +135,7 @@ jobs:
         run: go test -race -coverprofile=coverage.out .
 
       - name: Upload coverage
-        if: github.event_name != 'pull_request' && matrix.go == '1.27.3'
+        if: github.event_name != 'pull_request' && matrix.go == '1.27.4'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

@@ -16,9 +16,9 @@ reading would call major. Read the **Breaking** entries rather than the number.
 ## [Unreleased]
 
 ### Security
-- Go source builds and the oldest CI lane move to Go 1.26.11, which fixes
-  GO-2026-6859 in the standard library's HTTP/1 server. The minimum supported
-  Go patch version is now 1.26.11.
+- Go source builds and CI move to Go 1.26.11 / 1.27.4, which fix GO-2026-6859
+  in the standard library's HTTP/1 server. The minimum supported Go patch
+  version is now 1.26.11, and published Go images build from 1.27.4.
 
 ### Measurement
 - A paired-observation analyzer compares browser-internal captures with their
