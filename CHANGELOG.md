@@ -13,6 +13,28 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.50.0] — 2026-11-11
+
+### Detection
+- Extend the monitoring-only `identity-coherence-v1` observation with a
+  JavaScript-engine axis. It compares the engine family implied by the
+  User-Agent with bounded error-message, math, and feature-probe measurements
+  across the Go, Node.js, and Python servers.
+- Require at least two independent measurements to agree before reporting
+  Blink, Gecko, or WebKit. Missing, unfamiliar, and conflicting evidence stays
+  `unknown`; Chrome, Firefox, and Edge on iOS are correctly treated as WebKit,
+  including desktop-mode iPad User-Agents.
+
+### Tests
+- Add shared measured and synthetic identity fixtures for stock Chrome,
+  Firefox, Safari, iOS browsers, deliberate contradictions, and conflicting
+  measurements. The 507-sample regression gate remains at 0/252 human samples
+  flagged.
+
+This observation remains monitoring-only. No production score,
+recommendation, token issuance, proof-of-work, rate-limit, or blocking-policy
+behavior changes.
+
 ## [1.49.0] — 2026-11-11
 
 ### Added
