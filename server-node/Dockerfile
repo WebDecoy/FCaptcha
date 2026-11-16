@@ -9,7 +9,7 @@
 # resolves the widget at ../client/fcaptcha.js relative to its own directory, so
 # keeping server-node/ and client/ as siblings means it works with no
 # configuration, exactly as it does from a checkout.
-FROM node:26-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216
+FROM node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5
 
 WORKDIR /app/server-node
 
