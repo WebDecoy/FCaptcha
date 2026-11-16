@@ -13,6 +13,24 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.50.1] — 2026-11-16
+
+### Security
+- Upgrade the Hono example to `hono` 4.13.16 and `@hono/node-server`
+  2.1.6, resolving seven upstream advisories reported twice across its manifest
+  and lockfile. The example did not use the affected CSRF, mount, validator,
+  CSS, or WebSocket APIs and binds to loopback, but its direct runtime
+  dependencies are now patched.
+
+### Maintenance
+- Upgrade the Go server's `web-bot-auth` dependency from 0.4.1 to 0.5.1.
+- Raise the Python server's FastAPI floor to 0.162.5 and regenerate the
+  hash-locked environment at that version.
+- Refresh pinned Alpine and Node container digests and the Helm setup action.
+
+There are no FCaptcha API, scoring, detector, token, or configuration changes
+in this patch release.
+
 ## [1.50.0] — 2026-11-11
 
 ### Detection
