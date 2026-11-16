@@ -10,7 +10,7 @@ require (
 require github.com/hashicorp/golang-lru/v2 v2.0.7
 
 require (
-	github.com/WebDecoy/web-bot-auth v0.4.1
+	github.com/WebDecoy/web-bot-auth v0.5.1
 	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/redis/go-redis/v9 v9.23.0
 )

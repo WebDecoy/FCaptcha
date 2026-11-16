@@ -1,5 +1,5 @@
-github.com/WebDecoy/web-bot-auth v0.4.1 h1:lqFKng5tl58UxReemiHEn/kCjuGrDC9yBjS7Ui5vcr8=
-github.com/WebDecoy/web-bot-auth v0.4.1/go.mod h1:Vjih4b1Xzxi3whR7J3Fnfy2wBZDytvHLI0H1hqZV1Bo=
+github.com/WebDecoy/web-bot-auth v0.5.1 h1:dBryf3QKIAqt8gZq45uehTD9v4Szbt85ABqEmbCtNaA=
+github.com/WebDecoy/web-bot-auth v0.5.1/go.mod h1:Vjih4b1Xzxi3whR7J3Fnfy2wBZDytvHLI0H1hqZV1Bo=
 github.com/alicebob/miniredis/v2 v2.40.0 h1:6IgTQbvm2JiMYZ8yur/acNJzVjtSOWCelxXbk/LUBXc=
 github.com/alicebob/miniredis/v2 v2.40.0/go.mod h1:TcL7YfarKPGDAthEtl5NBeHZfeUQj6OXMm/+iu5cLMM=
 github.com/bsm/ginkgo/v2 v2.12.0 h1:Ny8MWAHyOepLGlLKYmXG4IEkioBysk6GpaRTLC8zwWs=
