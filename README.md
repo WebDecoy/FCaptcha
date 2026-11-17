@@ -95,6 +95,9 @@ Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is i
 
 ## Integrations
 
+[Setup recipes for Gitea, Django and Flask-WTF](INTEGRATIONS.md) cover paired
+widget/verifier URLs, server-only credentials and the checks performed.
+
 - **Statamic:** the [Captcha addon](https://statamic.com/addons/aryeh-raber/captcha)
   supports FCaptcha from v1.18.0. Install it with
   `composer require aryehraber/statamic-captcha`, set `CAPTCHA_SERVICE=Fcaptcha`
