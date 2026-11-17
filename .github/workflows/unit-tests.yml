@@ -94,9 +94,7 @@ jobs:
       - run: npm run test:build
         working-directory: packages/nuxt
       - name: Verify private fixture config is absent from browser assets
-        run: |
-          test -d test/fixture/.output/public
-          if rg "server-only-build-fixture" test/fixture/.output/public; then exit 1; else test $? -eq 1; fi
+        run: node test/check-public-assets.mjs
         working-directory: packages/nuxt
 
   go:
