@@ -49,6 +49,7 @@ class PoWChallengeStore {
     const expiresAt = timestamp + this.expirationMs;
 
     const challengeData = {
+      protocolVersion: 1,
       id: challengeId,
       siteKey,
       timestamp,

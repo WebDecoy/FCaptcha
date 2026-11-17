@@ -131,6 +131,7 @@ test('the engine prices a challenge from the ledger, and the sig covers minAgeMs
   const engine = fcaptcha.createScoringEngine({ secret: 'test-secret-0123456789abcdef0123456789abcdef' });
 
   const clean = engine.generateChallenge('site', '203.0.113.20');
+  assert.strictEqual(clean.protocolVersion, 1);
   assert.strictEqual(clean.difficulty, BASE_DIFFICULTY);
   assert.strictEqual(clean.minAgeMs, BASE_MIN_AGE_MS);
 
@@ -142,11 +143,11 @@ test('the engine prices a challenge from the ledger, and the sig covers minAgeMs
   // Signing the same challenge with the delay talked down must not reproduce
   // the signature it was issued with.
   const crypto = require('crypto');
-  const sign = (minAgeMs) => {
+  const sign = (minAgeMs, protocolVersion = suspicious.protocolVersion) => {
     const { sig, ...rest } = suspicious;
     return crypto
       .createHmac('sha256', 'test-secret-0123456789abcdef0123456789abcdef')
-      .update(JSON.stringify({ ...rest, minAgeMs }))
+      .update(JSON.stringify({ ...rest, protocolVersion, minAgeMs }))
       .digest('hex');
   };
   assert.strictEqual(
@@ -158,6 +159,11 @@ test('the engine prices a challenge from the ledger, and the sig covers minAgeMs
     sign(BASE_MIN_AGE_MS),
     suspicious.sig,
     'minAgeMs is not covered by the challenge signature — a client could talk its own delay down'
+  );
+  assert.notStrictEqual(
+    sign(suspicious.minAgeMs, 2),
+    suspicious.sig,
+    'protocolVersion is not covered by the challenge signature'
   );
 });
 

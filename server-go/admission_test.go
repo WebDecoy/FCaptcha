@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -12,6 +14,38 @@ import (
 
 	miniredis "github.com/alicebob/miniredis/v2"
 )
+
+func TestChallengeProtocolNegotiationAndCaching(t *testing.T) {
+	handler := powChallengeHandler(NewScoringEngine("test"), NewProxyTrust("none"), NewSiteKeyGuard(nil, 8))
+
+	for _, rawURL := range []string{
+		"/api/pow/challenge?siteKey=protocol-test",
+		"/api/pow/challenge?siteKey=protocol-test&protocolVersions=2,1",
+	} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, rawURL, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s: status %d, want 200", rawURL, w.Code)
+		}
+		if got := w.Header().Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("%s: Cache-Control = %q, want no-store", rawURL, got)
+		}
+		var response PoWChallengeResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.ProtocolVersion != 1 {
+			t.Fatalf("%s: protocol version %d, want 1", rawURL, response.ProtocolVersion)
+		}
+	}
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet,
+		"/api/pow/challenge?siteKey=protocol-test&protocolVersions=2", nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unsupported protocol status %d, want 400", w.Code)
+	}
+}
 
 func TestAdmissionAndRedisQuotaAreAtomic(t *testing.T) {
 	redisServer := miniredis.RunT(t)

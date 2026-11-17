@@ -163,6 +163,9 @@ func TestChallengeSignatureCoversMinAge(t *testing.T) {
 	e := NewScoringEngine("test-secret")
 
 	clean := e.GeneratePoWChallenge("site", "203.0.113.20", false)
+	if clean.ProtocolVersion != 1 {
+		t.Fatalf("challenge protocol version = %d, want 1", clean.ProtocolVersion)
+	}
 	if clean.MinAgeMs != baseMinAgeMs {
 		t.Fatalf("clean source got minAge %dms, want %d", clean.MinAgeMs, baseMinAgeMs)
 	}
@@ -178,26 +181,30 @@ func TestChallengeSignatureCoversMinAge(t *testing.T) {
 
 	// Signing the same challenge with the delay talked down must not reproduce
 	// the signature it was issued with.
-	sign := func(minAge int64) string {
+	sign := func(minAge int64, protocolVersion int) string {
 		payload, _ := json.Marshal(map[string]interface{}{
-			"id":         suspicious.ID,
-			"siteKey":    suspicious.SiteKey,
-			"timestamp":  suspicious.Timestamp,
-			"expiresAt":  suspicious.ExpiresAt,
-			"difficulty": suspicious.Difficulty,
-			"prefix":     suspicious.Prefix,
-			"minAgeMs":   minAge,
+			"protocolVersion": protocolVersion,
+			"id":              suspicious.ID,
+			"siteKey":         suspicious.SiteKey,
+			"timestamp":       suspicious.Timestamp,
+			"expiresAt":       suspicious.ExpiresAt,
+			"difficulty":      suspicious.Difficulty,
+			"prefix":          suspicious.Prefix,
+			"minAgeMs":        minAge,
 		})
 		h := hmac.New(sha256.New, []byte("test-secret"))
 		h.Write(payload)
 		return hex.EncodeToString(h.Sum(nil))
 	}
 
-	if sign(suspicious.MinAgeMs) != suspicious.Sig {
+	if sign(suspicious.MinAgeMs, suspicious.ProtocolVersion) != suspicious.Sig {
 		t.Fatal("the test is not reproducing the server's signing input; fix the test before trusting the assertion below")
 	}
-	if sign(baseMinAgeMs) == suspicious.Sig {
+	if sign(baseMinAgeMs, suspicious.ProtocolVersion) == suspicious.Sig {
 		t.Error("minAgeMs is not covered by the challenge signature — a client could talk its own delay down")
+	}
+	if sign(suspicious.MinAgeMs, 2) == suspicious.Sig {
+		t.Error("protocolVersion is not covered by the challenge signature")
 	}
 }
 

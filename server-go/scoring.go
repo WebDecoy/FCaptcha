@@ -80,14 +80,15 @@ type VerificationResult struct {
 
 // PoWChallenge for server-verified proof of work
 type PoWChallenge struct {
-	ID         string `json:"challengeId"`
-	SiteKey    string `json:"siteKey"`
-	Prefix     string `json:"prefix"`
-	Difficulty int    `json:"difficulty"`
-	Timestamp  int64  `json:"timestamp"`
-	ExpiresAt  int64  `json:"expiresAt"`
-	Nonce      string `json:"nonce"`
-	Sig        string `json:"sig"`
+	ProtocolVersion int    `json:"protocolVersion"`
+	ID              string `json:"challengeId"`
+	SiteKey         string `json:"siteKey"`
+	Prefix          string `json:"prefix"`
+	Difficulty      int    `json:"difficulty"`
+	Timestamp       int64  `json:"timestamp"`
+	ExpiresAt       int64  `json:"expiresAt"`
+	Nonce           string `json:"nonce"`
+	Sig             string `json:"sig"`
 	// MinAgeMs is how old this challenge must be before its solution is
 	// accepted without penalty. Sent to the client, which waits it out, and
 	// covered by Sig so it cannot be lowered on the way back.
@@ -852,26 +853,28 @@ func (e *ScoringEngine) GeneratePoWChallenge(siteKey, ip string, isDatacenter bo
 	prefix := challengeID + ":" + formatInt64(now) + ":" + formatInt(cost.Difficulty)
 
 	challenge := &PoWChallenge{
-		ID:         challengeID,
-		SiteKey:    siteKey,
-		Prefix:     prefix,
-		Difficulty: cost.Difficulty,
-		Timestamp:  now,
-		ExpiresAt:  expiresAt,
-		Nonce:      nonce,
-		MinAgeMs:   cost.MinAgeMs,
-		IP:         ip,
+		ProtocolVersion: 1,
+		ID:              challengeID,
+		SiteKey:         siteKey,
+		Prefix:          prefix,
+		Difficulty:      cost.Difficulty,
+		Timestamp:       now,
+		ExpiresAt:       expiresAt,
+		Nonce:           nonce,
+		MinAgeMs:        cost.MinAgeMs,
+		IP:              ip,
 	}
 
 	// Sign the challenge
 	sigData, _ := json.Marshal(map[string]interface{}{
-		"id":         challenge.ID,
-		"siteKey":    challenge.SiteKey,
-		"timestamp":  challenge.Timestamp,
-		"expiresAt":  challenge.ExpiresAt,
-		"difficulty": challenge.Difficulty,
-		"prefix":     challenge.Prefix,
-		"minAgeMs":   challenge.MinAgeMs,
+		"protocolVersion": challenge.ProtocolVersion,
+		"id":              challenge.ID,
+		"siteKey":         challenge.SiteKey,
+		"timestamp":       challenge.Timestamp,
+		"expiresAt":       challenge.ExpiresAt,
+		"difficulty":      challenge.Difficulty,
+		"prefix":          challenge.Prefix,
+		"minAgeMs":        challenge.MinAgeMs,
 	})
 	h := hmac.New(sha256.New, []byte(e.secretKey))
 	h.Write(sigData)

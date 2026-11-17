@@ -187,6 +187,19 @@ test('malformed public requests return errors while the server stays available',
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
+    const legacyChallenge = await fetch(base + '/api/pow/challenge?siteKey=protocol-test');
+    assert.equal(legacyChallenge.status, 200);
+    assert.equal(legacyChallenge.headers.get('cache-control'), 'no-store');
+    assert.equal((await legacyChallenge.json()).protocolVersion, 1);
+
+    const negotiatedChallenge = await fetch(base + '/api/pow/challenge?siteKey=protocol-test&protocolVersions=2,1');
+    assert.equal(negotiatedChallenge.status, 200);
+    assert.equal((await negotiatedChallenge.json()).protocolVersion, 1);
+
+    const unsupportedChallenge = await fetch(base + '/api/pow/challenge?siteKey=protocol-test&protocolVersions=2');
+    assert.equal(unsupportedChallenge.status, 400);
+    assert.deepEqual(await unsupportedChallenge.json(), { error: 'unsupported_protocol_version' });
+
     for (const path of ['/api/verify', '/api/score']) {
       assert.equal((await fetch(base + path)).status, 404, 'GET does not run POST validation');
       for (const body of [{}, { signals: null }, { signals: [] }, { signals: { behavioral: [] } },
