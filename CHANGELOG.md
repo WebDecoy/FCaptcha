@@ -13,6 +13,30 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.51.0] — 2026-11-17
+
+### Added
+- The widget now advertises its supported challenge-protocol versions and all
+  three servers return the selected `protocolVersion`. Version 1 remains the
+  default for older clients and servers, so mixed-version deployments continue
+  to work during rolling upgrades.
+- Add tested integration recipes for Gitea, Django with `django-recaptcha`, and
+  Flask-WTF with `flask-recaptcha`, including the required browser and backend
+  endpoint changes.
+
+### Security
+- The selected protocol version is covered by the challenge signature, offers
+  with no mutually supported version fail closed, and challenge responses now
+  carry `Cache-Control: no-store` so an intermediary cannot share a one-use
+  challenge between visitors.
+- Document the threat model and staged design for future dynamic browser
+  instrumentation. The proposed design uses a bounded, data-only interpreter;
+  it does not execute server-provided JavaScript and remains observation-only
+  until paired human/agent evidence supports enforcement.
+
+There are no scoring, detector-weight, token, proof-of-work primitive, or
+blocking-policy changes in this release.
+
 ## [1.50.1] — 2026-11-16
 
 ### Security
