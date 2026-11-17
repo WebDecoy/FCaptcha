@@ -2591,13 +2591,20 @@
       const serverUrl = this.serverUrl ?? FCaptcha.serverUrl ?? '';
       try {
         this.fetchController = new AbortController();
-        const response = await fetch(`${serverUrl}/api/pow/challenge?siteKey=${encodeURIComponent(siteKey || 'default')}`, {
+        // Protocol negotiation is additive. Older servers ignore the query
+        // parameter and return the original v1 shape; newer servers explicitly
+        // select the highest mutually supported version.
+        const response = await fetch(`${serverUrl}/api/pow/challenge?siteKey=${encodeURIComponent(siteKey || 'default')}&protocolVersions=1`, {
           signal: this.fetchController.signal
         });
         if (!response.ok) {
           throw new Error('FCaptcha challenge unavailable (HTTP ' + response.status + ')');
         }
         const challenge = await response.json();
+        const protocolVersion = challenge.protocolVersion == null ? 1 : Number(challenge.protocolVersion);
+        if (protocolVersion !== 1) {
+          throw new Error('FCaptcha challenge uses an unsupported protocol version');
+        }
         if (generation !== this.generation) throw new Error('Challenge fetch cancelled');
         this.challenge = challenge;
         this.solution = null;

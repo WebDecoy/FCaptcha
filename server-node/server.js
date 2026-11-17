@@ -980,7 +980,15 @@ app.post('/siteverify', asyncRoute(siteverifyHandler));
 
 // PoW Challenge endpoint - client fetches this on page load
 app.get('/api/pow/challenge', asyncRoute(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
   if (req.query.siteKey != null && typeof req.query.siteKey !== 'string') throw invalidRequest();
+  if (req.query.protocolVersions != null && typeof req.query.protocolVersions !== 'string') throw invalidRequest();
+  const offeredVersions = req.query.protocolVersions == null
+    ? ['1']
+    : req.query.protocolVersions.split(',').map((value) => value.trim());
+  if (!offeredVersions.includes('1')) {
+    return res.status(400).json({ error: 'unsupported_protocol_version' });
+  }
   const ip = PROXY_TRUST.clientIP(req);
   const siteKey = await normalizeSiteKey(req.query.siteKey, ip);
 
@@ -1003,6 +1011,7 @@ app.get('/api/pow/challenge', asyncRoute(async (req, res) => {
   }
 
   res.json({
+    protocolVersion: 1,
     challengeId: challenge.id,
     prefix: challenge.prefix,
     difficulty: challenge.difficulty,

@@ -34,6 +34,7 @@ class AdmissionTests(unittest.TestCase):
         with patch.object(server, "SHARED_STATE", None):
             store = server.PoWChallengeStore()
             first = store.generate("first", "192.0.2.50")
+            self.assertEqual(first["protocolVersion"], 1)
             for i in range(127):
                 store.generate(str(i), "192.0.2.50")
             with self.assertRaisesRegex(RuntimeError, "quota"):

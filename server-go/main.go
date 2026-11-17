@@ -734,12 +734,13 @@ func tokenVerifyHandler(engine *ScoringEngine, trust *ProxyTrust, verifySecret s
 
 // PoWChallengeResponse for the PoW challenge endpoint
 type PoWChallengeResponse struct {
-	ChallengeID string `json:"challengeId"`
-	Prefix      string `json:"prefix"`
-	Difficulty  int    `json:"difficulty"`
-	ExpiresAt   int64  `json:"expiresAt"`
-	Nonce       string `json:"nonce"`
-	Sig         string `json:"sig"`
+	ProtocolVersion int    `json:"protocolVersion"`
+	ChallengeID     string `json:"challengeId"`
+	Prefix          string `json:"prefix"`
+	Difficulty      int    `json:"difficulty"`
+	ExpiresAt       int64  `json:"expiresAt"`
+	Nonce           string `json:"nonce"`
+	Sig             string `json:"sig"`
 	// MinAgeMs tells the client how long to hold a solved challenge before
 	// submitting it. Honouring it is how an ordinary visitor pays an elevated
 	// cost as a short wait instead of as a worse score — which matters most for
@@ -749,6 +750,23 @@ type PoWChallengeResponse struct {
 
 func powChallengeHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *SiteKeyGuard) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		offeredVersions := r.URL.Query().Get("protocolVersions")
+		if offeredVersions != "" {
+			supportsV1 := false
+			for _, version := range strings.Split(offeredVersions, ",") {
+				if strings.TrimSpace(version) == "1" {
+					supportsV1 = true
+					break
+				}
+			}
+			if !supportsV1 {
+				w.Header().Set("Content-Type", "application/json")
+				http.Error(w, `{"error":"unsupported_protocol_version"}`, http.StatusBadRequest)
+				return
+			}
+		}
+
 		ip := trust.ClientIP(r)
 		siteKey := siteKeys.Normalize(r.URL.Query().Get("siteKey"), ip)
 
@@ -760,13 +778,14 @@ func powChallengeHandler(engine *ScoringEngine, trust *ProxyTrust, siteKeys *Sit
 		}
 
 		resp := PoWChallengeResponse{
-			ChallengeID: challenge.ID,
-			Prefix:      challenge.Prefix,
-			Difficulty:  challenge.Difficulty,
-			ExpiresAt:   challenge.ExpiresAt,
-			Nonce:       challenge.Nonce,
-			Sig:         challenge.Sig,
-			MinAgeMs:    challenge.MinAgeMs,
+			ProtocolVersion: challenge.ProtocolVersion,
+			ChallengeID:     challenge.ID,
+			Prefix:          challenge.Prefix,
+			Difficulty:      challenge.Difficulty,
+			ExpiresAt:       challenge.ExpiresAt,
+			Nonce:           challenge.Nonce,
+			Sig:             challenge.Sig,
+			MinAgeMs:        challenge.MinAgeMs,
 		}
 
 		w.Header().Set("Content-Type", "application/json")

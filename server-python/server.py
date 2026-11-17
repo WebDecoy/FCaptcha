@@ -23,7 +23,7 @@ from collections import defaultdict, OrderedDict
 from admission import AdmissionLimiter
 from identity import IDENTITY_POLICY, identity_observation
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -476,6 +476,7 @@ class PoWChallengeStore:
         prefix = f"{challenge_id}:{now}:{difficulty}"
 
         challenge = {
+            "protocolVersion": 1,
             "id": challenge_id,
             "siteKey": site_key,
             "prefix": prefix,
@@ -491,6 +492,7 @@ class PoWChallengeStore:
 
         # Sign the challenge
         sig_data = json.dumps({
+            "protocolVersion": challenge["protocolVersion"],
             "id": challenge_id,
             "siteKey": site_key,
             "timestamp": now,
@@ -508,6 +510,7 @@ class PoWChallengeStore:
             self.challenges[challenge_id] = challenge
 
         return {
+            "protocolVersion": challenge["protocolVersion"],
             "challengeId": challenge_id,
             "prefix": prefix,
             "difficulty": difficulty,
@@ -2501,8 +2504,25 @@ app.post("/siteverify")(_siteverify_route)
 
 @app.get("/api/pow/challenge")
 @stateful_route
-def pow_challenge(request: Request, siteKey: str = "default"):
+def pow_challenge(
+    request: Request,
+    response: Response,
+    siteKey: str = "default",
+    protocolVersions: Optional[str] = None,
+):
     from detection import is_datacenter_ip
+
+    offered_versions = ["1"] if protocolVersions is None else [
+        value.strip() for value in protocolVersions.split(",")
+    ]
+    if "1" not in offered_versions:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "unsupported_protocol_version"},
+            headers={"Cache-Control": "no-store"},
+        )
+
+    response.headers["Cache-Control"] = "no-store"
 
     ip = PROXY_TRUST.client_ip(request)
     siteKey = normalize_site_key(siteKey, ip)
@@ -2511,7 +2531,11 @@ def pow_challenge(request: Request, siteKey: str = "default"):
     try:
         challenge = pow_store.generate(siteKey, ip, is_datacenter)
     except Exception:
-        return JSONResponse(status_code=503, content={"error": "state_unavailable"})
+        return JSONResponse(
+            status_code=503,
+            content={"error": "state_unavailable"},
+            headers={"Cache-Control": "no-store"},
+        )
     return challenge
 
 
