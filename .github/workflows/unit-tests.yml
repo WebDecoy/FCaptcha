@@ -79,6 +79,26 @@ jobs:
         working-directory: packages/react
         run: npm pack --dry-run
 
+  nuxt:
+    name: Nuxt 4 module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+      - run: npm ci
+        working-directory: packages/nuxt
+      - run: npm test
+        working-directory: packages/nuxt
+      - run: npm run test:build
+        working-directory: packages/nuxt
+      - name: Verify private fixture config is absent from browser assets
+        run: |
+          test -d test/fixture/.output/public
+          if rg "server-only-build-fixture" test/fixture/.output/public; then exit 1; else test $? -eq 1; fi
+        working-directory: packages/nuxt
+
   go:
     name: Go (${{ matrix.go }})
     runs-on: ubuntu-latest

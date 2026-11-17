@@ -1,0 +1,1 @@
+export default defineNuxtConfig({ modules: ['../../module.mjs'], fcaptcha: { siteKey: 'fixture-site', serverUrl: 'https://captcha.example.test' }, runtimeConfig: { fcaptchaVerifySecret: 'server-only-build-fixture' }, compatibilityDate: '2026-11-17' });

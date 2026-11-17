@@ -1164,3 +1164,11 @@ MIT License - use freely, contribute back if you can.
 ---
 
 **Privacy Note**: FCaptcha is designed with privacy in mind. No persistent fingerprinting, no cross-site tracking, no PII collection. All fingerprints are session-scoped and used only for bot detection.
+
+## Nuxt integration
+
+An unreleased Nuxt 4 module is available in [`packages/nuxt`](packages/nuxt). It provides a client-only `<FCaptcha>` component, public runtime defaults, self-hosted script loading and lifecycle cleanup. Follow the source-install instructions there; this package is not yet published to npm.
+
+## Development provenance
+
+FCaptcha uses generative AI assistance for code, tests and documentation. The [public development disclosure](https://github.com/WebDecoy/FCaptcha/discussions/192) explains its scope and how the project's validation should be interpreted.
