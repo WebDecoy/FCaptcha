@@ -1,0 +1,33 @@
+{
+  "name": "@webdecoy/fcaptcha-nuxt",
+  "version": "1.51.0",
+  "private": true,
+  "description": "Nuxt 4 module for the self-hosted FCaptcha widget",
+  "type": "module",
+  "exports": {
+    ".": "./module.mjs"
+  },
+  "files": [
+    "module.mjs",
+    "runtime"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:build": "nuxt build test/fixture"
+  },
+  "dependencies": {
+    "@nuxt/kit": "4.6.4"
+  },
+  "peerDependencies": {
+    "nuxt": "^4.0.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "27.2.0",
+    "nuxt": "4.6.4",
+    "vitest": "^4.0.0",
+    "vue": "^3.5.0"
+  },
+  "license": "MIT"
+}

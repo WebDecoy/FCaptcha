@@ -79,6 +79,28 @@ jobs:
         working-directory: packages/react
         run: npm pack --dry-run
 
+  nuxt:
+    name: Nuxt 4 module
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+      # Nuxt 4's build-only @nuxt/kit chain currently carries the unfixed
+      # picomatch GHSA-fc5q-39xc-vjpf advisory. Keep the full audit visible,
+      # fail on critical production advisories, and let Dependabot lift the
+      # threshold again when Nuxt exposes a compatible fixed chain.
+      - run: npm ci && npm audit --omit=dev --audit-level=critical
+        working-directory: packages/nuxt
+      - run: npm test
+        working-directory: packages/nuxt
+      - run: npm run test:build
+        working-directory: packages/nuxt
+      - name: Verify private fixture config is absent from browser assets
+        run: node test/check-public-assets.mjs
+        working-directory: packages/nuxt
+
   go:
     name: Go (${{ matrix.go }})
     runs-on: ubuntu-latest
