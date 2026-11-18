@@ -2,7 +2,11 @@ const pending = new Map();
 
 export function loadClient(source) {
   if (window.FCaptcha) return Promise.resolve(window.FCaptcha);
-  const url = new URL(source, document.baseURI).href;
+  const parsed = new URL(source, document.baseURI);
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
+    throw new Error('FCaptcha scriptSrc must be a credential-free HTTP(S) URL');
+  }
+  const url = parsed.href;
   if (pending.has(url)) return pending.get(url);
   const script = document.createElement('script');
   script.src = url;

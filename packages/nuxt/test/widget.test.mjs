@@ -69,6 +69,13 @@ describe('FCaptcha Nuxt component', () => {
 });
 
 describe('self-hosted script loading', () => {
+  it('rejects executable non-HTTP and credential-bearing script URLs', () => {
+    delete window.FCaptcha;
+    for (const source of ['javascript:alert(1)', 'data:text/javascript,alert(1)', 'https://user:password@example.test/fcaptcha.js']) {
+      expect(() => loadClient(source)).toThrow('credential-free HTTP(S)');
+    }
+    expect(document.head.querySelector('script')).toBeNull();
+  });
   it('shares one load for simultaneous widgets', async () => {
     delete window.FCaptcha;
     const first = loadClient('/shared.js'); const second = loadClient('/shared.js');
