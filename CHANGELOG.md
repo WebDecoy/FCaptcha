@@ -13,6 +13,30 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.51.1] — 2026-11-20
+
+### Added
+- Add a tested, source-only Nuxt 4 module with an SSR-safe client component,
+  public runtime configuration, script-load lifecycle handling, and explicit
+  server-side verification guidance. The module remains private and is not
+  published to npm in this release.
+
+### Security
+- Override the Nuxt development tree from vulnerable `minimatch` 10.2.6 to
+  patched 11.0.9. The remaining `picomatch` advisory was withdrawn upstream as
+  not being a security issue and is not treated as a vulnerability.
+
+### Maintenance
+- Update the Python image to 3.15.2-slim, raise the FastAPI floor to 0.163.0,
+  and refresh the hash-locked Python environment.
+- Refresh Playwright, jsdom, and Vitest maintenance dependencies used by the
+  browser harness and source-only Nuxt module.
+- Extend the release-version consistency test to cover the Nuxt manifest and
+  lockfile.
+
+There are no scoring, detector-weight, token, proof-of-work primitive, API, or
+blocking-policy changes in this patch release.
+
 ## [1.51.0] — 2026-11-17
 
 ### Added

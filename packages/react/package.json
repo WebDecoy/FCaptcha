@@ -1,6 +1,6 @@
 {
   "name": "@webdecoy/fcaptcha-react",
-  "version": "1.51.0",
+  "version": "1.51.1",
   "description": "Official React component for the FCaptcha browser widget",
   "type": "module",
   "main": "index.js",
