@@ -1,0 +1,16 @@
+{
+  "name": "fcaptcha-better-auth-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node demo.mjs"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.6",
+    "better-auth": "1.7.27",
+    "hono": "4.13.19"
+  }
+}

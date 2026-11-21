@@ -161,6 +161,8 @@ A **prebuilt public image** is available at [`ghcr.io/webdecoy/fcaptcha`](https:
 
 See the [Docker guide](docker/README.md) for local startup, Compose, version pinning, and upgrades. If you already run CapRover, [install FCaptcha from One-Click Apps](docker/README.md#deploy-with-caprover).
 
+Using Better Auth? Follow the [runnable email sign-up example](examples/better-auth/) to point its CAPTCHA plugin at FCaptcha.
+
 Quick local start:
 
 ```bash
