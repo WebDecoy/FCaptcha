@@ -44,6 +44,8 @@ jobs:
             TAGS="${TAGS},ghcr.io/${IMAGE_NAME}:${VERSION}"
           fi
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
@@ -55,5 +57,12 @@ jobs:
           sbom: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.version.outputs.tags }}
+          # Artifact Hub reads package metadata from the multi-platform image index.
+          annotations: |
+            index:io.artifacthub.package.readme-url=https://raw.githubusercontent.com/${{ github.repository }}/${{ steps.version.outputs.revision }}/docker/README.md
+            index:org.opencontainers.image.created=${{ steps.version.outputs.created }}
+            index:org.opencontainers.image.description=Self-hosted CAPTCHA with a browser widget and server-side token verification
+            index:org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            index:io.artifacthub.package.license=MIT
           cache-from: type=gha
           cache-to: type=gha,mode=max
