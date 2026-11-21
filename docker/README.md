@@ -68,6 +68,17 @@ FCaptcha is available in the [official CapRover One-Click Apps catalog](https://
 
 The [catalog template](https://oneclickapps.caprover.com/v4/apps/fcaptcha) runs one replica with in-memory state. Keep both secrets server-side and retain them when updating the image. For public deployments, use the [hardening guide](../HARDENING.md) to configure `TRUSTED_PROXIES` for your ingress.
 
+## Deploy on Unraid
+
+The [Unraid Docker template](unraid/fcaptcha.xml) maps host port `8300` to container port `3000`.
+Run `openssl rand -hex 32` twice and enter the two different values as the
+signing and verification secrets. After starting the container, open its
+**WebUI** to try the demo. The template uses one instance with in-memory state.
+
+For a public integration, configure HTTPS, hostnames and trusted proxies
+using the [hardening guide](../HARDENING.md). Keep both keys across upgrades
+and use only the verification secret in your application backend.
+
 ## Version pinning and upgrades
 
 Use `ghcr.io/webdecoy/fcaptcha:1.41.0` for a fixed release, or pin the multi-platform

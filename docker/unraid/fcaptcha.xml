@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Container version="2">
+  <Name>FCaptcha</Name>
+  <Repository>ghcr.io/webdecoy/fcaptcha:1.51.1</Repository>
+  <Registry>https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Icon>https://github.com/WebDecoy.png?size=256</Icon>
+  <WebUI>http://[IP]:[PORT:3000]/demo/</WebUI>
+  <Overview>Run your own CAPTCHA service for forms and other web actions. The image includes a browser widget, a demo and a server-side token verification endpoint. This template runs one instance with in-memory state.</Overview>
+  <Support>https://github.com/WebDecoy/FCaptcha/discussions</Support>
+  <Project>https://github.com/WebDecoy/FCaptcha</Project>
+  <TemplateURL>https://raw.githubusercontent.com/WebDecoy/FCaptcha/main/docker/unraid/fcaptcha.xml</TemplateURL>
+  <ReadMe>https://github.com/WebDecoy/FCaptcha/blob/main/docker/README.md</ReadMe>
+  <Category>Tools:Utilities</Category>
+  <ExtraSearchTerms>captcha bot detection form spam</ExtraSearchTerms>
+  <License>MIT</License>
+  <Config Name="HTTP port" Target="3000" Default="8300" Mode="tcp" Description="Host port for the FCaptcha HTTP service." Type="Port" Display="always" Required="true" Mask="false"/>
+  <Config Name="Signing secret" Target="FCAPTCHA_SECRET" Default="" Description="Generate a signing key with openssl rand -hex 32. Keep this key private and retain it across container updates." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Verification secret" Target="FCAPTCHA_VERIFY_SECRET" Default="" Description="Generate a different key with openssl rand -hex 32. Use it only in the application backend for Siteverify." Type="Variable" Display="always" Required="true" Mask="true"/>
+</Container>
