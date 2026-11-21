@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CommunityApplications>
+  <Profile>WebDecoy maintains FCaptcha, an MIT-licensed CAPTCHA for forms and other web actions. This repository contains the FCaptcha image source and Unraid template. For setup help, use the FCaptcha Docker guide or GitHub Discussions.</Profile>
+  <Icon>https://github.com/WebDecoy.png?size=256</Icon>
+  <WebPage>https://github.com/WebDecoy/FCaptcha</WebPage>
+</CommunityApplications>
