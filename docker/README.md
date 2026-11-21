@@ -79,6 +79,20 @@ For a public integration, configure HTTPS, hostnames and trusted proxies
 using the [hardening guide](../HARDENING.md). Keep both keys across upgrades
 and use only the verification secret in your application backend.
 
+## Deploy with IceStore
+
+The [FCaptcha listing on IceStore](https://icestore.hsinghhira.me/app/fcaptcha/)
+has catalog installation instructions for ZimaOS, CasaOS, ReCasaOS, Homeio
+and MOS. Install **FCaptcha** and open it from your dashboard, or visit
+`http://<server-ip>:6790/demo/` on your local network.
+
+The IceStore image generates separate signing and verification keys on first
+start and keeps them in the app data directory across container recreation.
+Follow the listing's integration steps and the
+[FCaptcha quickstart](https://docs.webdecoy.com/fcaptcha/quickstart/) to connect
+your application's backend. For public use, configure HTTPS and trusted
+proxies with the [hardening guide](../HARDENING.md).
+
 ## Version pinning and upgrades
 
 Use `ghcr.io/webdecoy/fcaptcha:1.41.0` for a fixed release, or pin the multi-platform
