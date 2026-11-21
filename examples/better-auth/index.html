@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FCaptcha with Better Auth</title>
+    <style>
+      body { max-width: 32rem; margin: 3rem auto; padding: 0 1rem; font: 1rem/1.5 system-ui; }
+      form { display: grid; gap: 1rem; }
+      label { display: grid; gap: .25rem; }
+      input, button { font: inherit; padding: .5rem; }
+    </style>
+  </head>
+  <body>
+    <h1>FCaptcha with Better Auth</h1>
+    <p>Use sample details. This local demo clears all accounts on restart.</p>
+    <form id="signup">
+      <label>Name <input id="name" value="Demo User" autocomplete="off" required></label>
+      <label>Email <input id="email" type="email" value="demo@example.test" autocomplete="off" required></label>
+      <label>Password <input id="password" type="password" minlength="8" autocomplete="new-password" required></label>
+      <button type="submit" disabled>Create demo account</button>
+    </form>
+    <p id="status" role="status"></p>
+    <script src="http://127.0.0.1:8797/fcaptcha.js"></script>
+    <script>
+      const form = document.querySelector('#signup');
+      const status = document.querySelector('#status');
+      const button = form.querySelector('button');
+      if (window.FCaptcha) {
+        FCaptcha.configure({ serverUrl: 'http://127.0.0.1:8797' });
+        button.disabled = false;
+      } else {
+        status.textContent = 'Start the FCaptcha server, then reload this page.';
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        button.disabled = true;
+        status.textContent = 'Verifying…';
+        try {
+          const { success, token } = await FCaptcha.execute('better-auth-demo', { action: 'auth' });
+          if (!success || !token) {
+            status.textContent = 'Verification failed. Try again.';
+            return;
+          }
+          const response = await fetch('/api/auth/sign-up/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-captcha-response': token },
+            body: JSON.stringify({
+              name: form.querySelector('#name').value,
+              email: form.querySelector('#email').value,
+              password: form.querySelector('#password').value,
+            }),
+            signal: AbortSignal.timeout(10000),
+          });
+          status.textContent = response.ok
+            ? 'Demo account created.'
+            : 'Sign-up failed. Check the sample details and try again with a fresh verification.';
+        } catch {
+          status.textContent = 'The demo could not finish. Check that both local servers are running.';
+        } finally {
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
