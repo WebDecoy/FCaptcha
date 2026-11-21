@@ -57,6 +57,17 @@ running it on a reachable server. It uses `latest`; pin `image:` to a version or
 digest for reproducibility. Set a separate `FCAPTCHA_VERIFY_SECRET` in the service's
 environment when integrating a production app (otherwise it defaults to the signing key).
 
+## Deploy with CapRover
+
+FCaptcha is available in the [official CapRover One-Click Apps catalog](https://caprover.com/docs/one-click-apps.html).
+
+1. Open **One-Click Apps** in your CapRover dashboard and select **FCaptcha**.
+2. Run `openssl rand -hex 32` twice and enter the two different values in **Signing Secret** and **Verification Secret**.
+3. Deploy the app. Open its domain from **HTTP Settings** and append `/demo/` to try the widget.
+4. Enable HTTPS for public use. Copy `FCAPTCHA_VERIFY_SECRET` from the app's environment settings to your application backend, then follow the [integration quickstart](https://docs.webdecoy.com/fcaptcha/quickstart/).
+
+The [catalog template](https://oneclickapps.caprover.com/v4/apps/fcaptcha) runs one replica with in-memory state. Keep both secrets server-side and retain them when updating the image. For public deployments, use the [hardening guide](../HARDENING.md) to configure `TRUSTED_PROXIES` for your ingress.
+
 ## Version pinning and upgrades
 
 Use `ghcr.io/webdecoy/fcaptcha:1.41.0` for a fixed release, or pin the multi-platform
