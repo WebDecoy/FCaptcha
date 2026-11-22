@@ -329,6 +329,37 @@ function renderResearchReport(results, metrics) {
   return `${out.join('\n')}\n`;
 }
 
+function renderHostedSmokeReport(results) {
+  const errors = results.filter((result) => result.error);
+  const out = [];
+  out.push(`${C.bold}FCaptcha hosted smoke replay${C.reset}`);
+  out.push(
+    `${C.yellow}Operational only: production proxying and shared egress make hosted scores ` +
+      `non-comparable. No FPR, TPR, signal budget, or release gate is computed.${C.reset}`
+  );
+  out.push(
+    `${C.dim}${results.length - errors.length}/${results.length} checks completed; ` +
+      `${errors.length} error(s). No signal-level JSON is written.${C.reset}`
+  );
+
+  out.push(heading('Endpoint smoke checks'));
+  out.push(
+    table(results, [
+      { header: 'LABEL', value: (result) => result.sample.label },
+      { header: 'SCENARIO', value: (result) => truncate(result.sample.scenario || result.sample.group, 36) },
+      { header: 'ENDPOINT', value: (result) => result.sample.capture?.endpoint === '/api/score' ? '/api/score' : '/api/verify' },
+      { header: 'STATUS', value: (result) => result.error ? 'error' : 'completed', flag: (result) => Boolean(result.error) },
+    ])
+  );
+
+  if (errors.length) {
+    out.push(heading('Replay errors'));
+    for (const error of errors) out.push(`  ${C.red}${error.sample.id}${C.reset}: ${error.error}`);
+  }
+
+  return `${out.join('\n')}\n`;
+}
+
 function truncate(s, n) {
   return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
 }
@@ -337,4 +368,4 @@ function observationRate(stats) {
   return stats.known ? `${stats.detected}/${stats.known} (${pct(stats.rate)})` : `0/0 (n/a)`;
 }
 
-module.exports = { renderReport, renderResearchReport };
+module.exports = { renderHostedSmokeReport, renderReport, renderResearchReport };
