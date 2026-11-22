@@ -1145,7 +1145,7 @@ reverse proxy.
 
 ## Contributing
 
-Contributions welcome — please read [CONTRIBUTING.md](CONTRIBUTING.md) first. AI-agent detection is built out in phases — declared agents, input-event forensics, Web Bot Auth signature verification, the measurement harness, and typing/scroll/platform-coherence forensics have shipped; hosted-agent environment composites, accessibility-tree honeypots, and cross-session correlation are still open.
+Contributions welcome — please read [CONTRIBUTING.md](CONTRIBUTING.md) first. Accessibility commitments, test scope, and barrier-reporting guidance are in [ACCESSIBILITY.md](ACCESSIBILITY.md). AI-agent detection is built out in phases — declared agents, input-event forensics, Web Bot Auth signature verification, the measurement harness, and typing/scroll/platform-coherence forensics have shipped; hosted-agent environment composites, accessibility-tree honeypots, and cross-session correlation are still open.
 
 The most useful contribution right now is **captured traces from real browsers
 driven by real people**. The benchmark corpus is currently scripted personas from
