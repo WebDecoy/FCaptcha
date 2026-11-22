@@ -26,6 +26,8 @@ node capture/record.js
 node run-bench.js                     # human FPR, agent TPR, per-signal budgets
 node run-bench.js --gate              # non-zero exit when a signal is over budget
 node run-bench.js --json out.json     # machine-readable
+node run-bench.js --hosted-smoke --server https://fcaptcha.example.com --site-key demo
+                                      # bounded production deployment check
 node tools/analyze-paired-observations.js
                                       # rank paired agent/control differences
 
@@ -168,6 +170,35 @@ node tools/import-manual-capture.js \
 The importer refuses automated or normalized reports, strips the consumed
 challenge nonce, retains only replay-relevant request headers, records a hash of
 the source report, and will not overwrite an existing corpus file or sample id.
+
+### Checking a hosted deployment
+
+Do not point the normal benchmark at a shared production server. Derived samples
+are useful against a fresh local instance, but hundreds of requests from one
+public egress address correctly trigger production rate limits. A reverse proxy
+may also replace the documentation-range addresses the harness supplies, so
+per-source signals then describe the replayer's shared egress rather than the
+labeled personas.
+
+Use the bounded hosted smoke mode instead:
+
+```bash
+node run-bench.js \
+  --hosted-smoke \
+  --server https://fcaptcha.example.com \
+  --site-key demo-site-key
+```
+
+This mode requires an explicit HTTPS server and site key, fixes derivation at
+zero and concurrency at one, and selects four base captures: one human and one
+agent payload for each of `/api/verify` and `/api/score`. It reports only whether
+the endpoint contracts completed. Scores, recommendations, signals, FPR, TPR,
+budgets, and gates are deliberately omitted because hosted proxy topology makes
+those values non-comparable. Any replay error returns exit status 2.
+
+`--hosted-smoke` refuses `--gate`, `--json`, research imports, and workload
+overrides. Run the normal `--gate` command against a fresh local server for
+release evidence.
 
 ### Replaying consented hosted-demo research
 

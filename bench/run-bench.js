@@ -11,6 +11,7 @@
  *   node bench/run-bench.js --derive 20              # 20 jittered variants per capture
  *   node bench/run-bench.js --gate                   # exit non-zero on a budget breach
  *   node bench/run-bench.js --json out.json          # machine-readable output
+ *   node bench/run-bench.js --hosted-smoke --server https://host --site-key key
  *   node bench/run-bench.js --research-export        # ephemeral hosted-demo export
  *   node bench/run-bench.js --research-input file    # ephemeral local NDJSON export
  *   command-producing-ndjson | node bench/run-bench.js --research-stdin
@@ -26,9 +27,9 @@ const path = require('path');
 
 const { deriveVariant, loadCorpus } = require('./lib/corpus');
 const { computeMetrics, evaluateGate } = require('./lib/metrics');
-const { renderReport, renderResearchReport } = require('./lib/report');
+const { renderHostedSmokeReport, renderReport, renderResearchReport } = require('./lib/report');
 const crypto = require('crypto');
-const { replayCorpus } = require('./lib/replay');
+const { replayCorpus, scoringEndpoint } = require('./lib/replay');
 const { makeRng } = require('./lib/rng');
 const {
   DEFAULT_EXPORT_URL,
@@ -47,19 +48,33 @@ function parseArgs(argv) {
     gate: false,
     json: null,
     quiet: false,
+    hostedSmoke: false,
+    siteKey: null,
     researchInput: null,
     researchOnly: false,
     researchStdin: false,
     researchUrl: null,
   };
+  let deriveSpecified = false;
+  let concurrencySpecified = false;
+  let serverSpecified = false;
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--gate') args.gate = true;
     else if (a === '--quiet') args.quiet = true;
-    else if (a === '--server') args.server = argv[++i];
-    else if (a === '--derive') args.derive = Number(argv[++i]);
+    else if (a === '--server') {
+      args.server = argv[++i];
+      serverSpecified = true;
+    }
+    else if (a === '--derive') {
+      args.derive = Number(argv[++i]);
+      deriveSpecified = true;
+    }
     else if (a === '--seed') args.seed = Number(argv[++i]);
-    else if (a === '--concurrency') args.concurrency = Number(argv[++i]);
+    else if (a === '--concurrency') {
+      args.concurrency = Number(argv[++i]);
+      concurrencySpecified = true;
+    }
     else if (a === '--json') args.json = argv[++i];
     else if (a === '--research-export') args.researchUrl = DEFAULT_EXPORT_URL;
     else if (a === '--research-url') {
@@ -72,6 +87,11 @@ function parseArgs(argv) {
     }
     else if (a === '--research-stdin') args.researchStdin = true;
     else if (a === '--research-only') args.researchOnly = true;
+    else if (a === '--hosted-smoke') args.hostedSmoke = true;
+    else if (a === '--site-key') {
+      args.siteKey = argv[++i];
+      if (!args.siteKey) throw new Error('--site-key requires a value');
+    }
     else if (a === '--help' || a === '-h') args.help = true;
     else throw new Error(`unknown argument: ${a}`);
   }
@@ -88,7 +108,53 @@ function parseArgs(argv) {
   if (args.researchOnly && args.json) {
     throw new Error('--research-only cannot be combined with --json because ephemeral research is never persisted');
   }
+  if (args.hostedSmoke) {
+    if (!serverSpecified) throw new Error('--hosted-smoke requires an explicit --server URL');
+    let serverUrl;
+    try {
+      serverUrl = new URL(args.server);
+    } catch {
+      throw new Error('--hosted-smoke requires a valid HTTPS --server URL');
+    }
+    if (serverUrl.protocol !== 'https:') {
+      throw new Error('--hosted-smoke requires an HTTPS --server URL');
+    }
+    if (!args.siteKey) throw new Error('--hosted-smoke requires --site-key');
+    if (args.gate) throw new Error('--hosted-smoke is operational and cannot be combined with --gate');
+    if (args.json) throw new Error('--hosted-smoke does not persist signal-level JSON');
+    if (researchSources.length) {
+      throw new Error('--hosted-smoke cannot be combined with research imports; use --research-only');
+    }
+    if (deriveSpecified || concurrencySpecified) {
+      throw new Error('--hosted-smoke fixes derivation at 0 and concurrency at 1');
+    }
+    args.derive = 0;
+    args.concurrency = 1;
+  } else if (args.siteKey) {
+    throw new Error('--site-key is only valid with --hosted-smoke');
+  }
   return args;
+}
+
+/**
+ * A hosted deployment is behind a real proxy and every replay usually shares
+ * one public egress address. That makes its scores unsuitable for FPR/TPR or
+ * signal-budget claims. Exercise one human and one agent payload per scoring
+ * endpoint instead: enough to verify both contracts without flooding a public
+ * rate limiter or presenting derived samples as independent traffic.
+ */
+function selectHostedSmokeSamples(corpus) {
+  const wanted = [
+    ['human', '/api/verify'],
+    ['agent', '/api/verify'],
+    ['human', '/api/score'],
+    ['agent', '/api/score'],
+  ];
+  return wanted
+    .map(([label, endpoint]) => corpus.find((sample) =>
+      sample.label === label && scoringEndpoint(sample) === endpoint
+    ))
+    .filter(Boolean);
 }
 
 async function loadResearchSamples(args) {
@@ -154,7 +220,12 @@ async function main() {
 
   // Declared gaps are documentation, not data; they never reach the server.
   const scoreable = base.filter((s) => !s.unmeasured);
-  const corpus = expand(scoreable, args.derive, args.seed);
+  const corpus = args.hostedSmoke
+    ? selectHostedSmokeSamples(scoreable)
+    : expand(scoreable, args.derive, args.seed);
+  if (args.hostedSmoke && corpus.length !== 4) {
+    throw new Error(`hosted smoke requires human and agent samples for both scoring endpoints; found ${corpus.length}/4`);
+  }
 
   if (!args.quiet) {
     if (research.length) {
@@ -163,10 +234,14 @@ async function main() {
           'they will not be written to the corpus or JSON report'
       );
     }
-    console.log(
-      `replaying ${corpus.length} samples (${scoreable.length} base + ` +
-        `${corpus.length - scoreable.length} derived) against ${args.server}`
-    );
+    if (args.hostedSmoke) {
+      console.log(`replaying ${corpus.length} hosted smoke samples against ${args.server}`);
+    } else {
+      console.log(
+        `replaying ${corpus.length} samples (${scoreable.length} base + ` +
+          `${corpus.length - scoreable.length} derived) against ${args.server}`
+      );
+    }
   }
 
   // Namespace this run's server-side per-source state.
@@ -179,7 +254,9 @@ async function main() {
   //
   // A per-run site key makes runs independent without the harness having to own
   // the server's lifecycle.
-  const siteKey = `bench-${crypto.randomBytes(6).toString('hex')}`;
+  const siteKey = args.hostedSmoke
+    ? args.siteKey
+    : `bench-${crypto.randomBytes(6).toString('hex')}`;
 
   const started = Date.now();
   const results = await replayCorpus(args.server, corpus, {
@@ -200,6 +277,11 @@ async function main() {
 
   if (args.researchOnly) {
     console.log(renderResearchReport(results, metrics));
+    return metrics.counts.errors > 0 ? 2 : 0;
+  }
+
+  if (args.hostedSmoke) {
+    console.log(renderHostedSmokeReport(results));
     return metrics.counts.errors > 0 ? 2 : 0;
   }
 
@@ -254,4 +336,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { expand, loadResearchSamples, main, parseArgs };
+module.exports = { expand, loadResearchSamples, main, parseArgs, selectHostedSmokeSamples };

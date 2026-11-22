@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const { computeMetrics } = require('./metrics');
-const { renderResearchReport } = require('./report');
+const { renderHostedSmokeReport, renderResearchReport } = require('./report');
 
 test('research-only report is explicitly exploratory and contains no gate claims', () => {
   const results = [{
@@ -38,5 +38,41 @@ test('research-only report is explicitly exploratory and contains no gate claims
   assert.match(report, /Experimental observations — exploratory only/);
   assert.match(report, /pointer-movement-v1/);
   assert.match(report, /0\.00%/);
+  assert.doesNotMatch(report, /Human panel|Agent corpus|Gate/);
+});
+
+test('hosted smoke report is operational and makes no detection-rate claims', () => {
+  const results = [
+    {
+      sample: {
+        id: 'human/widget/0000',
+        label: 'human',
+        group: 'widget-human',
+        scenario: 'widget-human',
+        capture: { endpoint: '/api/verify' },
+      },
+      score: 0.95,
+      recommendation: 'block',
+      detections: [{ reason: 'shared egress artifact' }],
+    },
+    {
+      sample: {
+        id: 'agent/invisible/0000',
+        label: 'agent',
+        group: 'invisible-agent',
+        scenario: 'invisible-agent',
+        capture: { endpoint: '/api/score' },
+      },
+      error: '/api/score returned 503',
+    },
+  ];
+  const report = renderHostedSmokeReport(results);
+
+  assert.match(report, /Operational only/);
+  assert.match(report, /\/api\/verify/);
+  assert.match(report, /\/api\/score/);
+  assert.match(report, /1\/2 checks completed/);
+  assert.match(report, /returned 503/);
+  assert.doesNotMatch(report, /0\.950|block|shared egress artifact/);
   assert.doesNotMatch(report, /Human panel|Agent corpus|Gate/);
 });
