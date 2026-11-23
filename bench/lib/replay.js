@@ -132,6 +132,18 @@ function scoringEndpoint(sample) {
     : '/api/verify';
 }
 
+function replayHeaders(sample, opts, clientIp) {
+  return {
+    'Content-Type': 'application/json',
+    'User-Agent': DEFAULT_UA,
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    ...(sample.headers || {}),
+    ...(opts.requestHeaders || {}),
+    'X-Forwarded-For': clientIp,
+  };
+}
+
 /**
  * Runs one sample. Returns the verdict plus enough context for the reporter to
  * attribute a failure to a persona and a signal.
@@ -140,14 +152,7 @@ async function replaySample(serverUrl, sample, opts = {}) {
   const siteKey = opts.siteKey || 'bench';
   const clientIp = sample.clientIp || neutralIpFor(sample.id);
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'User-Agent': DEFAULT_UA,
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    ...(sample.headers || {}),
-    'X-Forwarded-For': clientIp,
-  };
+  const headers = replayHeaders(sample, opts, clientIp);
 
   try {
     const { body, difficulty } = await buildVerifyBody(
@@ -232,6 +237,7 @@ module.exports = {
   neutralIpFor,
   NEUTRAL_POOL_SIZE,
   replayCorpus,
+  replayHeaders,
   replaySample,
   scoringEndpoint,
   siteKeyForSample,

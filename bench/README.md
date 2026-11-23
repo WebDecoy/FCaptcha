@@ -186,7 +186,8 @@ Use the bounded hosted smoke mode instead:
 node run-bench.js \
   --hosted-smoke \
   --server https://fcaptcha.example.com \
-  --site-key demo-site-key
+  --site-key demo-site-key \
+  --origin https://demo.example.com
 ```
 
 This mode requires an explicit HTTPS server and site key, fixes derivation at
@@ -195,6 +196,12 @@ agent payload for each of `/api/verify` and `/api/score`. It reports only whethe
 the endpoint contracts completed. Scores, recommendations, signals, FPR, TPR,
 budgets, and gates are deliberately omitted because hosted proxy topology makes
 those values non-comparable. Any replay error returns exit status 2.
+
+Pass `--origin` when the site key is hostname-restricted. The harness sends that
+exact HTTPS origin on the challenge and scoring requests, matching a browser on
+the deployed demo. Origins with a path, query, fragment, credentials, or a
+non-HTTPS scheme are rejected. Omit the option only for deployments that
+intentionally allow native or server-side clients without an Origin header.
 
 `--hosted-smoke` refuses `--gate`, `--json`, research imports, and workload
 overrides. Run the normal `--gate` command against a fresh local server for

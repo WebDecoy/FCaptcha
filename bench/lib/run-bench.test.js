@@ -72,11 +72,13 @@ test('hosted smoke mode is explicit, HTTPS-only, and fixes its safe workload', (
     '--hosted-smoke',
     '--server', 'https://fcaptcha.example.com',
     '--site-key', 'demo-site-key',
+    '--origin', 'https://demo.example.com',
   ]);
   assert.equal(args.hostedSmoke, true);
   assert.equal(args.derive, 0);
   assert.equal(args.concurrency, 1);
   assert.equal(args.siteKey, 'demo-site-key');
+  assert.equal(args.origin, 'https://demo.example.com');
 
   assert.throws(
     () => parseArgs(['node', 'run-bench.js', '--hosted-smoke', '--site-key', 'key']),
@@ -103,6 +105,19 @@ test('hosted smoke mode is explicit, HTTPS-only, and fixes its safe workload', (
     () => parseArgs(['node', 'run-bench.js', '--site-key', 'key']),
     /only valid/
   );
+  assert.throws(
+    () => parseArgs(['node', 'run-bench.js', '--origin', 'https://demo.example.com']),
+    /only valid/
+  );
+  for (const origin of ['http://demo.example.com', 'https://demo.example.com/path', 'not-a-url']) {
+    assert.throws(
+      () => parseArgs([
+        'node', 'run-bench.js', '--hosted-smoke', '--server', 'https://example.com',
+        '--site-key', 'key', '--origin', origin,
+      ]),
+      /--origin requires/
+    );
+  }
 });
 
 test('hosted smoke selects one human and agent for each scoring endpoint', () => {
