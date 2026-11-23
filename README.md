@@ -63,7 +63,7 @@ Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is i
 
 - **It catches AI agents, not just bots.** Vision agents that screenshot and click, and computer-use agents that drive a real browser over CDP, leave input-event traces that FCaptcha scores. [How](#ai-agent-detection)
 - **It replaces Turnstile, reCAPTCHA or hCaptcha by changing a base URL.** It serves the same `siteverify` contract on the same paths.
-- **It runs on your server.** No cookies, no third parties, no phone-home. [COMPLIANCE.md](COMPLIANCE.md) lists every retention window.
+- **It runs on your server.** No cookies, no third parties, no phone-home. [COMPLIANCE.md](COMPLIANCE.md) lists every retention window. An optional [hosted service](https://docs.webdecoy.com/fcaptcha/webdecoy-hosted/) is run by WebDecoy, with its own [data handling](https://docs.webdecoy.com/fcaptcha/webdecoy-hosted/#privacy-and-data-handling).
 - **No puzzle to fail.** Screen-reader, keyboard-only, tremor and elderly personas run against a false-positive budget in CI that fails the build when exceeded.
 - **The algorithm is open.** Every score is itemised with a reason, and every threshold came from [measured browser traces](bench/).
 
@@ -74,7 +74,7 @@ Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is i
 | Self-hosted | Yes | No | No | No | Yes | Yes |
 | Open source | MIT | No | No | No | MIT | AGPL |
 | Image or audio puzzle | Never | Sometimes | Sometimes | Never | Never | Never |
-| Visitor data sent to a third party | No | Google | hCaptcha | Cloudflare | No | No |
+| Visitor data sent to a third party | No, when self-hosted | Google | hCaptcha | Cloudflare | No, when self-hosted | No |
 | Behavioural and environmental bot detection | Yes, open source | Yes, proprietary | Yes, proprietary | Yes, proprietary | Proof of work only[^altcha] | Proof of work only |
 | Turnstile-compatible `siteverify` | Yes | No | No | Yes | No | No |
 
@@ -479,9 +479,9 @@ The properties a procurement review asks about, with the evidence behind them in
 | | |
 |---|---|
 | **Cookies** | None. No consent banner needed for FCaptcha |
-| **Third parties** | None. No SaaS, no telemetry, no phone-home, no CDN requirement |
+| **Third parties** | None when self-hosted. No telemetry, no phone-home, no CDN requirement. The optional hosted service by WebDecoy is [documented separately](https://docs.webdecoy.com/fcaptcha/webdecoy-hosted/#privacy-and-data-handling) |
 | **Persistence** | Nothing written to disk. All state in memory, 5 minutes to 1 hour, enumerated |
-| **Data location** | Your server, wherever you run it |
+| **Data location** | Your server, wherever you run it (self-hosted) |
 | **Automated decisions** | Every score itemised with a human-readable reason, so an Article 22 decision can be explained rather than quoted |
 | **Accessibility** | No visual or audio puzzle. WCAG 2.2 AA criteria verified in CI; relevant to the European Accessibility Act |
 | **False positives** | Measured against a labelled human panel on every run, with a per-signal budget that fails the build |

@@ -8,11 +8,18 @@ Nothing here is legal advice. FCaptcha is self-hosted software: you are the
 controller, and the obligations are yours. What this page does is make the facts
 available so you can answer for them.
 
+**This page describes FCaptcha on your own server.** WebDecoy also offers an
+optional hosted FCaptcha service. If you use it, your visitors' signals go to
+WebDecoy and its hosting providers, and several answers below (third parties,
+data location, retention, the DPA) are different. Its data handling is documented
+separately: [hosted FCaptcha data handling](https://docs.webdecoy.com/fcaptcha/webdecoy-hosted/#privacy-and-data-handling). Self-hosting needs no WebDecoy
+account, and the open-source server makes no calls to WebDecoy.
+
 ## The short answer
 
 - **No cookies.** None are set, so no consent banner is needed for FCaptcha.
-- **No third parties.** Signals go to your server and stop there. There is no
-  FCaptcha SaaS, no telemetry, no phone-home, no CDN requirement.
+- **No third parties.** Signals go to your server and stop there. The
+  open-source server has no telemetry, no phone-home and no CDN requirement.
 - **Nothing is written to disk.** All state is in memory and expires on a timer,
   the longest being one hour.
 - **No cross-site or cross-session tracking.** Nothing identifies a returning
@@ -209,15 +216,18 @@ observing the environment.
 
 **Where FCaptcha is ahead:**
 
-**There is no cloud tier to leak into.** ALTCHA's Sentinel — the tier carrying its
-IP intelligence, geo-location, threat-intel and NLP classification — is a hosted
-service. Those features mean visitor data reaching a third party, with the DPA and
-transfer questions that follow. FCaptcha has no hosted tier: the open-source
-product is the whole product, and it cannot phone home because there is nowhere
-for it to phone.
+**The open-source product is the whole detector.** Both projects keep a
+self-hosted path and offer an optional managed one. ALTCHA's Sentinel is
+self-hosted and adds IP reputation, threat intelligence and an NLP spam and
+content classifier under a commercial licence; its managed service, ALTCHA
+Cloud, runs in the EU ([ALTCHA: open source vs paid](https://altcha.org/docs/open-source-vs-paid/)).
+FCaptcha's detection is entirely in the MIT server you run, and WebDecoy's hosted
+FCaptcha is an optional managed copy of it, run in the United States. With either
+managed service, visitor data reaches a third party, with the DPA and transfer
+questions that follow.
 
 **The decision is explainable, not a model output.** Sentinel's classifier is
-NLP/ML returning a likelihood score. FCaptcha's is a documented weighted sum over
+NLP-based content scoring. FCaptcha's is a documented weighted sum over
 named detections, each with a reason string. Under Article 22 that is the
 difference between showing a data subject the reasoning and showing them a number.
 
@@ -236,10 +246,13 @@ The summary: **ALTCHA collects less; FCaptcha accounts for more.** FCaptcha
 processes more signals because detecting an automated browser requires observing
 one, and this page exists so that the extra processing is disclosed, bounded,
 explainable and measured rather than quietly extensive. Every signal is listed
-above, every retention window is enumerated, nothing leaves your server, and the
+above, every retention window is enumerated, nothing leaves your server when you self-host, and the
 false-positive cost is measured in CI. Weigh that against your own requirement.
 
 ## Answering a questionnaire
+
+For FCaptcha on your own server. For the hosted service, use the
+[hosted data handling](https://docs.webdecoy.com/fcaptcha/webdecoy-hosted/#privacy-and-data-handling) page instead.
 
 | Question | Answer |
 |---|---|
