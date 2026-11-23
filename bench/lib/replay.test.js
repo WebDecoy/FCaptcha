@@ -7,6 +7,7 @@ const {
   neutralIpAt,
   neutralIpFor,
   NEUTRAL_POOL_SIZE,
+  replayHeaders,
   scoringEndpoint,
   siteKeyForSample,
 } = require('./replay');
@@ -83,6 +84,17 @@ test('replay preserves the captured scoring endpoint', () => {
   assert.strictEqual(scoringEndpoint({ capture: { endpoint: '/api/score' } }), '/api/score');
   assert.strictEqual(scoringEndpoint({ capture: { endpoint: '/api/verify' } }), '/api/verify');
   assert.strictEqual(scoringEndpoint({}), '/api/verify');
+});
+
+test('explicit replay headers override captured request headers', () => {
+  const headers = replayHeaders(
+    { headers: { Origin: 'https://captured.example', 'Accept-Language': 'fr' } },
+    { requestHeaders: { Origin: 'https://demo.example.com' } },
+    '192.0.2.1'
+  );
+  assert.strictEqual(headers.Origin, 'https://demo.example.com');
+  assert.strictEqual(headers['Accept-Language'], 'fr');
+  assert.strictEqual(headers['X-Forwarded-For'], '192.0.2.1');
 });
 
 test('derived variants preserve invisible scoring context', () => {

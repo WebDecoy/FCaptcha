@@ -11,7 +11,7 @@
  *   node bench/run-bench.js --derive 20              # 20 jittered variants per capture
  *   node bench/run-bench.js --gate                   # exit non-zero on a budget breach
  *   node bench/run-bench.js --json out.json          # machine-readable output
- *   node bench/run-bench.js --hosted-smoke --server https://host --site-key key
+ *   node bench/run-bench.js --hosted-smoke --server https://host --site-key key [--origin https://site]
  *   node bench/run-bench.js --research-export        # ephemeral hosted-demo export
  *   node bench/run-bench.js --research-input file    # ephemeral local NDJSON export
  *   command-producing-ndjson | node bench/run-bench.js --research-stdin
@@ -50,6 +50,7 @@ function parseArgs(argv) {
     quiet: false,
     hostedSmoke: false,
     siteKey: null,
+    origin: null,
     researchInput: null,
     researchOnly: false,
     researchStdin: false,
@@ -92,6 +93,10 @@ function parseArgs(argv) {
       args.siteKey = argv[++i];
       if (!args.siteKey) throw new Error('--site-key requires a value');
     }
+    else if (a === '--origin') {
+      args.origin = argv[++i];
+      if (!args.origin) throw new Error('--origin requires a value');
+    }
     else if (a === '--help' || a === '-h') args.help = true;
     else throw new Error(`unknown argument: ${a}`);
   }
@@ -120,6 +125,18 @@ function parseArgs(argv) {
       throw new Error('--hosted-smoke requires an HTTPS --server URL');
     }
     if (!args.siteKey) throw new Error('--hosted-smoke requires --site-key');
+    if (args.origin) {
+      let originUrl;
+      try {
+        originUrl = new URL(args.origin);
+      } catch {
+        throw new Error('--origin requires a valid HTTPS origin');
+      }
+      if (originUrl.protocol !== 'https:' || originUrl.origin !== args.origin) {
+        throw new Error('--origin requires an HTTPS origin without a path, query, or fragment');
+      }
+      args.origin = originUrl.origin;
+    }
     if (args.gate) throw new Error('--hosted-smoke is operational and cannot be combined with --gate');
     if (args.json) throw new Error('--hosted-smoke does not persist signal-level JSON');
     if (researchSources.length) {
@@ -130,8 +147,8 @@ function parseArgs(argv) {
     }
     args.derive = 0;
     args.concurrency = 1;
-  } else if (args.siteKey) {
-    throw new Error('--site-key is only valid with --hosted-smoke');
+  } else if (args.siteKey || args.origin) {
+    throw new Error('--site-key and --origin are only valid with --hosted-smoke');
   }
   return args;
 }
@@ -261,6 +278,7 @@ async function main() {
   const started = Date.now();
   const results = await replayCorpus(args.server, corpus, {
     siteKey,
+    requestHeaders: args.origin ? { Origin: args.origin } : undefined,
     isolateSiteKeys: args.researchOnly,
     concurrency: args.concurrency,
     onProgress: args.quiet
