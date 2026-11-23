@@ -16,7 +16,7 @@ FCAPTCHA_SECRET="$(openssl rand -hex 32)" docker run -d --rm \
   -e FCAPTCHA_SECRET -e FCAPTCHA_VERIFY_SECRET \
   -e FCAPTCHA_ALLOWED_HOSTNAMES=127.0.0.1 \
   -e FCAPTCHA_SITE_KEYS=better-auth-demo \
-  ghcr.io/webdecoy/fcaptcha:1.51.2
+  ghcr.io/webdecoy/fcaptcha:1.51.3
 npm start
 ```
 

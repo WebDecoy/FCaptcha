@@ -15,6 +15,8 @@ reading would call major. Read the **Breaking** entries rather than the number.
 
 ## [Unreleased]
 
+## [1.51.3] — 2026-11-23
+
 ### Fixed
 - The widget could never verify on a device whose clock ran about five minutes
   or more ahead of the server's: it compared the challenge's server-side expiry
@@ -27,6 +29,10 @@ reading would call major. Read the **Breaking** entries rather than the number.
   occur during ordinary input, so it is not safe evidence of automation. Raw
   bounded pointer measurements remain available for future research but no
   longer emit a detection, observation, or blocking verdict.
+
+This release changes detector and blocking policy by retiring evidence that a
+legitimate-user report proved was not specific to automation. Deployments using
+the Go, Node, or Python server should upgrade.
 
 ## [1.51.2] — 2026-11-23
 
