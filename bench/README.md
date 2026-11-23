@@ -514,6 +514,16 @@ Two results worth recording because they changed the design:
   separating signal, so no browser-internal regression floor or production
   enforcement is set from it.
 
+  Chromium's actor implementation supplies a narrower measurement target for
+  the next paired capture: its default click path emits a pointer move to the
+  resolved target, waits 5ms, then dispatches mousedown; incremental typing also
+  uses fixed key-down and key-up delays. The client therefore reports bounded,
+  content-free `clickPrelude` and `keyTiming` summaries under `inputForensics`.
+  These fields contain counts, means, variances and ratios only—no coordinates,
+  key identities or field values. They remain neutral telemetry: no detector or
+  observation consumes them until a new same-browser agent/control cohort shows
+  a repeated separation and independent human coverage supports a threshold.
+
   Expanding the cohort also exposed two false-positive paths. The replayer had
   treated every corpus entry as `/api/verify`; it now retains and replays the
   reviewed capture endpoint so invisible samples stay on `/api/score`. A real

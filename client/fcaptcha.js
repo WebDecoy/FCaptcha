@@ -244,6 +244,14 @@
       this._ptrLastY = null;
       this._ptrMoveSamples = 0;
       this._ptrMoveZero = 0;
+      // Browser-internal actors can emit a synthetic pointer move directly to
+      // a resolved target immediately before mousedown. Keep only compact
+      // timing/coherence summaries for the last few clicks; never coordinates.
+      this._lastPointerMove = null;
+      this._clickPreludes = [];
+      // Global, content-free key timing. Per-field cadence intentionally stays
+      // textarea-only, but fixed-delay browser actuation can target any input.
+      this._typingKeyDowns = [];
     }
 
     // Record any user-input event on a single timeline so the server can spot
@@ -297,6 +305,16 @@
     recordMouseDown(e) {
       const now = performance.now();
       this._markActivity(now);
+      const move = this._lastPointerMove;
+      if (move && move.pointerType === 'mouse' && now >= move.t) {
+        this._clickPreludes.push({
+          delay: now - move.t,
+          distance: Math.hypot(e.clientX - move.x, e.clientY - move.y),
+          coalesced: move.coalesced,
+          zeroMovement: move.zeroMovement
+        });
+        if (this._clickPreludes.length > 32) this._clickPreludes.shift();
+      }
       // Teleport click: mousedown landing far from the last observed mouse
       // position with no intervening movement = injected click (computer-use
       // agents dispatch a click at coordinates without an approach path).
@@ -341,7 +359,11 @@
       const keyId = e.code || e.key;
       if (!keyId || KEY_HOLD_EXCLUDED.has(e.key)) return;
       if (e.type === 'keydown') {
-        if (!e.repeat) this._keyDownAt.set(keyId, now);
+        if (!e.repeat) {
+          this._keyDownAt.set(keyId, now);
+          this._typingKeyDowns.push(now);
+          if (this._typingKeyDowns.length > 200) this._typingKeyDowns.shift();
+        }
       } else if (e.type === 'keyup') {
         const downAt = this._keyDownAt.get(keyId);
         if (downAt === undefined) return;
@@ -379,20 +401,21 @@
       this._markActivity(now);
 
       if (e.type === 'pointermove') {
+        let coalescedCount = 1;
         // Coalesced-events batch size. Only mouse pointers; touch/pen coalesce
         // differently and are scored via their own kinematics.
         if (e.pointerType !== 'touch' && typeof e.getCoalescedEvents === 'function') {
-          let len = 1;
           try {
             const coalesced = e.getCoalescedEvents();
-            len = (coalesced && coalesced.length) ? coalesced.length : 1;
-          } catch (_err) { len = 1; }
+            coalescedCount = (coalesced && coalesced.length) ? coalesced.length : 1;
+          } catch (_err) { coalescedCount = 1; }
           this._coalescedSamples++;
-          if (len <= 1) this._coalescedEmpty++;
-          this._coalescedSum += len;
-          if (len > this._coalescedMax) this._coalescedMax = len;
+          if (coalescedCount <= 1) this._coalescedEmpty++;
+          this._coalescedSum += coalescedCount;
+          if (coalescedCount > this._coalescedMax) this._coalescedMax = coalescedCount;
         }
         // movementX/Y should be nonzero whenever the position actually changed.
+        let zeroMovement = false;
         if (e.pointerType !== 'touch' && this._ptrLastX !== null) {
           const dx = e.clientX - this._ptrLastX;
           const dy = e.clientY - this._ptrLastY;
@@ -400,9 +423,20 @@
             this._ptrMoveSamples++;
             const mx = typeof e.movementX === 'number' ? e.movementX : 0;
             const my = typeof e.movementY === 'number' ? e.movementY : 0;
-            if (mx === 0 && my === 0) this._ptrMoveZero++;
+            if (mx === 0 && my === 0) {
+              this._ptrMoveZero++;
+              zeroMovement = true;
+            }
           }
         }
+        this._lastPointerMove = {
+          x: e.clientX,
+          y: e.clientY,
+          t: now,
+          pointerType: e.pointerType || 'unknown',
+          coalesced: coalescedCount,
+          zeroMovement
+        };
         this._ptrLastX = e.clientX;
         this._ptrLastY = e.clientY;
       }
@@ -537,6 +571,8 @@
         variance = gaps.reduce((acc, g) => acc + (g - mean) * (g - mean), 0) / gaps.length;
       }
       const gapCV = mean > 0 ? Math.sqrt(variance) / mean : 0;
+      const clickPrelude = this._analyzeClickPreludes();
+      const keyTiming = this._analyzeGlobalKeyTiming();
       return {
         coalescedSamples: this._coalescedSamples,
         coalescedEmptyRatio: this._coalescedSamples ? this._coalescedEmpty / this._coalescedSamples : 0,
@@ -548,7 +584,50 @@
         cadenceSilentGaps: silentGaps,
         cadenceGapCV: gapCV,
         cadenceSilentRatio: totalTime > 0 ? silentTime / totalTime : 0,
-        teleportClicks: this._teleportClicks
+        teleportClicks: this._teleportClicks,
+        clickPrelude,
+        keyTiming
+      };
+    }
+
+    _analyzeClickPreludes() {
+      const samples = this._clickPreludes;
+      const singleCoalesced = samples.filter((p) => p.coalesced <= 1).length;
+      const zeroMovement = samples.filter((p) => p.zeroMovement).length;
+      return {
+        version: 1,
+        samples: samples.length,
+        delays: this._summarizeValues(samples.map((p) => p.delay)),
+        distances: this._summarizeValues(samples.map((p) => p.distance)),
+        singleCoalescedRatio: samples.length ? singleCoalesced / samples.length : 0,
+        zeroMovementRatio: samples.length ? zeroMovement / samples.length : 0
+      };
+    }
+
+    _analyzeGlobalKeyTiming() {
+      const intervals = [];
+      for (let i = 1; i < this._typingKeyDowns.length; i++) {
+        intervals.push(this._typingKeyDowns[i] - this._typingKeyDowns[i - 1]);
+      }
+      return {
+        version: 1,
+        keydowns: this._typingKeyDowns.length,
+        intervals: this._summarizeValues(intervals),
+        holds: this._summarizeValues(this.keyHolds)
+      };
+    }
+
+    _summarizeValues(values) {
+      const mean = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+      const variance = values.length
+        ? values.reduce((acc, value) => acc + Math.pow(value - mean, 2), 0) / values.length
+        : 0;
+      return {
+        samples: values.length,
+        mean,
+        variance,
+        min: values.length ? Math.min(...values) : 0,
+        max: values.length ? Math.max(...values) : 0
       };
     }
 
