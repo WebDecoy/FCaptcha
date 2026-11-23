@@ -1,5 +1,5 @@
-fastapi>=0.163.0
+fastapi>=0.165.0
 uvicorn>=0.54.0
-pydantic>=2.14.3
+pydantic>=2.14.4
 redis>=8.1.0
-python-multipart>=0.0.33
+python-multipart>=0.0.34
