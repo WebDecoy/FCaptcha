@@ -87,7 +87,7 @@ test('self-reported humans are measured but cannot create false-positive claims 
 });
 
 test('experimental observations use base samples and stay outside every gate', () => {
-  const observation = (status) => ({ observations: { 'pointer-movement-v1': { status } } });
+  const observation = (status) => ({ observations: { 'animation-consistency-v1': { status } } });
   const human = {
     sample: { id: 'human/manual/0000', label: 'human', group: 'manual', provenance: 'captured' },
     score: 0.1, detections: [], experimental: observation('clear'),
@@ -107,7 +107,7 @@ test('experimental observations use base samples and stay outside every gate', (
   const metrics = computeMetrics([human, derived, research, agent]);
   const policy = metrics.experimental.policies[0];
 
-  assert.equal(policy.policy, 'pointer-movement-v1');
+  assert.equal(policy.policy, 'animation-consistency-v1');
   assert.deepEqual(policy.humans, { total: 1, detected: 0, clear: 1, unknown: 0, known: 1, rate: 0 });
   assert.equal(policy.exploratoryHumans.detected, 1);
   assert.equal(policy.agents.detected, 1);

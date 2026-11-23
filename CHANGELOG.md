@@ -13,6 +13,16 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [Unreleased]
+
+### Fixed
+- Remove the `pointer-movement-never-zero` observation and the related
+  fast-start stealth-CDP score floor. A real Edge user who continued moving a
+  mouse while the page loaded demonstrated that the complete conjunction could
+  occur during ordinary input, so it is not safe evidence of automation. Raw
+  bounded pointer measurements remain available for future research but no
+  longer emit a detection, observation, or blocking verdict.
+
 ## [1.51.2] — 2026-11-23
 
 ### Added

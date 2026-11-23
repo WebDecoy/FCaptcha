@@ -54,11 +54,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -115,11 +110,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -159,11 +149,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -216,11 +201,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -252,11 +232,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -305,11 +280,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -349,11 +319,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -399,11 +364,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -455,11 +415,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -507,11 +462,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -617,11 +567,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -716,11 +661,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -821,11 +761,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -895,11 +830,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -975,11 +905,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -1046,11 +971,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -1151,11 +1071,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -1250,11 +1165,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -1355,11 +1265,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -1454,11 +1359,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -1559,11 +1459,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -1658,11 +1553,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -1763,11 +1653,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -1865,11 +1750,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -1963,11 +1843,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -2069,11 +1944,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -2141,11 +2011,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -2223,11 +2088,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -2328,11 +2188,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -2369,11 +2224,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -2416,11 +2266,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -2460,11 +2305,6 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
@@ -2501,11 +2341,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []
@@ -2606,17 +2441,12 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
     },
     {
-      "name": "pointer-human-clear",
+      "name": "retired-pointer-human-shape-is-ignored",
       "signals": {
         "behavioral": {
           "touchEvents": 0,
@@ -2645,17 +2475,12 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "clear",
-            "detections": []
           }
         }
       }
     },
     {
-      "name": "pointer-stealth-detected",
+      "name": "retired-pointer-agent-shape-is-ignored",
       "signals": {
         "behavioral": {
           "touchEvents": 0,
@@ -2684,22 +2509,12 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "detected",
-            "detections": [
-              {
-                "id": "pointer-movement-never-zero",
-                "reason": "Pointer moves always report movement; experimental observation, not proof of automation"
-              }
-            ]
           }
         }
       }
     },
     {
-      "name": "pointer-boundary-clear",
+      "name": "retired-pointer-boundary-is-ignored",
       "signals": {
         "behavioral": {
           "touchEvents": 0,
@@ -2728,17 +2543,12 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "clear",
-            "detections": []
           }
         }
       }
     },
     {
-      "name": "pointer-too-few-samples-unknown",
+      "name": "retired-pointer-small-sample-is-ignored",
       "signals": {
         "behavioral": {
           "touchEvents": 0,
@@ -2767,17 +2577,12 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
     },
     {
-      "name": "pointer-touch-unknown",
+      "name": "retired-pointer-touch-shape-is-ignored",
       "signals": {
         "behavioral": {
           "touchEvents": 12,
@@ -2806,17 +2611,12 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
     },
     {
-      "name": "pointer-malformed-unknown",
+      "name": "retired-pointer-malformed-shape-is-ignored",
       "signals": {
         "behavioral": {
           "touchEvents": 0,
@@ -2845,17 +2645,12 @@
             "mode": "observe",
             "status": "unknown",
             "detections": []
-          },
-          "pointer-movement-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
           }
         }
       }
     },
     {
-      "name": "pointer-out-of-range-unknown",
+      "name": "retired-pointer-out-of-range-shape-is-ignored",
       "signals": {
         "behavioral": {
           "touchEvents": 0,
@@ -2881,11 +2676,6 @@
             "detections": []
           },
           "identity-coherence-v1": {
-            "mode": "observe",
-            "status": "unknown",
-            "detections": []
-          },
-          "pointer-movement-v1": {
             "mode": "observe",
             "status": "unknown",
             "detections": []

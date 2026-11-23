@@ -273,8 +273,10 @@ The benchmark prints those observe-only candidates in a separate
 self-reported humans separate, excludes unknown/unsupported observations from
 the displayed detection rate, and never feeds the result into production
 scores, signal budgets, or the release gate. This is the measurement path for
-deciding whether a candidate such as `pointer-movement-v1` has enough real
-hardware coverage to graduate; a high agent rate by itself is not sufficient.
+deciding whether an experimental candidate has enough real hardware coverage
+to graduate; a high agent rate by itself is not sufficient. Candidates that
+produce a legitimate-user report are removed rather than retained as noisy
+observations.
 
 The sessions also disproved two behavioural assumptions. All four natural
 trackpad paths reached the checkbox without an overshoot, and Safari produced a
@@ -473,7 +475,7 @@ Two results worth recording because they changed the design:
   cadence floor looks for. That is why the check requires ten keystrokes, no page
   paste and no field paste before it will look at cadence at all.
 
-### Remaining classes and the v1.48.0 stealth-CDP result
+### Remaining classes and the retired v1.48.0 stealth-CDP result
 
 - **`declared-crawler` (0.600 on the v1.48.0 corpus).** A self-identifying ClaudeBot is deliberately
   low-severity: it is honest about what it is, and whether to serve it is a
@@ -484,14 +486,14 @@ Two results worth recording because they changed the design:
   the behavioural layer does not carry the case alone. **This is the real open
   problem**, and the number is here so it stays visible rather than being
   averaged into a headline. Closing it is what workstreams C, D and F are for.
-- **`stealth-cdp-agent` now reaches the 0.800 floor on v1.48.0.** All 10
-  independent captures, and all 90 correlated derived variants, are caught;
-  none of 162 captured+derived human samples cross the human threshold. The
-  detector requires 30+ pointer samples, 30+ coalescing observations, under 5%
-  coalesced events, an attached console consumer, and first interaction under
-  250ms. That conjunction is intentionally narrow: waiting at least 250ms
-  evades it, and broadening it without new evidence would risk real DevTools
-  users.
+- **`stealth-cdp-agent` is a declared gap again.** The v1.48.0 rule combined
+  30+ pointer samples, a low movement-delta ratio, an attached console consumer,
+  and a first interaction under 250ms. Issue #212 supplied a real Edge verdict
+  showing that ordinary continuous mouse movement during page load can satisfy
+  the complete conjunction. The production floor and the associated
+  `pointer-movement-never-zero` observation are therefore removed. The raw
+  bounded measurements remain in captures for research, but they produce no
+  detection or observation until paired evidence establishes a safe separator.
 - **`browser-internal` has ten measured pairs, not a detector.** Five driver-free
   Chrome Auto Browse widget captures scored 0.000–0.030; their same-browser,
   same-profile manual controls scored 0.000–0.045. Five invisible captures
@@ -517,4 +519,4 @@ Two results worth recording because they changed the design:
   soon after page load” heuristic: the person moved at 30.7ms while Auto Browse
   first interacted at 244.7ms. That signal separated in the wrong direction and
   was removed from all three servers. Contextual form timing checks and the
-  multi-signal stealth-CDP conjunction still use timing where it is corroborated.
+  retired stealth-CDP conjunction no longer uses that timing signal.
