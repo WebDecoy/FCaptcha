@@ -13,6 +13,25 @@ the project uses [Semantic Versioning](https://semver.org/) — with the caveat
 that pre-2.0 it has used minor bumps for behaviour changes that a stricter
 reading would call major. Read the **Breaking** entries rather than the number.
 
+## [1.51.2] — 2026-11-23
+
+### Added
+- Add deployment and installation documentation for CapRover, Better Auth,
+  Unraid Community Apps, and IceStore, plus Artifact Hub image metadata.
+- Add a project accessibility policy.
+- Add a bounded hosted-deployment smoke mode that validates `/api/verify` and
+  `/api/score` without reporting hosted FPR or TPR figures from correlated
+  regression samples.
+
+### Maintenance
+- Refresh the Go 1.27.4 Alpine build image and `actions/setup-go` to 7.1.0.
+- Update FastAPI to 0.165.0, Pydantic to 2.14.4, python-multipart to 0.0.34,
+  and refresh the hash-locked Python environment.
+- Update the source-only Nuxt module's Vitest dependency to 5.1.1.
+
+There are no scoring, detector-weight, token, proof-of-work primitive, API, or
+blocking-policy changes in this patch release.
+
 ## [1.51.1] — 2026-11-20
 
 ### Added
