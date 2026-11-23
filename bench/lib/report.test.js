@@ -25,7 +25,7 @@ test('research-only report is explicitly exploratory and contains no gate claims
     detections: [{ reason: 'Observed signal', category: 'behavioral' }],
     experimental: {
       observations: {
-        'pointer-movement-v1': { mode: 'observe', status: 'clear', detections: [] },
+        'animation-consistency-v1': { mode: 'observe', status: 'clear', detections: [] },
       },
     },
   }];
@@ -36,7 +36,7 @@ test('research-only report is explicitly exploratory and contains no gate claims
   assert.match(report, /trackpad/);
   assert.match(report, /Observed signal/);
   assert.match(report, /Experimental observations — exploratory only/);
-  assert.match(report, /pointer-movement-v1/);
+  assert.match(report, /animation-consistency-v1/);
   assert.match(report, /0\.00%/);
   assert.doesNotMatch(report, /Human panel|Agent corpus|Gate/);
 });

@@ -200,7 +200,6 @@ const {
   calculateFinalScore,
   applyDispositiveFloor,
   applyCorroborationFloor,
-  applyStealthCDPFloor,
   widgetInstance, deviceRateKey, deviceRateDetection, DEVICE_VERIFICATIONS_PER_MINUTE
 } = require('./engine');
 const { detectInputForensics } = require('./inputforensics');
@@ -374,10 +373,10 @@ class ScoringEngine {
     }
 
     const categoryScores = calculateCategoryScores(detections, this.weights);
-    const finalScore = applyStealthCDPFloor(applyCorroborationFloor(
+    const finalScore = applyCorroborationFloor(
       applyDispositiveFloor(calculateFinalScore(categoryScores, this.weights), detections),
       detections
-    ), signals);
+    );
 
     const experimental = evaluateExperimental(signals, finalScore, detections, this.experimentalBlocking);
     const experimentalBlocked = this.experimentalBlocking && experimental.wouldBlock && finalScore < 0.5;

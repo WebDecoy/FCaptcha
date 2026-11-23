@@ -10,7 +10,6 @@ const {
   applyCorroborationFloor, calculateCategoryScores, detectCDP,
   CORROBORATION_AGREE_AT, CORROBORATION_MIN_AGREE, CORROBORATION_FLOOR,
   DISPOSITIVE_FLOOR, BEHAVIOURAL_CATEGORIES, detectStealthArtifacts,
-  STEALTH_CDP_FLOOR, stealthCDPCorroborated, applyStealthCDPFloor,
 } = require('./engine');
 const { analyzeWorkerConsistency } = require('./detection');
 
@@ -70,12 +69,13 @@ test('the console-attach probe is not scored', () => {
   assert.deepEqual(dets, []);
 });
 
-const stealthCDPSignals = () => ({
+const issue212HumanSignals = () => ({
   behavioral: {
     touchEvents: 0,
     inputForensics: {
       pointerMoveSamples: 30,
       coalescedSamples: 30,
+      coalescedMax: 2,
       pointerMoveZeroRatio: 0.049,
     },
   },
@@ -83,30 +83,8 @@ const stealthCDPSignals = () => ({
   temporal: { pageLoadToFirstInteraction: 249 },
 });
 
-test('captured stealth CDP conjunction floors at the catch threshold', () => {
-  const signals = stealthCDPSignals();
-  assert.equal(stealthCDPCorroborated(signals), true);
-  assert.equal(applyStealthCDPFloor(0.18, signals), STEALTH_CDP_FLOOR);
-  assert.equal(applyStealthCDPFloor(0.91, signals), 0.91);
-  assert.ok(detectCDP(signals).some((d) =>
-    d.reason === 'CDP-driven pointer input corroborated by impossible reaction timing'));
-});
-
-test('stealth CDP enforcement requires every boundary condition', () => {
-  const mutations = [
-    (s) => { s.environmental.cdpRuntime.consoleAttached = false; },
-    (s) => { s.behavioral.inputForensics.pointerMoveSamples = 29; },
-    (s) => { s.behavioral.inputForensics.coalescedSamples = 29; },
-    (s) => { s.behavioral.inputForensics.pointerMoveZeroRatio = 0.05; },
-    (s) => { s.temporal.pageLoadToFirstInteraction = 250; },
-    (s) => { s.behavioral.touchEvents = 3; },
-  ];
-  for (const mutate of mutations) {
-    const signals = stealthCDPSignals();
-    mutate(signals);
-    assert.equal(stealthCDPCorroborated(signals), false);
-    assert.equal(applyStealthCDPFloor(0.18, signals), 0.18);
-  }
+test('continuous human pointer movement from issue 212 is not a CDP detection', () => {
+  assert.deepEqual(detectCDP(issue212HumanSignals()), []);
 });
 
 // Live measurements from the webdecoy.com demo, 2026-09-09, v1.35.0. An

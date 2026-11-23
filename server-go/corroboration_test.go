@@ -140,13 +140,14 @@ func TestConsoleAttachedIsNotScored(t *testing.T) {
 	}
 }
 
-func stealthCDPSignals() map[string]interface{} {
+func issue212HumanSignals() map[string]interface{} {
 	return map[string]interface{}{
 		"behavioral": map[string]interface{}{
 			"touchEvents": float64(0),
 			"inputForensics": map[string]interface{}{
 				"pointerMoveSamples":   float64(30),
 				"coalescedSamples":     float64(30),
+				"coalescedMax":         float64(2),
 				"pointerMoveZeroRatio": float64(0.049),
 			},
 		},
@@ -155,55 +156,10 @@ func stealthCDPSignals() map[string]interface{} {
 	}
 }
 
-func TestStealthCDPConjunctionFloorsAtCatchThreshold(t *testing.T) {
-	signals := stealthCDPSignals()
-	if !stealthCDPCorroborated(signals) {
-		t.Fatal("complete captured stealth-CDP conjunction did not match")
-	}
-	if got := applyStealthCDPFloor(0.18, signals); got != stealthCDPFloor {
-		t.Fatalf("want stealth floor %v, got %v", stealthCDPFloor, got)
-	}
-	if got := applyStealthCDPFloor(0.91, signals); got != 0.91 {
-		t.Fatalf("floor lowered a higher score to %v", got)
-	}
+func TestContinuousHumanPointerMovementFromIssue212IsNotACDPDetection(t *testing.T) {
 	e := NewScoringEngine("test-secret")
-	found := false
-	for _, detection := range e.detectCDP(signals) {
-		if detection.Reason == "CDP-driven pointer input corroborated by impossible reaction timing" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("detectCDP did not report the corroborated stealth signal")
-	}
-}
-
-func TestStealthCDPEnforcementRequiresEveryBoundaryCondition(t *testing.T) {
-	mutations := []func(map[string]interface{}){
-		func(s map[string]interface{}) {
-			getMap(getMap(s, "environmental"), "cdpRuntime")["consoleAttached"] = false
-		},
-		func(s map[string]interface{}) {
-			getMap(getMap(s, "behavioral"), "inputForensics")["pointerMoveSamples"] = float64(29)
-		},
-		func(s map[string]interface{}) {
-			getMap(getMap(s, "behavioral"), "inputForensics")["coalescedSamples"] = float64(29)
-		},
-		func(s map[string]interface{}) {
-			getMap(getMap(s, "behavioral"), "inputForensics")["pointerMoveZeroRatio"] = float64(0.05)
-		},
-		func(s map[string]interface{}) { getMap(s, "temporal")["pageLoadToFirstInteraction"] = float64(250) },
-		func(s map[string]interface{}) { getMap(s, "behavioral")["touchEvents"] = float64(3) },
-	}
-	for i, mutate := range mutations {
-		signals := stealthCDPSignals()
-		mutate(signals)
-		if stealthCDPCorroborated(signals) {
-			t.Errorf("mutation %d still matched", i)
-		}
-		if got := applyStealthCDPFloor(0.18, signals); got != 0.18 {
-			t.Errorf("mutation %d unexpectedly floored to %v", i, got)
-		}
+	if got := e.detectCDP(issue212HumanSignals()); len(got) != 0 {
+		t.Fatalf("ordinary continuous pointer movement produced CDP detections: %+v", got)
 	}
 }
 

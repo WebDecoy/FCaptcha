@@ -730,7 +730,6 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	categoryScores := e.calculateCategoryScores(detections)
 	finalScore := applyDispositiveFloor(e.calculateFinalScore(categoryScores), detections)
 	finalScore = applyCorroborationFloor(finalScore, detections)
-	finalScore = applyStealthCDPFloor(finalScore, signals)
 
 	experimental := evaluateExperimental(signals, finalScore, detections, e.experimentalBlocking)
 	experimentalBlocked := e.experimentalBlocking && experimental.WouldBlock && finalScore < 0.5
@@ -1704,17 +1703,11 @@ func (e *ScoringEngine) detectCDP(signals map[string]interface{}) []DetectionRes
 	}
 
 	// cdpRuntime.consoleAttached is collected but not scored: measured on real
-	// visitors it fires in every Chrome and Safari session (no DevTools, no
-	// extensions), so it cannot tell a person from an agent by itself. It is
-	// scored only as part of the measured three-way conjunction below.
-	if stealthCDPCorroborated(signals) {
-		results = append(results, DetectionResult{
-			Category:   CategoryCDP,
-			Score:      0.9,
-			Confidence: 0.9,
-			Reason:     "CDP-driven pointer input corroborated by impossible reaction timing",
-		})
-	}
+	// visitors it fires in ordinary Chrome and Safari sessions. A former rule
+	// combined it with early mouse movement and a low movement-delta ratio, but
+	// issue #212 demonstrated that a person moving the mouse while navigation
+	// completes can produce that entire shape. Ambiguous pointer telemetry must
+	// not create either a detection or an observation.
 
 	cdp := getMap(env, "cdp")
 
@@ -2579,40 +2572,8 @@ const (
 	// corroborationEpsilon absorbs the few ulps a noisy-OR product lands from a
 	// round number (0.75×0.8 is 0.3999999999999999, not 0.4), so agreement does
 	// not depend on the order the arithmetic happened to run in.
-	corroborationEpsilon              = 1e-9
-	stealthCDPMinPointerSamples       = 30.0
-	stealthCDPZeroRatioBelow          = 0.05
-	stealthCDPFirstInteractionBelowMS = 250.0
-	stealthCDPFloor                   = 0.8
+	corroborationEpsilon = 1e-9
 )
-
-// stealthCDPCorroborated is the production-safe subset of the experimental
-// pointer observation. Pointer movement alone remains non-blocking: the
-// recorder and some real hardware can produce the same ratio. The conjunction
-// catches 10/10 captured stealth-CDP sessions and 0 supported humans. It is not
-// dispositive; an agent can evade it by waiting 250ms.
-func stealthCDPCorroborated(signals map[string]interface{}) bool {
-	behavioral := getMap(signals, "behavioral")
-	forensics := getMap(behavioral, "inputForensics")
-	temporal := getMap(signals, "temporal")
-	runtime := getMap(getMap(signals, "environmental"), "cdpRuntime")
-	ratio, ratioOK := forensics["pointerMoveZeroRatio"].(float64)
-	first := getFloat(temporal, "pageLoadToFirstInteraction")
-	return behavioral != nil && forensics != nil && ratioOK && !math.IsNaN(ratio) && !math.IsInf(ratio, 0) &&
-		!isTouchModality(behavioral) &&
-		getFloat(forensics, "pointerMoveSamples") >= stealthCDPMinPointerSamples &&
-		getFloat(forensics, "coalescedSamples") >= stealthCDPMinPointerSamples &&
-		ratio >= 0 && ratio < stealthCDPZeroRatioBelow &&
-		getBool(runtime, "consoleAttached") &&
-		first > 0 && first < stealthCDPFirstInteractionBelowMS
-}
-
-func applyStealthCDPFloor(score float64, signals map[string]interface{}) float64 {
-	if stealthCDPCorroborated(signals) {
-		return math.Max(score, stealthCDPFloor)
-	}
-	return score
-}
 
 // behaviouralCategories are the categories a browser trips by how it moves
 // rather than by what it is. A patched binary can hide what it is; it cannot
