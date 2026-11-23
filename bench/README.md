@@ -158,18 +158,22 @@ import its request into the corpus with explicit browser and input labels:
 ```bash
 python3 capture/camoufox_bench.py --manual --modes widget \
   --environment-label 'Chrome 156, macOS, default settings' \
+  --expected-client-version 1.51.4 \
   --out test-results/chrome-trackpad
 
 node tools/import-manual-capture.js \
   --report test-results/chrome-trackpad/report.json \
   --out corpus/captured/human-chrome-macos-trackpad.json \
   --group real-trackpad --scenario chrome-macos-trackpad \
-  --input 'built-in trackpad and keyboard'
+  --input 'built-in trackpad and keyboard' \
+  --expected-client-version 1.51.4
 ```
 
 The importer refuses automated or normalized reports, strips the consumed
-challenge nonce, retains only replay-relevant request headers, records a hash of
-the source report, and will not overwrite an existing corpus file or sample id.
+challenge nonce, retains only replay-relevant request headers, records the
+served client version and hash plus a hash of the source report, and will not
+overwrite an existing corpus file or sample id. With an expected version it
+also requires the release's versioned neutral input telemetry.
 
 ### Checking a hosted deployment
 

@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import platform
 import random
+import re
 import subprocess
 import threading
 import time
@@ -28,6 +29,7 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 BROWSER_VERSION = "152.0.4-beta.30"
+CLIENT_VERSION_PATTERN = re.compile(rb"\bversion\s*:\s*['\"](\d+\.\d+\.\d+)['\"]")
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <title>FCaptcha browser measurement</title>
 <style>body{font:18px system-ui;margin:32px;max-width:680px}input{font:inherit}
@@ -86,7 +88,7 @@ def request(url, body=None, headers=None):
 class CaptureServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, backend, mode, observations=False):
+    def __init__(self, backend, mode, observations=False, expected_client_version=None):
         super().__init__(('127.0.0.1', 0), CaptureHandler)
         self.backend = backend
         self.mode = mode
@@ -95,6 +97,8 @@ class CaptureServer(ThreadingHTTPServer):
         self.records = []
         self.requests = []
         self.client_sha256 = None
+        self.client_version = None
+        self.expected_client_version = expected_client_version
         self.finished = threading.Event()
         self.observations = None
         self.observations_finished = threading.Event()
@@ -173,6 +177,8 @@ class CaptureHandler(BaseHTTPRequestHandler):
             self.server.requests.append({'method': self.command, 'path': path, 'status': status})
             if path == '/fcaptcha.js':
                 self.server.client_sha256 = hashlib.sha256(payload).hexdigest()
+                match = CLIENT_VERSION_PATTERN.search(payload)
+                self.server.client_version = match.group(1).decode() if match else None
             if path in ('/api/score', '/api/verify'):
                 self.server.records.append({
                     'endpoint': path, 'httpStatus': status,
@@ -186,8 +192,8 @@ class CaptureHandler(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def capture_server(backend, mode, observations=False):
-    server = CaptureServer(backend, mode, observations)
+def capture_server(backend, mode, observations=False, expected_client_version=None):
+    server = CaptureServer(backend, mode, observations, expected_client_version)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -234,6 +240,13 @@ def finish_capture(server, secret):
         record['tokenValid'] = status == 200 and verification.get('valid') is True
     record['clientIp'] = server.client_ip
     record['clientSha256'] = getattr(server, 'client_sha256', None)
+    record['clientVersion'] = getattr(server, 'client_version', None)
+    expected_client_version = getattr(server, 'expected_client_version', None)
+    if expected_client_version and record['clientVersion'] != expected_client_version:
+        raise RuntimeError(
+            f"Expected FCaptcha client {expected_client_version}, served "
+            f"{record['clientVersion'] or 'an unversioned client'}"
+        )
     if record['httpStatus'] != 200:
         raise RuntimeError(f"Scoring HTTP {record['httpStatus']}")
     if result.get('experimental', {}).get('mode') != 'observe':
@@ -279,7 +292,8 @@ def run_case(args, case, index):
               'seed': args.seed + index, 'normalization': 'none',
               'startedAt': datetime.now(timezone.utc).isoformat()}
     started = time.monotonic()
-    with capture_server(args.server, case['mode'], args.observations) as (server, url):
+    with capture_server(args.server, case['mode'], args.observations,
+                        args.expected_client_version) as (server, url):
         try:
             if case['browser'] == 'camoufox':
                 from camoufox.sync_api import Camoufox
@@ -359,7 +373,8 @@ def manual_capture(args):
               'inputSource': 'operator-declared manual input', 'provenance': 'captured',
               'headless': False, 'humanize': False, 'privacy': 'operator-described',
               'mode': args.modes[0], 'normalization': 'none'}
-    with capture_server(args.server, args.modes[0], args.observations) as (server, url):
+    with capture_server(args.server, args.modes[0], args.observations,
+                        args.expected_client_version) as (server, url):
         print(f'Open {url} in your own browser and complete the page. Waiting {args.timeout}s.', flush=True)
         if not server.finished.wait(args.timeout):
             sample['error'] = 'No manual submission received; human baseline remains unmeasured'
@@ -385,7 +400,8 @@ def browser_internal_capture(args):
               'provenance': 'captured', 'headless': False, 'humanize': False,
               'privacy': 'operator-described', 'mode': args.modes[0],
               'normalization': 'none'}
-    with capture_server(args.server, args.modes[0], args.observations) as (server, url):
+    with capture_server(args.server, args.modes[0], args.observations,
+                        args.expected_client_version) as (server, url):
         print(f'Open {url} in {args.environment_label}, then ask {args.agent_label} '
               f'to complete the page. Waiting {args.timeout}s.', flush=True)
         if not server.finished.wait(args.timeout):
@@ -420,6 +436,7 @@ def main():
     capture_mode.add_argument('--external-agent', action='store_true', help='Record a browser-internal agent in an operator-opened browser; attaches no automation driver')
     parser.add_argument('--environment-label', help='Required with --manual or --external-agent; describe the exact browser and environment')
     parser.add_argument('--agent-label', help='Required with --external-agent, e.g. Chrome Auto Browse (Gemini)')
+    parser.add_argument('--expected-client-version', help='Require the loopback server to serve this exact FCaptcha client version')
     parser.add_argument('--verdict-log', type=Path, help='Local server verdict log; joins diagnostics missing from /api/score responses')
     parser.add_argument('--observations', action='store_true', help='Collect research probes after scoring; never submitted to FCaptcha')
     parser.add_argument('--control-settings', nargs='+', choices=['default', 'privacy', 'reduced-motion', 'privacy-reduced-motion'],
@@ -439,6 +456,10 @@ def main():
         parser.error('--manual/--external-agent requires --environment-label and exactly one --modes value')
     if args.external_agent and not args.agent_label:
         parser.error('--external-agent requires --agent-label')
+    if (args.manual or args.external_agent) and not args.expected_client_version:
+        parser.error('--manual/--external-agent requires --expected-client-version')
+    if args.expected_client_version and not re.fullmatch(r'\d+\.\d+\.\d+', args.expected_client_version):
+        parser.error('--expected-client-version must be a semantic version such as 1.51.4')
     args.secret = os.environ.get('FCAPTCHA_VERIFY_SECRET') or os.environ.get('FCAPTCHA_SECRET')
     if not args.secret:
         parser.error('Set FCAPTCHA_SECRET (or FCAPTCHA_VERIFY_SECRET) to validate issued tokens')
@@ -468,6 +489,7 @@ def main():
         'schemaVersion': 1, 'startedAt': datetime.now(timezone.utc).isoformat(),
         'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'clientSha256': hashlib.sha256((ROOT/'client/fcaptcha.js').read_bytes()).hexdigest(),
+        'expectedClientVersion': args.expected_client_version,
         'recorderSha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'platform': platform.platform(), 'server': args.server,
         'camoufoxBuild': args.browser_version, 'camoufoxConfig': args.camoufox_config,

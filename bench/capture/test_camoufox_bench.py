@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -10,6 +11,7 @@ from unittest.mock import patch
 import urllib.request
 
 from camoufox_bench import (
+    CLIENT_VERSION_PATTERN,
     attach_failed_captures,
     attach_verdict_log,
     capture_server,
@@ -29,6 +31,38 @@ def sample():
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_client_version_pattern_accepts_source_and_minified_forms(self):
+        self.assertEqual(CLIENT_VERSION_PATTERN.search(b"version: '1.51.4'").group(1), b'1.51.4')
+        self.assertEqual(CLIENT_VERSION_PATTERN.search(b'version:"1.51.4"').group(1), b'1.51.4')
+
+    def test_proxy_records_the_exact_served_client_version_and_hash(self):
+        source = b"window.FCaptcha={version:'1.51.4'}"
+
+        class Backend(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/javascript')
+                self.end_headers()
+                self.wfile.write(source)
+
+        backend = ThreadingHTTPServer(('127.0.0.1', 0), Backend)
+        thread = threading.Thread(target=backend.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with capture_server(f'http://127.0.0.1:{backend.server_port}', 'widget',
+                                expected_client_version='1.51.4') as (server, url):
+                with urllib.request.urlopen(url + 'fcaptcha.js') as response:
+                    self.assertEqual(response.read(), source)
+                self.assertEqual(server.client_version, '1.51.4')
+                self.assertEqual(server.client_sha256, hashlib.sha256(source).hexdigest())
+        finally:
+            backend.shutdown()
+            backend.server_close()
+            thread.join()
+
     def test_observations_are_opt_in_and_separate_from_scoring(self):
         with capture_server('', 'invisible', observations=True) as (server, url):
             def submit():
@@ -134,6 +168,17 @@ class MeasurementTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'valid token'):
                 finish_capture(server, 'test-secret')
         self.assertNotIn('token', record['response'])
+
+    def test_expected_client_version_mismatch_fails_the_capture(self):
+        record = sample()['capture']
+        record.update(httpStatus=200)
+        server = SimpleNamespace(
+            records=[record], backend='http://127.0.0.1:3000', client_ip='192.0.2.1',
+            client_sha256='a' * 64, client_version='1.51.3',
+            expected_client_version='1.51.4',
+        )
+        with self.assertRaisesRegex(RuntimeError, 'Expected FCaptcha client 1.51.4'):
+            finish_capture(server, 'test-secret')
 
     def test_failed_capture_retains_verification_reason_without_token(self):
         record = sample()['capture']

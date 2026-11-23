@@ -50,6 +50,27 @@ test('imports manual signals without stale challenge state or transport litter',
   assert.match(sample.capture.reportSha256, /^[a-f0-9]{64}$/);
 });
 
+test('pins released-client provenance and requires the new neutral telemetry', () => {
+  const released = report();
+  const capture = released.samples[0].capture;
+  capture.clientVersion = '1.51.4';
+  capture.clientSha256 = 'a'.repeat(64);
+  capture.request.signals.behavioral = {
+    inputForensics: { clickPrelude: { version: 1 }, keyTiming: { version: 1 } },
+  };
+  const pinned = { ...options, expectedClientVersion: '1.51.4' };
+  const sample = toCorpusSample(released, pinned, Buffer.from('released-report'));
+
+  assert.equal(sample.capture.clientVersion, '1.51.4');
+  assert.equal(sample.capture.clientSha256, 'a'.repeat(64));
+
+  capture.clientVersion = '1.51.3';
+  assert.throws(() => toCorpusSample(released, pinned), /expected FCaptcha client 1\.51\.4/);
+  capture.clientVersion = '1.51.4';
+  delete capture.request.signals.behavioral.inputForensics.keyTiming;
+  assert.throws(() => toCorpusSample(released, pinned), /input telemetry is missing/);
+});
+
 test('rejects automated and normalized samples', () => {
   assert.throws(
     () => toCorpusSample(report({ inputSource: 'playwright' }), options),

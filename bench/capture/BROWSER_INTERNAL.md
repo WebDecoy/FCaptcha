@@ -29,7 +29,9 @@ separation that stays clear of the human panel.
 ## Paired protocol
 
 Use one browser version, machine, profile, network, page mode, and FCaptcha
-commit for both sides of each pair:
+release for both sides of each pair. The recorder requires the expected client
+version, extracts that version from the exact `/fcaptcha.js` response, and
+records its SHA-256. A mismatch fails the capture before it can be imported:
 
 1. Browser-internal session: the named feature completes the page without human
    clicks or typing after the capture starts.
@@ -48,6 +50,7 @@ python3 bench/capture/camoufox_bench.py \
   --external-agent --modes widget --observations --timeout 600 \
   --environment-label 'Chrome <exact version>, macOS, signed-in test profile' \
   --agent-label 'Chrome Auto Browse (Gemini)' \
+  --expected-client-version 1.51.4 \
   --server http://127.0.0.1:18881 \
   --out bench/test-results/chrome-auto-browse-widget-0000
 ```
@@ -62,6 +65,7 @@ Record the paired manual control with the same mode and environment label:
 python3 bench/capture/camoufox_bench.py \
   --manual --modes widget --observations --timeout 600 \
   --environment-label 'Chrome <same version>, macOS, signed-in test profile' \
+  --expected-client-version 1.51.4 \
   --server http://127.0.0.1:18881 \
   --out bench/test-results/chrome-manual-widget-0000
 ```
@@ -79,13 +83,17 @@ node bench/tools/import-browser-internal-capture.js \
   --report bench/test-results/chrome-auto-browse-widget-0000/report.json \
   --out bench/corpus/captured/agent-browser-internal-widget-0000.json \
   --scenario chrome-auto-browse-widget \
-  --index 0 --input 'browser-internal pointer and keyboard'
+  --index 0 --input 'browser-internal pointer and keyboard' \
+  --expected-client-version 1.51.4
 ```
 
-Import the paired human report with `import-manual-capture.js`. The agent
-importer rejects human, externally driven, normalized, incomplete, and unlabeled
-reports. Both importers strip stale challenge state, retain replay-relevant
-headers, and hash the source report.
+Import the paired human report with `import-manual-capture.js` and the same
+`--expected-client-version 1.51.4` argument. The agent importer rejects human,
+externally driven, normalized, incomplete, and unlabeled reports. When an
+expected version is supplied, both importers also reject a version mismatch,
+missing client hash, or missing `clickPrelude`/`keyTiming` telemetry. Imported
+samples retain the served client version and hash alongside the source-report
+hash.
 
 Run the ordinary benchmark. The first real agent sample removed the former
 `gap/browser-internal/0000` marker; do not reintroduce a no-data marker while

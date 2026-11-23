@@ -16,6 +16,7 @@ function parseArgs(argv) {
     else if (arg === '--scenario') args.scenario = argv[++i];
     else if (arg === '--input') args.input = argv[++i];
     else if (arg === '--notes') args.notes = argv[++i];
+    else if (arg === '--expected-client-version') args.expectedClientVersion = argv[++i];
     else if (arg === '--index') args.index = Number(argv[++i]);
     else if (arg === '--help' || arg === '-h') args.help = true;
     else throw new Error(`unknown argument: ${arg}`);
@@ -28,7 +29,8 @@ function usage() {
   node bench/tools/import-browser-internal-capture.js \\
     --report bench/test-results/<capture>/report.json \\
     --out bench/corpus/captured/agent-browser-internal.json \\
-    --scenario chrome-auto-browse-widget --input "browser-internal pointer/keyboard"
+    --scenario chrome-auto-browse-widget --input "browser-internal pointer/keyboard" \\\\
+    --expected-client-version 1.51.4
 
 The output path must not exist. The report must come from camoufox_bench.py's
 --external-agent mode. The importer refuses manual-human, Playwright-driven,
@@ -48,8 +50,8 @@ function main() {
     process.stdout.write(usage());
     return;
   }
-  if (!args.report || !args.out || !args.scenario || !args.input) {
-    throw new Error(`--report, --out, --scenario and --input are required\n\n${usage()}`);
+  if (!args.report || !args.out || !args.scenario || !args.input || !args.expectedClientVersion) {
+    throw new Error(`--report, --out, --scenario, --input and --expected-client-version are required\n\n${usage()}`);
   }
   requireSlug(args.scenario, 'scenario');
   if (!Number.isInteger(args.index) || args.index < 0) {
