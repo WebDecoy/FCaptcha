@@ -15,10 +15,15 @@ reading would call major. Read the **Breaking** entries rather than the number.
 
 ## [Unreleased]
 
+## [1.51.4] — 2026-11-23
+
 ### Added
 - Collect bounded, content-free click-prelude and global key-timing summaries
   for paired browser-internal agent research. The new fields are neutral
   telemetry: they do not emit a detection, alter a score, or affect a token.
+
+This release adds measurement only. It does not add a detector, observation,
+score floor, or blocking-policy change.
 
 ## [1.51.3] — 2026-11-23
 
