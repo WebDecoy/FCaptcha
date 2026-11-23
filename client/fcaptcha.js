@@ -2624,11 +2624,36 @@
 
     // Whether the held challenge is at or near its expiry. A challenge with no
     // expiry stated is treated as good, since there is nothing to compare.
+    //
+    // expiresAt is on the server's clock. Comparing it with Date.now() meant a
+    // device clock running ~5 minutes fast saw every fresh challenge as
+    // expired, and the widget could never verify. When the issue time is known,
+    // measure the challenge's lifetime (expiresAt - issued) from when it
+    // arrived, which uses the device clock on both sides.
     challengeExpired() {
       const expiresAt = this.challenge && this.challenge.expiresAt;
       if (!expiresAt) return false;
 
+      const issuedAt = this._challengeIssuedAt();
+      if (issuedAt !== null && this.challengeReceivedAt) {
+        return Date.now() >= this.challengeReceivedAt + (expiresAt - issuedAt) - CHALLENGE_REFRESH_MARGIN_MS;
+      }
       return Date.now() >= expiresAt - CHALLENGE_REFRESH_MARGIN_MS;
+    }
+
+    // The server's issue time for the held challenge: an explicit numeric
+    // `timestamp` when the server sends one, else the issue time every server
+    // writes into the signed prefix ("<id>:<issuedAtMs>:<difficulty>"), else
+    // null.
+    _challengeIssuedAt() {
+      const c = this.challenge;
+      if (typeof c.timestamp === 'number' && isFinite(c.timestamp)) return c.timestamp;
+      const parts = typeof c.prefix === 'string' ? c.prefix.split(':') : [];
+      if (parts.length === 3 && /^\d+$/.test(parts[1])) {
+        const issued = Number(parts[1]);
+        if (issued > 0 && issued <= c.expiresAt) return issued;
+      }
+      return null;
     }
 
     // Hold a solved challenge until it is old enough for the server to accept

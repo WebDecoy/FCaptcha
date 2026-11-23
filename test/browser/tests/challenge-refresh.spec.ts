@@ -101,6 +101,30 @@ test.describe('PoW challenge refresh', () => {
     expect(await challengeId(page)).toBe(first);
   });
 
+  // expiresAt is on the server's clock. A device clock ten minutes fast used
+  // to see every fresh challenge as already expired, so the widget threw
+  // "Challenge changed before solving" and could never verify.
+  for (const skewMinutes of [10, -10]) {
+    test(`keeps a fresh challenge when the device clock is ${skewMinutes} minutes off`, async ({ page }) => {
+      await page.clock.install({ time: Date.now() + skewMinutes * 60_000 });
+      const fetched = recordChallengeFetches(page);
+      await loadWidget(page);
+
+      const first = await challengeId(page);
+      expect(await page.evaluate(() => (window as any).__widget().powManager.challengeExpired())).toBe(false);
+
+      const solved = await page.evaluate(async () => {
+        const solution = await (window as any)
+          .__widget()
+          .powManager.solveWithSignalsHash('challenge-refresh-test', 'deadbeef');
+        return solution.challengeId;
+      });
+
+      expect(fetched.length, 'a fresh challenge must not be thrown away').toBe(1);
+      expect(solved).toBe(first);
+    });
+  }
+
   test('a failed attempt leaves a fresh challenge ready for the retry', async ({ page }) => {
     await loadWidget(page);
     const first = await challengeId(page);

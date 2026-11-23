@@ -16,6 +16,11 @@ reading would call major. Read the **Breaking** entries rather than the number.
 ## [Unreleased]
 
 ### Fixed
+- The widget could never verify on a device whose clock ran about five minutes
+  or more ahead of the server's: it compared the challenge's server-side expiry
+  with the device clock, saw every fresh challenge as expired, and failed with
+  "Challenge changed before solving". It now measures the challenge's lifetime
+  from when it arrived, on the device clock alone.
 - Remove the `pointer-movement-never-zero` observation and the related
   fast-start stealth-CDP score floor. A real Edge user who continued moving a
   mouse while the page loaded demonstrated that the complete conjunction could
