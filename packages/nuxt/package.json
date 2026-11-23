@@ -1,6 +1,6 @@
 {
   "name": "@webdecoy/fcaptcha-nuxt",
-  "version": "1.51.3",
+  "version": "1.51.4",
   "private": true,
   "description": "Nuxt 4 module for the self-hosted FCaptcha widget",
   "type": "module",
