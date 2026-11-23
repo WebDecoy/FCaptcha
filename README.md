@@ -159,7 +159,7 @@ is in `fcaptcha_score` there.
 
 A **prebuilt public image** is available at [`ghcr.io/webdecoy/fcaptcha`](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) for **Linux AMD64 and ARM64**. No GitHub login or source build is required. Use `:latest` to try the current image, or pin a release tag (for example, `:1.51.1`) or digest for reproducible deployments.
 
-See the [Docker guide](docker/README.md) for local startup, Compose, version pinning, and upgrades. If you already run CapRover, [install FCaptcha from One-Click Apps](docker/README.md#deploy-with-caprover).
+See the [Docker guide](docker/README.md) for local startup, Compose, version pinning, and upgrades. If you already run CapRover, [install FCaptcha from One-Click Apps](docker/README.md#deploy-with-caprover). If you run Unraid, [install FCaptcha from Community Apps](https://ca.unraid.net/apps/fcaptcha-1sjnpad0cymf0h).
 
 Using Better Auth? Follow the [runnable email sign-up example](examples/better-auth/) to point its CAPTCHA plugin at FCaptcha.
 
