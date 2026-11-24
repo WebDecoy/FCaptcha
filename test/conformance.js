@@ -232,6 +232,10 @@ async function run() {
       assert.strictEqual(identity.status, scenario === 'identity-only' ? 'detected' : 'unknown');
       assert.deepStrictEqual(identity.detections.map((d) => d.id),
         scenario === 'identity-only' ? ['gpu-backend-os-mismatch'] : []);
+      const externalCdpInput = result.experimental.observations['external-cdp-input-shape-v1'];
+      assert.strictEqual(externalCdpInput.mode, 'observe');
+      assert.strictEqual(externalCdpInput.status, 'unknown');
+      assert.deepStrictEqual(externalCdpInput.detections, []);
       assert.ok(result.score < 0.5, response.text);
       assert.strictEqual(result.success, !blocked, response.text);
       if (blocked) {

@@ -3,7 +3,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { evaluateExperimental } = require('./experimental');
+const {
+  evaluateExperimental,
+  EXTERNAL_CDP_INPUT_POLICY,
+  externalCdpInputObservation,
+} = require('./experimental');
 const { createScoringEngine } = require('./index');
 const { experimentalBlockingEnabled } = require('./config');
 const fixtures = require('../test/fixtures/experimental-scoring.json');
@@ -11,12 +15,77 @@ const fixtures = require('../test/fixtures/experimental-scoring.json');
 for (const fixture of fixtures.cases) {
   test(`experimental parity: ${fixture.name}`, () => {
     const before = JSON.stringify(fixture);
-    assert.deepEqual(evaluateExperimental(fixture.signals, fixture.productionScore, fixture.detections), fixture.expected);
-    assert.deepEqual(evaluateExperimental(fixture.signals, fixture.productionScore, fixture.detections, true),
-      { ...fixture.expected, mode: 'block' });
+    const observe = evaluateExperimental(fixture.signals, fixture.productionScore, fixture.detections);
+    const block = evaluateExperimental(fixture.signals, fixture.productionScore, fixture.detections, true);
+    const withoutExternalCdp = (result) => {
+      const { [EXTERNAL_CDP_INPUT_POLICY]: observation, ...observations } = result.observations;
+      assert.equal(observation.mode, 'observe');
+      return { ...result, observations };
+    };
+    assert.deepEqual(withoutExternalCdp(observe), fixture.expected);
+    assert.deepEqual(withoutExternalCdp(block), { ...fixture.expected, mode: 'block' });
     assert.equal(JSON.stringify(fixture), before, 'observations must not mutate production inputs');
   });
 }
+
+const inputShape = ({
+  inputEvents = 13,
+  inputsWithoutKeys = 1,
+  inputsWithoutInputType = 1,
+  selectAllShortcuts = 1,
+  pasteEvents = 0,
+  pasteInputs = 0,
+  gestures = 2,
+  instantRatio = 1,
+} = {}) => ({
+  formAnalysis: { typing: {
+    inputEvents,
+    inputsWithoutKeys,
+    inputsWithoutInputType,
+    selectAllShortcuts,
+    pasteEvents,
+    pasteInputs,
+  } },
+  behavioral: { scrollMorphology: { gestures, instantRatio } },
+});
+
+test('external CDP input observation detects only the full paired Browser Harness shape', () => {
+  const observation = externalCdpInputObservation(inputShape());
+  assert.equal(observation.mode, 'observe');
+  assert.equal(observation.status, 'detected');
+  assert.deepEqual(observation.detections.map((row) => row.id), ['external-cdp-form-input-shape']);
+  assert.match(observation.detections[0].reason, /assistive input/);
+});
+
+test('accessibility-adjacent partial input shapes stay clear', () => {
+  const controls = [
+    inputShape({ selectAllShortcuts: 0 }), // dictation, autofill, or a password manager
+    inputShape({ inputsWithoutKeys: 0, inputsWithoutInputType: 0 }), // keyboard/screen-reader select-all
+    inputShape({ pasteEvents: 1 }), // explicit assistive or ordinary paste
+    inputShape({ gestures: 1 }), // anchor, switch, or reduced-motion navigation
+    inputShape({ instantRatio: 0.5 }), // paired manual-control ceiling
+  ];
+  for (const signals of controls) {
+    assert.equal(externalCdpInputObservation(signals).status, 'clear');
+  }
+});
+
+test('missing old-client telemetry is unknown, never detected', () => {
+  assert.deepEqual(externalCdpInputObservation({}), {
+    mode: 'observe', status: 'unknown', detections: [],
+  });
+  assert.equal(externalCdpInputObservation({
+    formAnalysis: { typing: {} }, behavioral: { scrollMorphology: {} },
+  }).status, 'unknown');
+});
+
+test('external CDP observation never changes score, gate, or production detections', () => {
+  const result = evaluateExperimental(inputShape(), 0.1, []);
+  assert.equal(result.observations[EXTERNAL_CDP_INPUT_POLICY].status, 'detected');
+  assert.equal(result.score, 0.1);
+  assert.equal(result.wouldBlock, false);
+  assert.deepEqual(result.detections, []);
+});
 
 test('experimental blocking requires the current policy and library options override the environment', () => {
   const policy = 'stealth-corroboration-v1';
