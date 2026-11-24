@@ -8,6 +8,48 @@ const { calculateCategoryScores, BEHAVIOURAL_CATEGORIES, CORROBORATION_AGREE_AT,
 // change. An old selector must never silently opt an operator into a new policy.
 const EXPERIMENTAL_POLICY = 'stealth-corroboration-v1';
 const ANIMATION_POLICY = 'animation-consistency-v1';
+const EXTERNAL_CDP_INPUT_POLICY = 'external-cdp-input-shape-v1';
+
+const finite = (value) => typeof value === 'number' && Number.isFinite(value);
+
+/**
+ * Observe the complete Browser Harness 0.1.13 form-input shape.
+ *
+ * None of the components is safe alone. Assistive input, dictation, autofill,
+ * password managers, keyboard shortcuts, anchor navigation, and reduced-motion
+ * interfaces can each overlap one or two of them. The initial paired cohort
+ * separated only when the synthetic fill, select-all, and repeated instant
+ * scrolling occurred together. Even that conjunction remains observation-only
+ * until independent accessibility and machine/profile replication exists.
+ */
+function externalCdpInputObservation(signals) {
+  const typing = signals.formAnalysis?.typing;
+  const scroll = signals.behavioral?.scrollMorphology;
+  const fields = [
+    typing?.inputEvents,
+    typing?.inputsWithoutKeys,
+    typing?.inputsWithoutInputType,
+    typing?.selectAllShortcuts,
+    typing?.pasteEvents,
+    typing?.pasteInputs,
+    scroll?.gestures,
+    scroll?.instantRatio,
+  ];
+  if (!typing || !scroll || !fields.every(finite)) {
+    return { mode: 'observe', status: 'unknown', detections: [] };
+  }
+
+  const syntheticFill = typing.inputEvents > 0 && typing.inputsWithoutKeys > 0 &&
+    typing.inputsWithoutInputType > 0 && typing.pasteEvents === 0 && typing.pasteInputs === 0;
+  const selectAll = typing.selectAllShortcuts > 0;
+  const repeatedInstantScroll = scroll.gestures >= 2 && scroll.instantRatio > 0.5;
+  const status = syntheticFill && selectAll && repeatedInstantScroll ? 'detected' : 'clear';
+
+  return { mode: 'observe', status, detections: status === 'detected' ? [{
+    id: 'external-cdp-form-input-shape',
+    reason: 'External-CDP form-input shape; observe only because assistive input, autofill, shortcuts, and navigation can overlap',
+  }] : [] };
+}
 
 function animationObservation(signals) {
   const probe = signals.environmental?.animationConsistency;
@@ -55,8 +97,14 @@ function evaluateExperimental(signals, productionScore, detections, blocking = f
     observations: {
       [ANIMATION_POLICY]: animationObservation(signals),
       [IDENTITY_POLICY]: identityObservation(signals),
+      [EXTERNAL_CDP_INPUT_POLICY]: externalCdpInputObservation(signals),
     },
   };
 }
 
-module.exports = { evaluateExperimental, EXPERIMENTAL_POLICY };
+module.exports = {
+  evaluateExperimental,
+  EXPERIMENTAL_POLICY,
+  EXTERNAL_CDP_INPUT_POLICY,
+  externalCdpInputObservation,
+};

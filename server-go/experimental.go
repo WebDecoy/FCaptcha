@@ -9,6 +9,7 @@ import (
 // Change the ID when evidence, thresholds, or scoring semantics change so an
 // existing selector cannot silently opt an operator into a different policy.
 const experimentalPolicy = "stealth-corroboration-v1"
+const externalCDPInputPolicy = "external-cdp-input-shape-v1"
 
 func experimentalBlockingEnabled() bool {
 	return strings.TrimSpace(os.Getenv("FCAPTCHA_EXPERIMENTAL_BLOCKING")) == experimentalPolicy
@@ -31,6 +32,59 @@ type ExperimentalObservation struct {
 	Mode       string                  `json:"mode"`
 	Status     string                  `json:"status"`
 	Detections []ExperimentalDetection `json:"detections"`
+}
+
+func finiteNumber(value interface{}) (float64, bool) {
+	var number float64
+	switch n := value.(type) {
+	case float64:
+		number = n
+	case float32:
+		number = float64(n)
+	case int:
+		number = float64(n)
+	case int64:
+		number = float64(n)
+	default:
+		return 0, false
+	}
+	return number, !math.IsNaN(number) && !math.IsInf(number, 0)
+}
+
+// externalCDPInputObservation observes the complete Browser Harness 0.1.13
+// form-input shape. None of its components is safe alone: assistive input,
+// dictation, autofill, password managers, keyboard shortcuts, anchor
+// navigation, and reduced-motion interfaces can overlap parts of it.
+func externalCDPInputObservation(signals map[string]interface{}) ExperimentalObservation {
+	result := ExperimentalObservation{Mode: "observe", Status: "unknown", Detections: []ExperimentalDetection{}}
+	typing := getMap(getMap(signals, "formAnalysis"), "typing")
+	scroll := getMap(getMap(signals, "behavioral"), "scrollMorphology")
+	inputEvents, inputEventsOK := finiteNumber(typing["inputEvents"])
+	inputsWithoutKeys, inputsWithoutKeysOK := finiteNumber(typing["inputsWithoutKeys"])
+	inputsWithoutInputType, inputsWithoutInputTypeOK := finiteNumber(typing["inputsWithoutInputType"])
+	selectAllShortcuts, selectAllShortcutsOK := finiteNumber(typing["selectAllShortcuts"])
+	pasteEvents, pasteEventsOK := finiteNumber(typing["pasteEvents"])
+	pasteInputs, pasteInputsOK := finiteNumber(typing["pasteInputs"])
+	gestures, gesturesOK := finiteNumber(scroll["gestures"])
+	instantRatio, instantRatioOK := finiteNumber(scroll["instantRatio"])
+	if !(inputEventsOK && inputsWithoutKeysOK && inputsWithoutInputTypeOK && selectAllShortcutsOK &&
+		pasteEventsOK && pasteInputsOK && gesturesOK && instantRatioOK) {
+		return result
+	}
+
+	syntheticFill := inputEvents > 0 && inputsWithoutKeys > 0 && inputsWithoutInputType > 0 &&
+		pasteEvents == 0 && pasteInputs == 0
+	selectAll := selectAllShortcuts > 0
+	repeatedInstantScroll := gestures >= 2 && instantRatio > 0.5
+	result.Status = "clear"
+	if syntheticFill && selectAll && repeatedInstantScroll {
+		result.Status = "detected"
+		result.Detections = append(result.Detections, ExperimentalDetection{
+			ID:     "external-cdp-form-input-shape",
+			Reason: "External-CDP form-input shape; observe only because assistive input, autofill, shortcuts, and navigation can overlap",
+		})
+	}
+	return result
 }
 
 func animationRealm(value interface{}) (bool, bool) {
@@ -109,6 +163,7 @@ func evaluateExperimental(signals map[string]interface{}, productionScore float6
 		Observations: map[string]ExperimentalObservation{
 			"animation-consistency-v1": animationObservation(signals),
 			identityPolicy:             identityObservation(signals),
+			externalCDPInputPolicy:     externalCDPInputObservation(signals),
 		},
 	}
 	if blocking {

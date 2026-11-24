@@ -15,6 +15,15 @@ reading would call major. Read the **Breaking** entries rather than the number.
 
 ## [Unreleased]
 
+### Added
+- Add an observe-only `external-cdp-input-shape-v1` research observation for
+  the complete Browser Harness synthetic-fill, select-all, and repeated instant-
+  scroll conjunction. Accessibility-adjacent partial patterns remain clear.
+
+This observation does not alter scores, recommendations, tokens, challenge
+cost, state updates, or blocking policy. Independent accessibility and
+machine/profile replication remain required before any scoring proposal.
+
 ## [1.51.4] — 2026-11-23
 
 ### Added

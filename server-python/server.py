@@ -1741,6 +1741,43 @@ def animation_observation(signals: Dict) -> Dict:
     }] if status == "detected" else []}
 
 
+EXTERNAL_CDP_INPUT_POLICY = "external-cdp-input-shape-v1"
+
+
+def external_cdp_input_observation(signals: Dict) -> Dict:
+    """Observe the complete Browser Harness 0.1.13 form-input shape.
+
+    Components stay non-actionable alone because assistive input, dictation,
+    autofill, password managers, shortcuts, anchor navigation, and
+    reduced-motion interfaces can overlap parts of the shape.
+    """
+    form = signals.get("formAnalysis")
+    behavioral = signals.get("behavioral")
+    typing = form.get("typing") if isinstance(form, dict) else None
+    scroll = behavioral.get("scrollMorphology") if isinstance(behavioral, dict) else None
+    names = (
+        "inputEvents", "inputsWithoutKeys", "inputsWithoutInputType",
+        "selectAllShortcuts", "pasteEvents", "pasteInputs",
+    )
+    if (not isinstance(typing, dict) or not isinstance(scroll, dict)
+            or any(type(typing.get(name)) not in (int, float)
+                   or not math.isfinite(typing[name]) for name in names)
+            or any(type(scroll.get(name)) not in (int, float)
+                   or not math.isfinite(scroll[name]) for name in ("gestures", "instantRatio"))):
+        return {"mode": "observe", "status": "unknown", "detections": []}
+
+    synthetic_fill = (typing["inputEvents"] > 0 and typing["inputsWithoutKeys"] > 0
+                      and typing["inputsWithoutInputType"] > 0 and typing["pasteEvents"] == 0
+                      and typing["pasteInputs"] == 0)
+    select_all = typing["selectAllShortcuts"] > 0
+    repeated_instant_scroll = scroll["gestures"] >= 2 and scroll["instantRatio"] > 0.5
+    status = "detected" if synthetic_fill and select_all and repeated_instant_scroll else "clear"
+    return {"mode": "observe", "status": status, "detections": [{
+        "id": "external-cdp-form-input-shape",
+        "reason": "External-CDP form-input shape; observe only because assistive input, autofill, shortcuts, and navigation can overlap",
+    }] if status == "detected" else []}
+
+
 def evaluate_experimental(signals: Dict, production_score: float, detections: List[Detection], blocking: bool = False) -> Dict:
     """Observe by default: #87's stealth session and a DevTools override can look
     identical. Never merge this evidence into production scoring or state.
@@ -1771,6 +1808,7 @@ def evaluate_experimental(signals: Dict, production_score: float, detections: Li
         "observations": {
             "animation-consistency-v1": animation_observation(signals),
             IDENTITY_POLICY: identity_observation(signals),
+            EXTERNAL_CDP_INPUT_POLICY: external_cdp_input_observation(signals),
         },
     }
 

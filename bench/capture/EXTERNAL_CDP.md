@@ -136,3 +136,12 @@ These results describe one machine, browser build, driver release, task, and
 input method. They do not authorize enforcement. Independent machine/profile
 replication and a separate reviewed scoring change with false-positive analysis
 remain required. Widget and invisible follow-up are also still unmeasured.
+
+The follow-up `external-cdp-input-shape-v1` observation requires the complete
+synthetic-fill, select-all, and repeated-instant-scroll conjunction. It remains
+observe-only and does not alter the production score, recommendation, token,
+challenge cost, or blocking policy. Partial shapes that can arise from
+dictation, autofill, password managers, keyboard/screen-reader selection,
+explicit paste, anchor navigation, switch input, or reduced-motion interfaces
+do not produce a detection. The full conjunction still requires independent
+accessibility testing before it can be considered for scoring.
