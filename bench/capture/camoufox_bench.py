@@ -34,11 +34,11 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8">
 <title>Browser interaction benchmark</title>
 <style>body{font:18px system-ui;margin:32px;max-width:680px}input{font:inherit}
 button{padding:14px;margin:20px 0}#filler{height:1200px}</style></head><body>
-<h1>Browser interaction benchmark</h1><p>Read this page, move around, and enter a
-made-up name. Scroll down and back, then submit the benchmark. Do not enter
+<h1>Browser interaction benchmark</h1><p>Read this page, move around, and
+__FORM_INSTRUCTION__ Scroll down and back, then submit the benchmark. Do not enter
 personal data. Form submissions are measured locally and are not stored.</p>
 <form id="benchmark" data-fcaptcha-action="benchmark">
-<label>Sample name <input id="name" name="sample_name" autocomplete="off"></label>
+__FORM_FIELDS__
 <p><a href="#footer">Read more</a></p><div id="captcha"></div>
 <button id="submit" type="button" hidden>Submit benchmark</button>
 </form><pre id="result"></pre>
@@ -81,6 +81,26 @@ if (options.mode === 'form') {
 document.body.dataset.ready = 'true';
 </script></body></html>"""
 
+FORM_FIXTURES = {
+    'basic': '<label>Sample name <input id="name" name="sample_name" autocomplete="off"></label>',
+    'autofill': '''<fieldset><legend>Fictional test profile</legend>
+<label>Full name <input id="name" name="name" autocomplete="name"></label>
+<label>Email <input name="email" type="email" autocomplete="email"></label>
+<label>Street address <input name="street_address" autocomplete="street-address"></label>
+<label>Postal code <input name="postal_code" autocomplete="postal-code"></label>
+</fieldset>''',
+    'credentials': '''<fieldset><legend>Fictional test account</legend>
+<label>Username <input id="name" name="username" autocomplete="username"></label>
+<label>Password <input name="password" type="password" autocomplete="current-password"></label>
+</fieldset>''',
+}
+
+FORM_INSTRUCTIONS = {
+    'basic': 'enter a made-up name.',
+    'autofill': 'fill the fictional profile fields using the workflow under test.',
+    'credentials': 'fill the fictional account fields using the workflow under test.',
+}
+
 
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -103,7 +123,8 @@ def request(url, body=None, headers=None):
 class CaptureServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, backend, mode, observations=False, expected_client_version=None):
+    def __init__(self, backend, mode, observations=False, expected_client_version=None,
+                 form_fixture='basic'):
         super().__init__(('127.0.0.1', 0), CaptureHandler)
         self.backend = backend
         self.mode = mode
@@ -114,6 +135,7 @@ class CaptureServer(ThreadingHTTPServer):
         self.client_sha256 = None
         self.client_version = None
         self.expected_client_version = expected_client_version
+        self.form_fixture = form_fixture
         self.finished = threading.Event()
         self.observations = None
         self.observations_finished = threading.Event()
@@ -136,7 +158,11 @@ class CaptureHandler(BaseHTTPRequestHandler):
         if self.path == '/':
             options = {'mode': self.server.mode, 'siteKey': self.server.site_key, 'observations': self.server.probe_source is not None}
             script = '<script src="/__research/probe.js"></script>' if self.server.probe_source else ''
-            data = PAGE.replace('__OPTIONS__', json.dumps(options)).replace('__RESEARCH_SCRIPT__', script).encode()
+            data = (PAGE.replace('__OPTIONS__', json.dumps(options))
+                    .replace('__RESEARCH_SCRIPT__', script)
+                    .replace('__FORM_FIELDS__', FORM_FIXTURES[self.server.form_fixture])
+                    .replace('__FORM_INSTRUCTION__', FORM_INSTRUCTIONS[self.server.form_fixture])
+                    .encode())
             return self.respond(200, 'text/html; charset=utf-8', data)
         if self.server.probe_source:
             path = urllib.parse.urlsplit(self.path).path
@@ -207,8 +233,9 @@ class CaptureHandler(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def capture_server(backend, mode, observations=False, expected_client_version=None):
-    server = CaptureServer(backend, mode, observations, expected_client_version)
+def capture_server(backend, mode, observations=False, expected_client_version=None,
+                   form_fixture='basic'):
+    server = CaptureServer(backend, mode, observations, expected_client_version, form_fixture)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -410,14 +437,53 @@ def summarize(samples):
     return groups
 
 
+def accessibility_workflow(args):
+    """Return validated, operator-declared provenance for a real accessibility capture."""
+    if not getattr(args, 'accessibility_manual', False):
+        return None
+
+    fields = {
+        '--manual-workflow': getattr(args, 'manual_workflow', None),
+        '--input-tool-name': getattr(args, 'input_tool_name', None),
+        '--input-tool-version': getattr(args, 'input_tool_version', None),
+        '--input-tool-settings': getattr(args, 'input_tool_settings', None),
+    }
+    missing = [name for name, value in fields.items() if not str(value or '').strip()]
+    if missing:
+        raise ValueError('--accessibility-manual requires ' + ', '.join(missing))
+    if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', args.manual_workflow):
+        raise ValueError('--manual-workflow must be a lowercase hyphenated slug')
+    if args.form_fixture not in FORM_FIXTURES:
+        raise ValueError('--form-fixture must be basic, autofill, or credentials')
+    if not getattr(args, 'consent_confirmed', False):
+        raise ValueError('--accessibility-manual requires --consent-confirmed')
+    if not getattr(args, 'isolated_test_context', False):
+        raise ValueError('--accessibility-manual requires --isolated-test-context')
+
+    return {
+        'id': args.manual_workflow,
+        'fixture': args.form_fixture,
+        'tool': {
+            'name': args.input_tool_name,
+            'version': args.input_tool_version,
+            'settings': args.input_tool_settings,
+        },
+        'consent': 'operator-confirmed',
+        'isolation': 'fresh-test-context-no-personal-data',
+    }
+
+
 def manual_capture(args):
     """Serve a page for a person using their own browser, without Playwright."""
     sample = {'browser': args.environment_label, 'label': 'human',
               'inputSource': 'operator-declared manual input', 'provenance': 'captured',
               'headless': False, 'humanize': False, 'privacy': 'operator-described',
               'mode': args.modes[0], 'normalization': 'none'}
+    workflow = accessibility_workflow(args)
+    if workflow:
+        sample['manualWorkflow'] = workflow
     with capture_server(args.server, args.modes[0], args.observations,
-                        args.expected_client_version) as (server, url):
+                        args.expected_client_version, args.form_fixture) as (server, url):
         print(f'Open {url} in your own browser and complete the page. Waiting {args.timeout}s.', flush=True)
         if not server.finished.wait(args.timeout):
             sample['error'] = 'No manual submission received; human baseline remains unmeasured'
@@ -510,13 +576,21 @@ def main():
     parser.add_argument('--out', type=Path, default=ROOT/'bench/test-results/camoufox')
     capture_mode = parser.add_mutually_exclusive_group()
     capture_mode.add_argument('--manual', action='store_true', help='Record one person using their own browser; launches no browser automation')
+    capture_mode.add_argument('--accessibility-manual', action='store_true', help='Record one consented accessibility workflow with pinned tool provenance; launches no browser automation')
     capture_mode.add_argument('--external-agent', action='store_true', help='Record a browser-internal agent in an operator-opened browser; attaches no automation driver')
     capture_mode.add_argument('--external-driver', action='store_true', help='Record an operator-started external browser automation driver')
-    parser.add_argument('--environment-label', help='Required with --manual/--external-agent/--external-driver; describe the exact browser and environment')
+    parser.add_argument('--environment-label', help='Required with manual and external capture modes; describe the exact browser and environment')
     parser.add_argument('--agent-label', help='Required with --external-agent, e.g. Chrome Auto Browse (Gemini)')
     parser.add_argument('--driver-name', help='Required with --external-driver, e.g. browser-harness')
     parser.add_argument('--driver-version', help='Required with --external-driver, e.g. 0.1.13')
     parser.add_argument('--driver-commit', help='Required with --external-driver; full lowercase Git SHA')
+    parser.add_argument('--manual-workflow', help='Required with --accessibility-manual; lowercase workflow slug')
+    parser.add_argument('--input-tool-name', help='Required with --accessibility-manual; exact assistive/input tool name')
+    parser.add_argument('--input-tool-version', help='Required with --accessibility-manual; exact tool or operating-system version')
+    parser.add_argument('--input-tool-settings', help='Required with --accessibility-manual; relevant enabled settings')
+    parser.add_argument('--form-fixture', choices=sorted(FORM_FIXTURES), default='basic', help='Recorder-only form fields for manual accessibility input testing')
+    parser.add_argument('--consent-confirmed', action='store_true', help='Confirm the operator consented to this accessibility capture')
+    parser.add_argument('--isolated-test-context', action='store_true', help='Confirm a fresh test context with no personal data, accounts, or saved credentials')
     parser.add_argument('--expected-client-version', help='Require the loopback server to serve this exact FCaptcha client version')
     parser.add_argument('--verdict-log', type=Path, help='Local server verdict log; joins diagnostics missing from /api/score responses')
     parser.add_argument('--observations', action='store_true', help='Collect research probes after scoring; never submitted to FCaptcha')
@@ -533,9 +607,20 @@ def main():
         parser.error('--server must be a loopback HTTP test server')
     if args.repeats < 1 or args.timeout < 1:
         parser.error('--repeats and --timeout must be positive')
-    external_capture = args.manual or args.external_agent or args.external_driver
+    external_capture = args.manual or args.accessibility_manual or args.external_agent or args.external_driver
     if external_capture and (not args.environment_label or len(args.modes) != 1):
-        parser.error('--manual/--external-agent/--external-driver requires --environment-label and exactly one --modes value')
+        parser.error('--manual/--accessibility-manual/--external-agent/--external-driver requires --environment-label and exactly one --modes value')
+    if args.accessibility_manual:
+        try:
+            accessibility_workflow(args)
+        except ValueError as error:
+            parser.error(str(error))
+    elif any((args.manual_workflow, args.input_tool_name, args.input_tool_version,
+              args.input_tool_settings, args.consent_confirmed,
+              args.isolated_test_context, args.form_fixture != 'basic')):
+        parser.error('accessibility workflow arguments require --accessibility-manual')
+    if args.form_fixture != 'basic' and args.modes != ['form']:
+        parser.error('autofill and credentials form fixtures require --modes form')
     if args.external_agent and not args.agent_label:
         parser.error('--external-agent requires --agent-label')
     if args.external_driver:
@@ -548,7 +633,7 @@ def main():
         if not re.fullmatch(r'[a-f0-9]{40}', args.driver_commit):
             parser.error('--driver-commit must be a full lowercase Git SHA')
     if external_capture and not args.expected_client_version:
-        parser.error('--manual/--external-agent/--external-driver requires --expected-client-version')
+        parser.error('--manual/--accessibility-manual/--external-agent/--external-driver requires --expected-client-version')
     if args.expected_client_version and not re.fullmatch(r'\d+\.\d+\.\d+', args.expected_client_version):
         parser.error('--expected-client-version must be a semantic version such as 1.51.4')
     args.secret = os.environ.get('FCAPTCHA_VERIFY_SECRET') or os.environ.get('FCAPTCHA_SECRET')
@@ -591,13 +676,14 @@ def main():
                         'Default Camoufox fingerprints vary per launch; observations apply to these captures.'],
         'samples': [],
     }
-    if args.manual:
+    if args.manual or args.accessibility_manual:
         report['camoufoxBuild'] = None
-        report['limitations'] = [
+        report['limitations'] = ([
             'Browser configuration and manual input are operator-declared.',
             'A single-person capture is not a population false-positive estimate.',
             'Loopback proxy isolates state and removes transport fingerprinting.',
-        ]
+        ] + (['Accessibility tool, settings, consent, and test-context isolation are operator-declared.']
+             if args.accessibility_manual else []))
         report['samples'] = [manual_capture(args)]
         report['summary'] = summarize(report['samples'])
         write_json(args.out/'report.json', report)

@@ -17,6 +17,7 @@ function parseArgs(argv) {
     else if (arg === '--scenario') args.scenario = argv[++i];
     else if (arg === '--input') args.input = argv[++i];
     else if (arg === '--notes') args.notes = argv[++i];
+    else if (arg === '--expected-workflow') args.expectedWorkflow = argv[++i];
     else if (arg === '--expected-client-version') args.expectedClientVersion = argv[++i];
     else if (arg === '--index') args.index = Number(argv[++i]);
     else if (arg === '--help' || arg === '-h') args.help = true;
@@ -31,6 +32,7 @@ function usage() {
     --report bench/test-results/<capture>/report.json \\
     --out bench/corpus/captured/human-<scenario>.json \\
     --group <input-persona> --scenario <browser-input-slug> --input <description> \\\\
+    [--expected-workflow <accessibility-workflow-slug>] \\
     [--expected-client-version 1.51.4]
 
 The output path must not exist. Group is the human input persona (for example
@@ -56,6 +58,7 @@ function main() {
   }
   requireSlug(args.group, 'group');
   requireSlug(args.scenario, 'scenario');
+  if (args.expectedWorkflow) requireSlug(args.expectedWorkflow, 'expected-workflow');
   if (!Number.isInteger(args.index) || args.index < 0) throw new Error('--index must be a non-negative integer');
 
   const out = path.resolve(args.out);

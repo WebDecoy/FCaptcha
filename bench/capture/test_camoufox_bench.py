@@ -12,7 +12,9 @@ import urllib.request
 
 from camoufox_bench import (
     CLIENT_VERSION_PATTERN,
+    FORM_FIXTURES,
     PAGE,
+    accessibility_workflow,
     attach_failed_captures,
     attach_verdict_log,
     capture_server,
@@ -33,6 +35,37 @@ def sample():
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_accessibility_workflow_requires_pinned_consent_and_isolation(self):
+        args = SimpleNamespace(
+            accessibility_manual=True,
+            manual_workflow='screen-reader-keyboard-selection',
+            input_tool_name='VoiceOver',
+            input_tool_version='macOS 26.1 built-in',
+            input_tool_settings='Quick Nav off; keyboard selection',
+            form_fixture='basic',
+            consent_confirmed=True,
+            isolated_test_context=True,
+        )
+        self.assertEqual(accessibility_workflow(args), {
+            'id': 'screen-reader-keyboard-selection',
+            'fixture': 'basic',
+            'tool': {
+                'name': 'VoiceOver',
+                'version': 'macOS 26.1 built-in',
+                'settings': 'Quick Nav off; keyboard selection',
+            },
+            'consent': 'operator-confirmed',
+            'isolation': 'fresh-test-context-no-personal-data',
+        })
+
+        args.consent_confirmed = False
+        with self.assertRaisesRegex(ValueError, '--consent-confirmed'):
+            accessibility_workflow(args)
+        args.consent_confirmed = True
+        args.manual_workflow = 'Screen reader'
+        with self.assertRaisesRegex(ValueError, 'lowercase hyphenated slug'):
+            accessibility_workflow(args)
+
     def test_operator_outcome_keeps_only_completion_without_takeover(self):
         completed = sample()
         self.assertTrue(record_operator_outcome(completed, 'completed'))
@@ -60,6 +93,17 @@ class MeasurementTests(unittest.TestCase):
         self.assertIn('<title>Browser interaction benchmark</title>', PAGE)
         self.assertIn('Form submissions are measured locally and are not stored.', PAGE)
         self.assertNotIn('id="form-protection"', PAGE)
+
+    def test_accessibility_form_fixtures_exercise_real_browser_fill_surfaces(self):
+        self.assertIn('autocomplete="name"', FORM_FIXTURES['autofill'])
+        self.assertIn('autocomplete="street-address"', FORM_FIXTURES['autofill'])
+        self.assertIn('autocomplete="username"', FORM_FIXTURES['credentials'])
+        self.assertIn('autocomplete="current-password"', FORM_FIXTURES['credentials'])
+        with capture_server('', 'form', form_fixture='credentials') as (_, url):
+            with urllib.request.urlopen(url) as response:
+                page = response.read().decode()
+        self.assertIn('Fictional test account', page)
+        self.assertNotIn('__FORM_FIELDS__', page)
 
     def test_client_version_pattern_accepts_source_and_minified_forms(self):
         self.assertEqual(CLIENT_VERSION_PATTERN.search(b"version: '1.51.4'").group(1), b'1.51.4')
