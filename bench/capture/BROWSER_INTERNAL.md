@@ -149,18 +149,19 @@ cohort and require new paired evidence before adding a detector or score floor.
 Each imported sample retains `/api/verify` or `/api/score` as non-secret capture
 metadata so benchmark replay preserves widget versus invisible server context.
 
-The Chrome 158 / Claude in Chrome 1.0.107 form pilot currently contains two
-pairs. Claude's mean inter-key intervals were 0.209–0.218 ms and mean key holds
-were 0.230–0.275 ms, versus 212.527 ms inter-key and 122.225–133.925 ms holds
-for the paired manual controls. All four tokens were valid and all submissions
-were allowed; Claude scores were 0.061–0.0738 and both controls scored 0.000.
+The Chrome 158 / Claude in Chrome 1.0.107 form campaign contains five pairs.
+Claude's mean inter-key intervals were 0.209–0.300 ms and mean key holds were
+0.230–0.275 ms, versus 133.727–212.527 ms inter-key and 102.275–133.925 ms
+holds for the paired manual controls. All ten tokens were valid and all
+submissions were allowed; Claude scores were 0.061–0.1366 and control scores
+were 0.000–0.016.
 
-The form-only analysis currently reports nine review candidates with complete
-30/30 captured-human observation coverage, but they are based on only two
-Claude pairs. The new `keyTiming` and `clickPrelude` fields separate these pairs
-but exist on only 2/30 captured humans, so the analyzer correctly refuses to
-promote them. The combined 12-pair analysis finds no cross-mode promotion
-candidate. This is useful research evidence, not an enforcement threshold;
-collect the remaining three form pairs, recapture broader human coverage for
-the new telemetry, and repeat on an independent machine/profile before
-retuning.
+The form-only analysis currently reports seven review candidates with complete
+33/33 captured-human observation coverage and complete 5/5 pair and
+leave-one-pair-out detection. The new `keyTiming` and `clickPrelude` fields also
+separate all five pairs but exist on only 5/33 captured humans, so the analyzer
+correctly refuses to promote them. The combined 15-pair analysis finds no
+cross-mode promotion candidate. The same-machine form evidence minimum is now
+met, but this is still not an enforcement threshold: recapture broader human
+coverage for the new telemetry and repeat the form campaign on an independent
+machine/profile before retuning.
