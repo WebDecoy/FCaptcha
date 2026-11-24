@@ -117,6 +117,9 @@ function toBrowserInternalSample(report, options, reportBytes = null) {
     fail('sample was not recorded in external browser-internal mode');
   }
   if (!String(source.agent || '').trim()) fail('browser-internal agent label is missing');
+  if (source.operatorOutcome !== 'completed') {
+    fail('operator did not confirm completion without takeover');
+  }
   if (source.normalization !== 'none') fail('browser-internal sample must not be normalized');
   if (source.error) fail(source.error);
 

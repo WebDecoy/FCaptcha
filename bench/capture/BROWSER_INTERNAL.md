@@ -23,6 +23,11 @@ separation that stays clear of the human panel.
 - A report is `captured` evidence only when the named browser-internal feature
   completed the task. A person taking over mid-task is a failed agent capture,
   not an agent sample.
+- After a scoring submission, the recorder requires the operator to classify
+  the task as `completed`, `takeover`, or `refused`. Only `completed` retains an
+  importable capture. The importer independently requires that outcome so a
+  technically valid score produced before a takeover prompt cannot enter the
+  agent corpus.
 - If the feature refuses a loopback URL, record that limitation. Do not expose
   the recorder publicly merely to obtain a sample.
 
@@ -73,6 +78,35 @@ python3 bench/capture/camoufox_bench.py \
 Repeat both commands with `--modes invisible`. Increment the output suffix for
 each pair.
 
+### Automatic form method
+
+The recorder also exposes the shipped automatic form integration as the
+distinct `form` mode. It presents an ordinary, product-neutral benchmark form
+with a generic local-measurement notice and uses
+`FCaptcha.invisible({ autoScore: true })`. The client intercepts the submit,
+adds `fcaptcha_token`, and resubmits through the browser's normal form event.
+The task-facing copy stays product-neutral because this cohort measures ordinary
+invisible form handling, not challenge solving. The operator report and capture
+metadata retain the exact FCaptcha version, client hash, endpoint, and form mode.
+This cohort must remain separate from the existing widget and explicit
+invisible-button cohorts. Collect at least five agent/control pairs before
+considering a form-mode observation for promotion.
+
+```sh
+python3 bench/capture/camoufox_bench.py \
+  --external-agent --modes form --observations --timeout 600 \
+  --environment-label 'Chrome <exact version>, macOS, signed-in test profile' \
+  --agent-label 'Chrome Auto Browse (Gemini)' \
+  --expected-client-version 1.51.4 \
+  --server http://127.0.0.1:18881 \
+  --out bench/test-results/chrome-auto-browse-form-0000
+```
+
+Ask the feature to enter the made-up name `Browser test`, follow the page's
+“Read more” link, return, and submit the benchmark. Do not describe this sample
+as a CAPTCHA completion or combine it with another mode when reporting paired
+results.
+
 ## Import and benchmark
 
 After reviewing the report and confirming the agent completed the whole task,
@@ -114,3 +148,13 @@ not support browser-internal enforcement. Retain the samples as a regression
 cohort and require new paired evidence before adding a detector or score floor.
 Each imported sample retains `/api/verify` or `/api/score` as non-secret capture
 metadata so benchmark replay preserves widget versus invisible server context.
+
+The Chrome 158 / Claude in Chrome 1.0.107 form pilot currently contains one
+pair. Claude's mean inter-key interval was 0.218 ms and mean key hold was 0.275
+ms, versus 212.527 ms and 133.925 ms for the paired manual control. Both tokens
+were valid and both submissions were allowed; replay scores were 0.061 and
+0.000 respectively. The existing mechanical-typing observation fired on the
+Claude sample with zero captured-human hits, but the combined 11-pair analysis
+found no promotion candidate across form, widget, and invisible modes. This is
+useful research evidence, not an enforcement threshold; collect the remaining
+form pairs and repeat on an independent machine/profile before retuning.

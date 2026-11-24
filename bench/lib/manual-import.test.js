@@ -87,6 +87,7 @@ function browserInternalReport(overrides = {}) {
     label: 'agent',
     agent: 'Chrome Auto Browse (Gemini)',
     inputSource: 'operator-declared browser-internal automation',
+    operatorOutcome: 'completed',
     ...overrides,
   });
 }
@@ -128,5 +129,17 @@ test('browser-internal importer rejects human, driven, and normalized reports', 
       browserInternalReport({ normalization: 'environment-normalized' }), browserInternalOptions
     ),
     /must not be normalized/
+  );
+  assert.throws(
+    () => toBrowserInternalSample(
+      browserInternalReport({ operatorOutcome: 'takeover' }), browserInternalOptions
+    ),
+    /did not confirm completion without takeover/
+  );
+  assert.throws(
+    () => toBrowserInternalSample(
+      browserInternalReport({ operatorOutcome: undefined }), browserInternalOptions
+    ),
+    /did not confirm completion without takeover/
   );
 });

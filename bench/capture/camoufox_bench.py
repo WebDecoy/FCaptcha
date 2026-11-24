@@ -31,14 +31,17 @@ ROOT = Path(__file__).resolve().parents[2]
 BROWSER_VERSION = "152.0.4-beta.30"
 CLIENT_VERSION_PATTERN = re.compile(rb"\bversion\s*:\s*['\"](\d+\.\d+\.\d+)['\"]")
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
-<title>FCaptcha browser measurement</title>
+<title>Browser interaction benchmark</title>
 <style>body{font:18px system-ui;margin:32px;max-width:680px}input{font:inherit}
 button{padding:14px;margin:20px 0}#filler{height:1200px}</style></head><body>
-<h1>Browser measurement</h1><p>Read this page, move around, and enter a made-up
-name. Scroll down and back, then complete the check. Do not enter personal data.</p>
-<label>Sample name <input id="name" autocomplete="off"></label>
+<h1>Browser interaction benchmark</h1><p>Read this page, move around, and enter a
+made-up name. Scroll down and back, then submit the benchmark. Do not enter
+personal data. Form submissions are measured locally and are not stored.</p>
+<form id="benchmark" data-fcaptcha-action="benchmark">
+<label>Sample name <input id="name" name="sample_name" autocomplete="off"></label>
 <p><a href="#footer">Read more</a></p><div id="captcha"></div>
-<button id="submit" hidden>Complete check</button><pre id="result"></pre>
+<button id="submit" type="button" hidden>Submit benchmark</button>
+</form><pre id="result"></pre>
 <div id="filler"></div><p id="footer">Return to the check above.</p>
 __RESEARCH_SCRIPT__<script src="/fcaptcha.js"></script><script>
 const options = __OPTIONS__;
@@ -50,7 +53,19 @@ function show(value) {
     experimental:value.experimental, tokenIssued:!!value.token
   }, null, 2);
 }
-if (options.mode === 'invisible') {
+if (options.mode === 'form') {
+  const form = document.querySelector('#benchmark');
+  const button = document.querySelector('#submit');
+  button.type = 'submit';
+  button.hidden = false;
+  const session = FCaptcha.invisible({siteKey:options.siteKey, autoScore:true});
+  form.addEventListener('submit', (event) => {
+    const token = new FormData(form).get('fcaptcha_token');
+    if (!token) return;
+    event.preventDefault();
+    show(session.lastScore || {success:true, token});
+  });
+} else if (options.mode === 'invisible') {
   const session = FCaptcha.invisible({siteKey:options.siteKey, autoScore:false});
   const button = document.querySelector('#submit');
   button.hidden = false;
@@ -219,7 +234,7 @@ def interact(page, mode, seed):
     page.wait_for_timeout(500)
     page.mouse.wheel(0, -450)
     page.wait_for_timeout(600)
-    target = page.locator('#submit' if mode == 'invisible' else '#captcha [role=checkbox]')
+    target = page.locator('#submit' if mode in ('invisible', 'form') else '#captcha [role=checkbox]')
     target.click()
 
 
@@ -285,6 +300,34 @@ def attach_failed_captures(sample, server):
         record['tokenIssued'] = record.get('tokenIssued', bool(response.get('token')))
         response.pop('token', None)
     sample['failedCaptures'] = server.records
+
+
+def record_operator_outcome(sample, value):
+    """Keep only a browser-internal task completed without human takeover."""
+    outcome = str(value or '').strip().lower()
+    if outcome not in ('completed', 'takeover', 'refused'):
+        outcome = 'unconfirmed'
+    sample['operatorOutcome'] = outcome
+    if outcome == 'completed':
+        return True
+    capture = sample.pop('capture', None)
+    if capture:
+        sample.setdefault('failedCaptures', []).append(capture)
+    sample['error'] = (
+        f'Browser-internal task outcome was {outcome}; '
+        'only completion without takeover is importable'
+    )
+    return False
+
+
+def prompt_operator_outcome():
+    print('Scoring submission captured. Enter "completed" only if the named '
+          'browser-internal agent finished the whole task without human takeover.',
+          flush=True)
+    try:
+        return input('Outcome [completed/takeover/refused]: ')
+    except EOFError:
+        return 'unconfirmed'
 
 
 def run_case(args, case, index):
@@ -414,6 +457,7 @@ def browser_internal_capture(args):
                     server.observations_finished.wait(25)
                     sample['observations'] = server.observations or {'status': 'timeout'}
                     sample['probeSha256'] = hashlib.sha256(server.probe_source).hexdigest()
+                record_operator_outcome(sample, prompt_operator_outcome())
             except Exception as error:
                 sample['error'] = str(error)
                 attach_failed_captures(sample, server)
@@ -425,7 +469,7 @@ def main():
     parser.add_argument('--server', default='http://127.0.0.1:18881')
     parser.add_argument('--browser-version', default=BROWSER_VERSION)
     parser.add_argument('--browsers', nargs='+', choices=['camoufox', 'firefox'], default=['camoufox', 'firefox'])
-    parser.add_argument('--modes', nargs='+', choices=['invisible', 'widget'], default=['invisible', 'widget'])
+    parser.add_argument('--modes', nargs='+', choices=['form', 'invisible', 'widget'], default=['invisible', 'widget'])
     parser.add_argument('--display', choices=['both', 'headed', 'headless'], default='both')
     parser.add_argument('--repeats', type=int, default=3)
     parser.add_argument('--seed', type=int, default=87)
