@@ -26,6 +26,27 @@ function selectedHeaders(headers = {}) {
   );
 }
 
+function validateReleasedClient(capture, signals, expectedVersion) {
+  if (!expectedVersion) return;
+  if (capture.clientVersion !== expectedVersion) {
+    fail(`expected FCaptcha client ${expectedVersion}, captured ${capture.clientVersion || 'no version'}`);
+  }
+  if (!/^[a-f0-9]{64}$/.test(capture.clientSha256 || '')) {
+    fail('captured client SHA-256 is missing or invalid');
+  }
+  const forensics = signals.behavioral?.inputForensics;
+  if (forensics?.clickPrelude?.version !== 1 || forensics?.keyTiming?.version !== 1) {
+    fail('released browser-internal input telemetry is missing');
+  }
+}
+
+function clientMetadata(capture) {
+  return {
+    clientVersion: capture.clientVersion || null,
+    clientSha256: capture.clientSha256 || null,
+  };
+}
+
 function toCorpusSample(report, options, reportBytes = null) {
   if (!report || typeof report !== 'object') fail('report must be an object');
   if (!Array.isArray(report.samples) || report.samples.length !== 1) {
@@ -50,6 +71,7 @@ function toCorpusSample(report, options, reportBytes = null) {
   if (!['/api/score', '/api/verify'].includes(capture.endpoint)) {
     fail(`unexpected scoring endpoint ${capture.endpoint || '(missing)'}`);
   }
+  validateReleasedClient(capture, signals, options.expectedClientVersion);
 
   const cleanSignals = structuredClone(signals);
   if (cleanSignals.meta) delete cleanSignals.meta.challengeNonce;
@@ -74,6 +96,7 @@ function toCorpusSample(report, options, reportBytes = null) {
       endpoint: capture.endpoint,
       mode: source.mode || null,
       normalization: source.normalization,
+      ...clientMetadata(capture),
       reportSha256: reportBytes
         ? crypto.createHash('sha256').update(reportBytes).digest('hex')
         : null,
@@ -105,6 +128,7 @@ function toBrowserInternalSample(report, options, reportBytes = null) {
   if (!['/api/score', '/api/verify'].includes(capture.endpoint)) {
     fail(`unexpected scoring endpoint ${capture.endpoint || '(missing)'}`);
   }
+  validateReleasedClient(capture, signals, options.expectedClientVersion);
 
   const cleanSignals = structuredClone(signals);
   if (cleanSignals.meta) delete cleanSignals.meta.challengeNonce;
@@ -130,6 +154,7 @@ function toBrowserInternalSample(report, options, reportBytes = null) {
       endpoint: capture.endpoint,
       mode: source.mode || null,
       normalization: source.normalization,
+      ...clientMetadata(capture),
       reportSha256: reportBytes
         ? crypto.createHash('sha256').update(reportBytes).digest('hex')
         : null,
@@ -137,4 +162,4 @@ function toBrowserInternalSample(report, options, reportBytes = null) {
   };
 }
 
-module.exports = { selectedHeaders, toCorpusSample, toBrowserInternalSample };
+module.exports = { selectedHeaders, toCorpusSample, toBrowserInternalSample, validateReleasedClient };

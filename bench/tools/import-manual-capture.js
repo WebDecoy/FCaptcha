@@ -17,6 +17,7 @@ function parseArgs(argv) {
     else if (arg === '--scenario') args.scenario = argv[++i];
     else if (arg === '--input') args.input = argv[++i];
     else if (arg === '--notes') args.notes = argv[++i];
+    else if (arg === '--expected-client-version') args.expectedClientVersion = argv[++i];
     else if (arg === '--index') args.index = Number(argv[++i]);
     else if (arg === '--help' || arg === '-h') args.help = true;
     else throw new Error(`unknown argument: ${arg}`);
@@ -29,7 +30,8 @@ function usage() {
   node bench/tools/import-manual-capture.js \\
     --report bench/test-results/<capture>/report.json \\
     --out bench/corpus/captured/human-<scenario>.json \\
-    --group <input-persona> --scenario <browser-input-slug> --input <description>
+    --group <input-persona> --scenario <browser-input-slug> --input <description> \\\\
+    [--expected-client-version 1.51.4]
 
 The output path must not exist. Group is the human input persona (for example
 real-trackpad); scenario identifies the browser/configuration (for example
