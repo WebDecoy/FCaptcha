@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BROWSER_VERSION = "152.0.4-beta.30"
 CLIENT_VERSION_PATTERN = re.compile(rb"\bversion\s*:\s*['\"](\d+\.\d+\.\d+)['\"]")
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
-<title>FCaptcha browser interaction benchmark</title>
+<title>Browser interaction benchmark</title>
 <style>body{font:18px system-ui;margin:32px;max-width:680px}input{font:inherit}
 button{padding:14px;margin:20px 0}#filler{height:1200px}</style></head><body>
 <h1>Browser interaction benchmark</h1><p>Read this page, move around, and enter a
@@ -40,8 +40,6 @@ personal data. Form submissions are measured locally and are not stored.</p>
 <form id="benchmark" data-fcaptcha-action="benchmark">
 <label>Sample name <input id="name" name="sample_name" autocomplete="off"></label>
 <p><a href="#footer">Read more</a></p><div id="captcha"></div>
-<p id="form-protection" hidden>This benchmark uses FCaptcha's automatic form
-protection to measure the submission.</p>
 <button id="submit" type="button" hidden>Submit benchmark</button>
 </form><pre id="result"></pre>
 <div id="filler"></div><p id="footer">Return to the check above.</p>
@@ -58,7 +56,6 @@ function show(value) {
 if (options.mode === 'form') {
   const form = document.querySelector('#benchmark');
   const button = document.querySelector('#submit');
-  document.querySelector('#form-protection').hidden = false;
   button.type = 'submit';
   button.hidden = false;
   const session = FCaptcha.invisible({siteKey:options.siteKey, autoScore:true});

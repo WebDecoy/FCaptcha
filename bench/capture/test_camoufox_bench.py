@@ -57,7 +57,9 @@ class MeasurementTests(unittest.TestCase):
         self.assertIn("options.mode === 'form'", PAGE)
         self.assertIn('autoScore:true', PAGE)
         self.assertIn("new FormData(form).get('fcaptcha_token')", PAGE)
-        self.assertIn("FCaptcha's automatic form", PAGE)
+        self.assertIn('<title>Browser interaction benchmark</title>', PAGE)
+        self.assertIn('Form submissions are measured locally and are not stored.', PAGE)
+        self.assertNotIn('id="form-protection"', PAGE)
 
     def test_client_version_pattern_accepts_source_and_minified_forms(self):
         self.assertEqual(CLIENT_VERSION_PATTERN.search(b"version: '1.51.4'").group(1), b'1.51.4')

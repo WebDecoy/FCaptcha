@@ -81,12 +81,15 @@ each pair.
 ### Automatic form method
 
 The recorder also exposes the shipped automatic form integration as the
-distinct `form` mode. It presents an ordinary benchmark form, discloses that
-FCaptcha protects the submission, and uses
+distinct `form` mode. It presents an ordinary, product-neutral benchmark form
+with a generic local-measurement notice and uses
 `FCaptcha.invisible({ autoScore: true })`. The client intercepts the submit,
 adds `fcaptcha_token`, and resubmits through the browser's normal form event.
-This is not a disguised checkbox challenge and must be labeled separately from
-the existing widget and explicit invisible-button cohorts.
+The task-facing copy stays product-neutral because this cohort measures ordinary
+invisible form handling, not challenge solving. The operator report and capture
+metadata retain the exact FCaptcha version, client hash, endpoint, and form mode.
+This cohort must remain separate from the existing widget and explicit
+invisible-button cohorts.
 
 ```sh
 python3 bench/capture/camoufox_bench.py \
