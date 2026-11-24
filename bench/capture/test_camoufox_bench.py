@@ -17,6 +17,7 @@ from camoufox_bench import (
     attach_verdict_log,
     capture_server,
     finish_capture,
+    record_operator_outcome,
     summarize,
 )
 
@@ -32,6 +33,25 @@ def sample():
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_operator_outcome_keeps_only_completion_without_takeover(self):
+        completed = sample()
+        self.assertTrue(record_operator_outcome(completed, 'completed'))
+        self.assertEqual(completed['operatorOutcome'], 'completed')
+        self.assertIn('capture', completed)
+        self.assertNotIn('error', completed)
+
+        takeover = sample()
+        self.assertFalse(record_operator_outcome(takeover, 'takeover'))
+        self.assertEqual(takeover['operatorOutcome'], 'takeover')
+        self.assertNotIn('capture', takeover)
+        self.assertEqual(len(takeover['failedCaptures']), 1)
+        self.assertIn('only completion without takeover', takeover['error'])
+
+        unconfirmed = sample()
+        self.assertFalse(record_operator_outcome(unconfirmed, 'maybe'))
+        self.assertEqual(unconfirmed['operatorOutcome'], 'unconfirmed')
+        self.assertNotIn('capture', unconfirmed)
+
     def test_form_mode_uses_the_shipped_automatic_form_integration(self):
         self.assertIn('data-fcaptcha-action="benchmark"', PAGE)
         self.assertIn("options.mode === 'form'", PAGE)

@@ -23,6 +23,11 @@ separation that stays clear of the human panel.
 - A report is `captured` evidence only when the named browser-internal feature
   completed the task. A person taking over mid-task is a failed agent capture,
   not an agent sample.
+- After a scoring submission, the recorder requires the operator to classify
+  the task as `completed`, `takeover`, or `refused`. Only `completed` retains an
+  importable capture. The importer independently requires that outcome so a
+  technically valid score produced before a takeover prompt cannot enter the
+  agent corpus.
 - If the feature refuses a loopback URL, record that limitation. Do not expose
   the recorder publicly merely to obtain a sample.
 

@@ -305,6 +305,34 @@ def attach_failed_captures(sample, server):
     sample['failedCaptures'] = server.records
 
 
+def record_operator_outcome(sample, value):
+    """Keep only a browser-internal task completed without human takeover."""
+    outcome = str(value or '').strip().lower()
+    if outcome not in ('completed', 'takeover', 'refused'):
+        outcome = 'unconfirmed'
+    sample['operatorOutcome'] = outcome
+    if outcome == 'completed':
+        return True
+    capture = sample.pop('capture', None)
+    if capture:
+        sample.setdefault('failedCaptures', []).append(capture)
+    sample['error'] = (
+        f'Browser-internal task outcome was {outcome}; '
+        'only completion without takeover is importable'
+    )
+    return False
+
+
+def prompt_operator_outcome():
+    print('Scoring submission captured. Enter "completed" only if the named '
+          'browser-internal agent finished the whole task without human takeover.',
+          flush=True)
+    try:
+        return input('Outcome [completed/takeover/refused]: ')
+    except EOFError:
+        return 'unconfirmed'
+
+
 def run_case(args, case, index):
     sample = {**case, 'label': 'agent', 'provenance': 'captured',
               'seed': args.seed + index, 'normalization': 'none',
@@ -432,6 +460,7 @@ def browser_internal_capture(args):
                     server.observations_finished.wait(25)
                     sample['observations'] = server.observations or {'status': 'timeout'}
                     sample['probeSha256'] = hashlib.sha256(server.probe_source).hexdigest()
+                record_operator_outcome(sample, prompt_operator_outcome())
             except Exception as error:
                 sample['error'] = str(error)
                 attach_failed_captures(sample, server)
