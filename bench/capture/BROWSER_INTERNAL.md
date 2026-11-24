@@ -89,7 +89,8 @@ The task-facing copy stays product-neutral because this cohort measures ordinary
 invisible form handling, not challenge solving. The operator report and capture
 metadata retain the exact FCaptcha version, client hash, endpoint, and form mode.
 This cohort must remain separate from the existing widget and explicit
-invisible-button cohorts.
+invisible-button cohorts. Collect at least five agent/control pairs before
+considering a form-mode observation for promotion.
 
 ```sh
 python3 bench/capture/camoufox_bench.py \
@@ -147,3 +148,13 @@ not support browser-internal enforcement. Retain the samples as a regression
 cohort and require new paired evidence before adding a detector or score floor.
 Each imported sample retains `/api/verify` or `/api/score` as non-secret capture
 metadata so benchmark replay preserves widget versus invisible server context.
+
+The Chrome 158 / Claude in Chrome 1.0.107 form pilot currently contains one
+pair. Claude's mean inter-key interval was 0.218 ms and mean key hold was 0.275
+ms, versus 212.527 ms and 133.925 ms for the paired manual control. Both tokens
+were valid and both submissions were allowed; replay scores were 0.061 and
+0.000 respectively. The existing mechanical-typing observation fired on the
+Claude sample with zero captured-human hits, but the combined 11-pair analysis
+found no promotion candidate across form, widget, and invisible modes. This is
+useful research evidence, not an enforcement threshold; collect the remaining
+form pairs and repeat on an independent machine/profile before retuning.
