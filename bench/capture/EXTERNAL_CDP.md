@@ -114,3 +114,25 @@ A candidate must catch every valid pair, preserve one direction, survive
 leave-one-pair-out analysis, and be present for every pair and every captured
 human used by the analysis. Independent machine/profile replication is still
 required before a separate production scoring change can be proposed.
+
+## Initial Mac mini form cohort
+
+The first form cohort was captured on the Mac mini in five fresh Linux/arm64
+containers using Chromium 156.0.8078.79, Browser Harness 0.1.13, and FCaptcha
+1.51.4. Every Browser Harness submission scored 0.600 and received a block
+recommendation. All five same-configuration manual controls scored 0.108675
+and were allowed.
+
+The form-only paired analysis screened all five pairs against 38 captured human
+samples. Four research candidates caught 5/5 agents, produced 0/38 captured-
+human hits, and survived all five leave-one-pair-out checks:
+
+- `behavioral.scrollMorphology.instantRatio > 0.5`;
+- `formAnalysis.typing.inputsWithoutInputType > 0`;
+- `formAnalysis.typing.inputsWithoutKeys > 0`;
+- `formAnalysis.typing.selectAllShortcuts > 0`.
+
+These results describe one machine, browser build, driver release, task, and
+input method. They do not authorize enforcement. Independent machine/profile
+replication and a separate reviewed scoring change with false-positive analysis
+remain required. Widget and invisible follow-up are also still unmeasured.
