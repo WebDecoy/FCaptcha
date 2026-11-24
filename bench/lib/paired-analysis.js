@@ -75,7 +75,12 @@ function pairKey(sample) {
 function buildPairs(samples, options = {}) {
   const agentGroup = options.agentGroup || 'browser-internal';
   const controlGroup = options.controlGroup || 'browser-internal-control';
-  const captured = samples.filter((sample) => sample.provenance === 'captured' && !sample.unmeasured);
+  const mode = options.mode || null;
+  const captured = samples.filter((sample) =>
+    sample.provenance === 'captured' &&
+    !sample.unmeasured &&
+    (!mode || sample.capture?.mode === mode)
+  );
   const agents = captured.filter((sample) => sample.label === 'agent' && sample.group === agentGroup);
   const controls = captured.filter((sample) => sample.label === 'human' && sample.group === controlGroup);
 
@@ -307,10 +312,15 @@ function analyzePairs(samples, options = {}) {
       : evaluateCategoricalCandidate(path, covered, humans);
     if (feature) {
       const coverage = covered.length / pairs.length;
+      const humanCoverage = feature.humanTotal
+        ? feature.humanObserved / feature.humanTotal
+        : 0;
       features.push({
         ...feature,
         coverage,
-        promotionCandidate: feature.promotionCandidate && coverage === 1,
+        humanCoverage,
+        promotionCandidate:
+          feature.promotionCandidate && coverage === 1 && humanCoverage === 1,
       });
     }
   }
@@ -328,6 +338,7 @@ function analyzePairs(samples, options = {}) {
     generatedAt: new Date().toISOString(),
     agentGroup: options.agentGroup || 'browser-internal',
     controlGroup: options.controlGroup || 'browser-internal-control',
+    mode: options.mode || null,
     pairCount: pairs.length,
     pairKeys: pairs.map((pair) => pair.key),
     capturedHumanCount: humans.length,
