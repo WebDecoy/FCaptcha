@@ -73,6 +73,31 @@ python3 bench/capture/camoufox_bench.py \
 Repeat both commands with `--modes invisible`. Increment the output suffix for
 each pair.
 
+### Automatic form method
+
+The recorder also exposes the shipped automatic form integration as the
+distinct `form` mode. It presents an ordinary benchmark form, discloses that
+FCaptcha protects the submission, and uses
+`FCaptcha.invisible({ autoScore: true })`. The client intercepts the submit,
+adds `fcaptcha_token`, and resubmits through the browser's normal form event.
+This is not a disguised checkbox challenge and must be labeled separately from
+the existing widget and explicit invisible-button cohorts.
+
+```sh
+python3 bench/capture/camoufox_bench.py \
+  --external-agent --modes form --observations --timeout 600 \
+  --environment-label 'Chrome <exact version>, macOS, signed-in test profile' \
+  --agent-label 'Chrome Auto Browse (Gemini)' \
+  --expected-client-version 1.51.4 \
+  --server http://127.0.0.1:18881 \
+  --out bench/test-results/chrome-auto-browse-form-0000
+```
+
+Ask the feature to enter the made-up name `Browser test`, follow the page's
+“Read more” link, return, and submit the benchmark. Do not describe this sample
+as a CAPTCHA completion or combine it with another mode when reporting paired
+results.
+
 ## Import and benchmark
 
 After reviewing the report and confirming the agent completed the whole task,

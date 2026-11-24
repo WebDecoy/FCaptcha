@@ -12,6 +12,7 @@ import urllib.request
 
 from camoufox_bench import (
     CLIENT_VERSION_PATTERN,
+    PAGE,
     attach_failed_captures,
     attach_verdict_log,
     capture_server,
@@ -31,6 +32,13 @@ def sample():
 
 
 class MeasurementTests(unittest.TestCase):
+    def test_form_mode_uses_the_shipped_automatic_form_integration(self):
+        self.assertIn('data-fcaptcha-action="benchmark"', PAGE)
+        self.assertIn("options.mode === 'form'", PAGE)
+        self.assertIn('autoScore:true', PAGE)
+        self.assertIn("new FormData(form).get('fcaptcha_token')", PAGE)
+        self.assertIn("FCaptcha's automatic form", PAGE)
+
     def test_client_version_pattern_accepts_source_and_minified_forms(self):
         self.assertEqual(CLIENT_VERSION_PATTERN.search(b"version: '1.51.4'").group(1), b'1.51.4')
         self.assertEqual(CLIENT_VERSION_PATTERN.search(b'version:"1.51.4"').group(1), b'1.51.4')
