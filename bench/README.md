@@ -87,6 +87,12 @@ false positives and survive leave-one-pair-out evaluation. Even then it is a
 research candidate, not authorization to enforce: an independent environment
 must reproduce it first.
 
+Promotion also requires complete observation coverage: the candidate field
+must exist in every pair and every captured-human sample. The report prints the
+human observation count for each feature. A new telemetry field can be studied
+with sparse historical coverage, but cannot be promoted until the human panel
+has been recaptured with that field.
+
 Write the complete machine-readable result when reviewing or attaching a run:
 
 ```bash
@@ -94,6 +100,12 @@ node tools/analyze-paired-observations.js \
   --json test-results/paired-observations.json \
   --top 20
 ```
+
+Use `--mode form` (or another capture-mode slug) to evaluate telemetry that is
+available only in one cohort. The zero-false-positive screen still uses every
+captured human sample that contains the candidate field. Always run the default
+all-mode analysis as the separate generalization check; a mode-specific result
+does not establish cross-mode coverage.
 
 Derived and self-reported samples never participate. The report also prints the
 largest distribution shifts separately, because an interesting paired change

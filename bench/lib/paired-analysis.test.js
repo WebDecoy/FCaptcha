@@ -70,6 +70,20 @@ test('pairs captures by mode and numeric suffix and rejects missing controls', (
   );
 });
 
+test('filters pairs to one capture mode without narrowing human screening', () => {
+  const samples = [
+    sample('agent/a/0000', 'agent', 'browser-internal', 'widget', 10),
+    sample('human/a/0000', 'human', 'browser-internal-control', 'widget', 1),
+    sample('agent/a/0001', 'agent', 'browser-internal', 'form', 11),
+    sample('human/a/0001', 'human', 'browser-internal-control', 'form', 2),
+    sample('human/other/0000', 'human', 'trackpad', 'widget', 3),
+  ];
+  const result = analyzePairs(samples, { mode: 'form' });
+  assert.equal(result.mode, 'form');
+  assert.deepEqual(result.pairKeys, ['form:1']);
+  assert.equal(result.capturedHumanCount, 3);
+});
+
 test('promotes a complete zero-FP separator that survives leave-one-pair-out', () => {
   const samples = [
     sample('agent/a/0000', 'agent', 'browser-internal', 'widget', 10),
@@ -114,5 +128,24 @@ test('never promotes a feature that is missing from any pair', () => {
   const result = analyzePairs(samples, { minCoverage: 0.5 });
   const feature = result.features.find((item) => item.path === 'behavioral.partial');
   assert.equal(feature.coverage, 0.5);
+  assert.equal(feature.promotionCandidate, false);
+});
+
+test('never promotes a feature that is missing from any captured human', () => {
+  const samples = [
+    sample('agent/a/0000', 'agent', 'browser-internal', 'form', 10),
+    sample('agent/a/0001', 'agent', 'browser-internal', 'form', 11),
+    sample('human/a/0000', 'human', 'browser-internal-control', 'form', 1),
+    sample('human/a/0001', 'human', 'browser-internal-control', 'form', 2),
+    sample('human/other/0000', 'human', 'trackpad', 'widget', 3),
+  ];
+  delete samples[4].signals.behavioral.value;
+
+  const result = analyzePairs(samples, { mode: 'form' });
+  const feature = result.features.find((item) => item.path === 'behavioral.value');
+  assert.equal(feature.caught, 2);
+  assert.equal(feature.humanObserved, 2);
+  assert.equal(feature.humanTotal, 3);
+  assert.equal(feature.humanCoverage, 2 / 3);
   assert.equal(feature.promotionCandidate, false);
 });

@@ -10,6 +10,7 @@ function parseArgs(argv) {
   const args = {
     agentGroup: 'browser-internal',
     controlGroup: 'browser-internal-control',
+    mode: null,
     top: 20,
     minCoverage: 1,
     json: null,
@@ -18,12 +19,16 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--agent-group') args.agentGroup = argv[++i];
     else if (arg === '--control-group') args.controlGroup = argv[++i];
+    else if (arg === '--mode') args.mode = argv[++i];
     else if (arg === '--top') args.top = Number(argv[++i]);
     else if (arg === '--min-coverage') args.minCoverage = Number(argv[++i]);
     else if (arg === '--json') args.json = argv[++i];
     else throw new Error(`unknown argument: ${arg}`);
   }
   if (!Number.isInteger(args.top) || args.top < 1) throw new Error('--top must be a positive integer');
+  if (args.mode && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(args.mode)) {
+    throw new Error('--mode must be a lowercase hyphenated slug');
+  }
   if (!(args.minCoverage > 0 && args.minCoverage <= 1)) {
     throw new Error('--min-coverage must be greater than 0 and at most 1');
   }
@@ -41,6 +46,7 @@ function number(value) {
 function printReport(result, top) {
   console.log('FCaptcha paired observation analysis');
   console.log('====================================');
+  if (result.mode) console.log(`Mode filter: ${result.mode}`);
   console.log(`${result.pairCount} captured pair(s): ${result.pairKeys.join(', ')}`);
   console.log(`${result.capturedHumanCount} captured human sample(s) used for zero-FP screening.`);
   console.log('Derived and self-reported samples are excluded. Array elements are summarized, not aligned by index.');
@@ -55,10 +61,11 @@ function printReport(result, top) {
   }
   console.log('');
   console.log('Top zero-FP candidates on the captured corpus');
-  console.log('CAUGHT  LOO    DIR  DELTA    THRESHOLD  MODES          FEATURE');
-  console.log('------  -----  ---  -------  ---------  -------------  -------');
+  console.log('CAUGHT  LOO    HUMAN  DIR  DELTA    THRESHOLD  MODES          FEATURE');
+  console.log('------  -----  -----  ---  -------  ---------  -------------  -------');
   for (const feature of result.features.filter((item) => item.caught > 0).slice(0, top)) {
     const loo = `${feature.looCaught}/${feature.totalAgents}`;
+    const human = `${feature.humanObserved}/${feature.humanTotal}`;
     const direction = feature.direction || 'set';
     const delta = feature.kind === 'numeric' ? number(feature.cliffsDelta) : '-';
     const threshold = feature.kind === 'numeric'
@@ -71,7 +78,7 @@ function printReport(result, top) {
       : '-';
     console.log(
       `${`${feature.caught}/${feature.totalAgents}`.padEnd(7)} ` +
-      `${loo.padEnd(6)} ${direction.padEnd(4)} ${delta.padEnd(8)} ${threshold.padEnd(10)} ` +
+      `${loo.padEnd(6)} ${human.padEnd(6)} ${direction.padEnd(4)} ${delta.padEnd(8)} ${threshold.padEnd(10)} ` +
       `${modes.padEnd(14)} ${feature.path}`
     );
   }
@@ -109,7 +116,8 @@ function printReport(result, top) {
     console.log(`It misses: ${missed.join(', ') || '(none)'}.`);
   }
   if (!result.promotionCandidates.length) {
-    console.log('Collect new paired widget and invisible runs on an independent machine/profile before retuning.');
+    const scope = result.mode ? `${result.mode} runs` : 'widget and invisible runs';
+    console.log(`Collect new paired ${scope} on an independent machine/profile before retuning.`);
     console.log('Derived variants do not increase confidence, and no listed threshold is approved for enforcement.');
   }
 }
