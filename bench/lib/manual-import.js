@@ -47,6 +47,51 @@ function clientMetadata(capture) {
   };
 }
 
+function manualWorkflow(source, options) {
+  const workflow = source.manualWorkflow;
+  if (!workflow) {
+    if (options.expectedWorkflow) fail(`expected workflow ${options.expectedWorkflow}, capture has none`);
+    return null;
+  }
+  if (!options.expectedWorkflow) {
+    fail('accessibility capture requires --expected-workflow');
+  }
+  if (workflow.id !== options.expectedWorkflow) {
+    fail(`expected workflow ${options.expectedWorkflow}, captured ${workflow.id || '(missing)'}`);
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(workflow.id || '')) {
+    fail('manual workflow id must be a lowercase hyphenated slug');
+  }
+  if (!['basic', 'autofill', 'credentials'].includes(workflow.fixture)) {
+    fail('manual workflow fixture must be basic, autofill, or credentials');
+  }
+  if (!workflow.tool || typeof workflow.tool !== 'object' || Array.isArray(workflow.tool)) {
+    fail('manual workflow tool provenance is missing');
+  }
+  for (const field of ['name', 'version', 'settings']) {
+    if (!String(workflow.tool[field] || '').trim()) {
+      fail(`manual workflow tool ${field} is missing`);
+    }
+  }
+  if (workflow.consent !== 'operator-confirmed') {
+    fail('manual workflow consent was not confirmed');
+  }
+  if (workflow.isolation !== 'fresh-test-context-no-personal-data') {
+    fail('manual workflow test-context isolation was not confirmed');
+  }
+  return {
+    id: workflow.id,
+    fixture: workflow.fixture,
+    tool: {
+      name: workflow.tool.name,
+      version: workflow.tool.version,
+      settings: workflow.tool.settings,
+    },
+    consent: workflow.consent,
+    isolation: workflow.isolation,
+  };
+}
+
 function toCorpusSample(report, options, reportBytes = null) {
   if (!report || typeof report !== 'object') fail('report must be an object');
   if (!Array.isArray(report.samples) || report.samples.length !== 1) {
@@ -72,6 +117,7 @@ function toCorpusSample(report, options, reportBytes = null) {
     fail(`unexpected scoring endpoint ${capture.endpoint || '(missing)'}`);
   }
   validateReleasedClient(capture, signals, options.expectedClientVersion);
+  const workflow = manualWorkflow(source, options);
 
   const cleanSignals = structuredClone(signals);
   if (cleanSignals.meta) delete cleanSignals.meta.challengeNonce;
@@ -96,6 +142,7 @@ function toCorpusSample(report, options, reportBytes = null) {
       endpoint: capture.endpoint,
       mode: source.mode || null,
       normalization: source.normalization,
+      ...(workflow ? { workflow } : {}),
       ...clientMetadata(capture),
       reportSha256: reportBytes
         ? crypto.createHash('sha256').update(reportBytes).digest('hex')

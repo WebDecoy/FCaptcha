@@ -145,3 +145,6 @@ dictation, autofill, password managers, keyboard/screen-reader selection,
 explicit paste, anchor navigation, switch input, or reduced-motion interfaces
 do not produce a detection. The full conjunction still requires independent
 accessibility testing before it can be considered for scoring.
+
+Use the consent, isolation, provenance, exclusion, and teardown protocol in
+[`ACCESSIBILITY_OBSERVATION.md`](ACCESSIBILITY_OBSERVATION.md) for that testing.

@@ -86,6 +86,63 @@ test('rejects automated and normalized samples', () => {
   );
 });
 
+test('imports pinned accessibility workflow provenance', () => {
+  const manualWorkflow = {
+    id: 'screen-reader-keyboard-selection',
+    fixture: 'basic',
+    tool: {
+      name: 'VoiceOver',
+      version: 'macOS 26.1 built-in',
+      settings: 'Quick Nav off; keyboard selection',
+    },
+    consent: 'operator-confirmed',
+    isolation: 'fresh-test-context-no-personal-data',
+    unrelatedProfileData: 'must not survive import',
+  };
+  const sample = toCorpusSample(
+    report({ manualWorkflow }),
+    { ...options, expectedWorkflow: manualWorkflow.id }
+  );
+
+  assert.deepEqual(sample.capture.workflow, {
+    id: manualWorkflow.id,
+    fixture: manualWorkflow.fixture,
+    tool: manualWorkflow.tool,
+    consent: manualWorkflow.consent,
+    isolation: manualWorkflow.isolation,
+  });
+  assert.equal(sample.capture.workflow.unrelatedProfileData, undefined);
+  assert.notEqual(sample.capture.workflow, manualWorkflow);
+});
+
+test('rejects unpinned or unconfirmed accessibility workflow provenance', () => {
+  const manualWorkflow = {
+    id: 'voice-control-form-entry',
+    fixture: 'basic',
+    tool: { name: 'Voice Control', version: 'macOS 26.1 built-in', settings: 'default' },
+    consent: 'operator-confirmed',
+    isolation: 'fresh-test-context-no-personal-data',
+  };
+  assert.throws(
+    () => toCorpusSample(report({ manualWorkflow }), options),
+    /requires --expected-workflow/
+  );
+  assert.throws(
+    () => toCorpusSample(
+      report({ manualWorkflow }),
+      { ...options, expectedWorkflow: 'screen-reader-keyboard-selection' }
+    ),
+    /expected workflow screen-reader-keyboard-selection, captured voice-control-form-entry/
+  );
+  assert.throws(
+    () => toCorpusSample(
+      report({ manualWorkflow: { ...manualWorkflow, consent: 'unknown' } }),
+      { ...options, expectedWorkflow: manualWorkflow.id }
+    ),
+    /consent was not confirmed/
+  );
+});
+
 function browserInternalReport(overrides = {}) {
   return report({
     label: 'agent',
