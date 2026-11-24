@@ -3,7 +3,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { toCorpusSample, toBrowserInternalSample } = require('./manual-import');
+const {
+  toBrowserInternalSample,
+  toCorpusSample,
+  toExternalDriverSample,
+} = require('./manual-import');
 
 function report(overrides = {}) {
   return {
@@ -141,5 +145,115 @@ test('browser-internal importer rejects human, driven, and normalized reports', 
       browserInternalReport({ operatorOutcome: undefined }), browserInternalOptions
     ),
     /did not confirm completion without takeover/
+  );
+});
+
+const DRIVER_COMMIT = 'c24e5072ee66f8499bacd663f4f4bcb089bc4492';
+
+function externalDriverReport(overrides = {}) {
+  const value = report({
+    label: 'agent',
+    inputSource: 'operator-declared external browser automation',
+    operatorOutcome: 'completed',
+    driver: {
+      name: 'browser-harness',
+      version: '0.1.13',
+      commit: DRIVER_COMMIT,
+    },
+    ...overrides,
+  });
+  const capture = value.samples[0].capture;
+  capture.clientVersion = '1.51.4';
+  capture.clientSha256 = 'b'.repeat(64);
+  capture.request.signals.behavioral = {
+    inputForensics: { clickPrelude: { version: 1 }, keyTiming: { version: 1 } },
+  };
+  return value;
+}
+
+const externalDriverOptions = {
+  scenario: 'browser-harness-real-chrome-form',
+  input: 'Browser Harness over loopback CDP',
+  index: 2,
+  expectedClientVersion: '1.51.4',
+  expectedDriverName: 'browser-harness',
+  expectedDriverVersion: '0.1.13',
+  expectedDriverCommit: DRIVER_COMMIT,
+};
+
+test('imports a pinned external CDP driver capture into its own cohort', () => {
+  const sample = toExternalDriverSample(
+    externalDriverReport(), externalDriverOptions, Buffer.from('external-driver-report')
+  );
+
+  assert.equal(sample.id, 'agent/browser-harness-real-chrome-form/0002');
+  assert.equal(sample.group, 'browser-harness-cdp-agent');
+  assert.equal(sample.capture.driver.name, 'browser-harness');
+  assert.equal(sample.capture.driver.version, '0.1.13');
+  assert.equal(sample.capture.driver.commit, DRIVER_COMMIT);
+  assert.equal(sample.capture.endpoint, '/api/verify');
+  assert.equal(sample.signals.meta.challengeNonce, undefined);
+  assert.match(sample.capture.reportSha256, /^[a-f0-9]{64}$/);
+});
+
+test('external-driver importer rejects takeover and provenance mismatches', () => {
+  assert.throws(
+    () => toExternalDriverSample(report(), externalDriverOptions),
+    /label must be agent/
+  );
+  assert.throws(
+    () => toExternalDriverSample(
+      externalDriverReport({ inputSource: 'operator-declared browser-internal automation' }),
+      externalDriverOptions
+    ),
+    /not recorded in external-driver mode/
+  );
+  assert.throws(
+    () => toExternalDriverSample(
+      externalDriverReport({ operatorOutcome: 'takeover' }), externalDriverOptions
+    ),
+    /did not confirm completion without takeover/
+  );
+  assert.throws(
+    () => toExternalDriverSample(
+      externalDriverReport({ normalization: 'environment-normalized' }), externalDriverOptions
+    ),
+    /must not be normalized/
+  );
+  assert.throws(
+    () => toExternalDriverSample(
+      externalDriverReport({
+        driver: { name: 'browser-harness', version: '0.1.14', commit: DRIVER_COMMIT },
+      }),
+      externalDriverOptions
+    ),
+    /expected external driver version 0\.1\.13, captured 0\.1\.14/
+  );
+  assert.throws(
+    () => toExternalDriverSample(
+      externalDriverReport({
+        driver: { name: 'browser-harness', version: '0.1.13', commit: 'short' },
+      }),
+      externalDriverOptions
+    ),
+    /full lowercase Git SHA/
+  );
+  assert.throws(
+    () => toExternalDriverSample(
+      externalDriverReport({
+        driver: { name: 'browser-harness', version: 'latest', commit: DRIVER_COMMIT },
+      }),
+      { ...externalDriverOptions, expectedDriverVersion: 'latest' }
+    ),
+    /version must be semantic/
+  );
+  assert.throws(
+    () => toExternalDriverSample(
+      externalDriverReport({
+        driver: { name: '../browser-harness', version: '0.1.13', commit: DRIVER_COMMIT },
+      }),
+      { ...externalDriverOptions, expectedDriverName: '../browser-harness' }
+    ),
+    /name must be a lowercase hyphenated slug/
   );
 });

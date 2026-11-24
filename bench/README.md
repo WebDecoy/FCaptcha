@@ -107,6 +107,13 @@ captured human sample that contains the candidate field. Always run the default
 all-mode analysis as the separate generalization check; a mode-specific result
 does not establish cross-mode coverage.
 
+The same analyzer supports separately labeled external-driver cohorts. For the
+real-Chrome CDP protocol, use `--agent-group browser-harness-cdp-agent` and
+`--control-group browser-harness-cdp-control`; see
+[`capture/EXTERNAL_CDP.md`](capture/EXTERNAL_CDP.md). Never combine that cohort
+with `browser-internal`: attaching over CDP is a materially different actuation
+path and security boundary.
+
 Derived and self-reported samples never participate. The report also prints the
 largest distribution shifts separately, because an interesting paired change
 can still overlap humans and be unsafe as a detector.
@@ -390,6 +397,7 @@ bench/
     input.js              per-persona input choreography
     normalize.js          undoes automation artifacts (documented, auditable)
     BROWSER_INTERNAL.md   driver-free paired browser-internal capture protocol
+    EXTERNAL_CDP.md       isolated external real-Chrome CDP capture protocol
   lib/
     corpus.js             sample schema, provenance rules, jitter
     paired-analysis.js    paired flattening, screening, leave-one-out checks
@@ -404,6 +412,8 @@ bench/
     compare-aggregation.js  score-composition schemes measured side by side
     import-browser-internal-capture.js
                             validates and imports driver-free agent captures
+    import-external-driver-capture.js
+                            validates pinned external-driver captures
   corpus/captured/        committed traces
 ```
 

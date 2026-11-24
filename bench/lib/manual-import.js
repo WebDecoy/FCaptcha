@@ -165,4 +165,98 @@ function toBrowserInternalSample(report, options, reportBytes = null) {
   };
 }
 
-module.exports = { selectedHeaders, toCorpusSample, toBrowserInternalSample, validateReleasedClient };
+function toExternalDriverSample(report, options, reportBytes = null) {
+  if (!report || typeof report !== 'object') fail('report must be an object');
+  if (!Array.isArray(report.samples) || report.samples.length !== 1) {
+    fail('report must contain exactly one sample');
+  }
+
+  const source = report.samples[0];
+  if (source.label !== 'agent') fail('sample label must be agent');
+  if (source.provenance !== 'captured') fail('sample provenance must be captured');
+  if (source.inputSource !== 'operator-declared external browser automation') {
+    fail('sample was not recorded in external-driver mode');
+  }
+  if (source.operatorOutcome !== 'completed') {
+    fail('operator did not confirm completion without takeover');
+  }
+  if (source.normalization !== 'none') fail('external-driver sample must not be normalized');
+  if (source.error) fail(source.error);
+
+  const driver = source.driver;
+  if (!driver || typeof driver !== 'object' || Array.isArray(driver)) {
+    fail('external driver provenance is missing');
+  }
+  for (const field of ['name', 'version', 'commit']) {
+    if (!String(driver[field] || '').trim()) fail(`external driver ${field} is missing`);
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(driver.name)) {
+    fail('external driver name must be a lowercase hyphenated slug');
+  }
+  if (!/^[a-f0-9]{40}$/.test(driver.commit)) {
+    fail('external driver commit must be a full lowercase Git SHA');
+  }
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(driver.version)) {
+    fail('external driver version must be semantic');
+  }
+  const expected = {
+    name: options.expectedDriverName,
+    version: options.expectedDriverVersion,
+    commit: options.expectedDriverCommit,
+  };
+  for (const [field, value] of Object.entries(expected)) {
+    if (!value) fail(`expected external driver ${field} is required`);
+    if (driver[field] !== value) {
+      fail(`expected external driver ${field} ${value}, captured ${driver[field]}`);
+    }
+  }
+
+  const capture = source.capture;
+  const signals = capture?.request?.signals;
+  if (!signals || typeof signals !== 'object' || Array.isArray(signals)) {
+    fail('capture.request.signals is missing');
+  }
+  if (!['/api/score', '/api/verify'].includes(capture.endpoint)) {
+    fail(`unexpected scoring endpoint ${capture.endpoint || '(missing)'}`);
+  }
+  validateReleasedClient(capture, signals, options.expectedClientVersion);
+
+  const cleanSignals = structuredClone(signals);
+  if (cleanSignals.meta) delete cleanSignals.meta.challengeNonce;
+  const browser = String(source.browser || 'operator-described browser');
+  const input = String(options.input || 'external browser automation');
+  const notes = options.notes ||
+    `${driver.name} ${driver.version} (${driver.commit}) in ${browser}; ` +
+    `input: ${input}; mode: ${source.mode || 'unknown'}; no normalization`;
+
+  return {
+    id: `agent/${options.scenario}/${String(options.index).padStart(4, '0')}`,
+    label: 'agent',
+    group: `${driver.name}-cdp-agent`,
+    scenario: options.scenario,
+    provenance: 'captured',
+    notes,
+    headers: selectedHeaders(capture.headers),
+    signals: cleanSignals,
+    capture: {
+      browser,
+      driver: structuredClone(driver),
+      input,
+      endpoint: capture.endpoint,
+      mode: source.mode || null,
+      normalization: source.normalization,
+      ...clientMetadata(capture),
+      reportSha256: reportBytes
+        ? crypto.createHash('sha256').update(reportBytes).digest('hex')
+        : null,
+    },
+  };
+}
+
+module.exports = {
+  selectedHeaders,
+  toBrowserInternalSample,
+  toCorpusSample,
+  toExternalDriverSample,
+  validateReleasedClient,
+};

@@ -302,8 +302,8 @@ def attach_failed_captures(sample, server):
     sample['failedCaptures'] = server.records
 
 
-def record_operator_outcome(sample, value):
-    """Keep only a browser-internal task completed without human takeover."""
+def record_operator_outcome(sample, value, actor='browser-internal task'):
+    """Keep only an automated task completed without human takeover."""
     outcome = str(value or '').strip().lower()
     if outcome not in ('completed', 'takeover', 'refused'):
         outcome = 'unconfirmed'
@@ -314,15 +314,15 @@ def record_operator_outcome(sample, value):
     if capture:
         sample.setdefault('failedCaptures', []).append(capture)
     sample['error'] = (
-        f'Browser-internal task outcome was {outcome}; '
+        f'{actor} outcome was {outcome}; '
         'only completion without takeover is importable'
     )
     return False
 
 
-def prompt_operator_outcome():
+def prompt_operator_outcome(actor='browser-internal agent'):
     print('Scoring submission captured. Enter "completed" only if the named '
-          'browser-internal agent finished the whole task without human takeover.',
+          f'{actor} finished the whole task without human takeover.',
           flush=True)
     try:
         return input('Outcome [completed/takeover/refused]: ')
@@ -464,6 +464,39 @@ def browser_internal_capture(args):
     return sample
 
 
+def external_driver_capture(args):
+    """Serve a page for an operator-started external browser automation driver."""
+    driver = {'name': args.driver_name, 'version': args.driver_version,
+              'commit': args.driver_commit}
+    sample = {'browser': args.environment_label, 'driver': driver,
+              'label': 'agent',
+              'inputSource': 'operator-declared external browser automation',
+              'provenance': 'captured', 'headless': False, 'humanize': False,
+              'privacy': 'operator-described', 'mode': args.modes[0],
+              'normalization': 'none'}
+    with capture_server(args.server, args.modes[0], args.observations,
+                        args.expected_client_version) as (server, url):
+        print(f'Direct {args.driver_name} {args.driver_version} ({args.driver_commit}) '
+              f'in {args.environment_label} to {url} and have it complete the page. '
+              f'Waiting {args.timeout}s.', flush=True)
+        if not server.finished.wait(args.timeout):
+            sample['error'] = 'No external-driver submission received; class remains unmeasured'
+        else:
+            try:
+                sample['capture'] = finish_capture(server, args.secret)
+                attach_verdict_log(sample, args.verdict_log)
+                if args.observations:
+                    server.observations_finished.wait(25)
+                    sample['observations'] = server.observations or {'status': 'timeout'}
+                    sample['probeSha256'] = hashlib.sha256(server.probe_source).hexdigest()
+                actor = f'{args.driver_name} external-driver task'
+                record_operator_outcome(sample, prompt_operator_outcome(actor), actor)
+            except Exception as error:
+                sample['error'] = str(error)
+                attach_failed_captures(sample, server)
+    return sample
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--server', default='http://127.0.0.1:18881')
@@ -478,8 +511,12 @@ def main():
     capture_mode = parser.add_mutually_exclusive_group()
     capture_mode.add_argument('--manual', action='store_true', help='Record one person using their own browser; launches no browser automation')
     capture_mode.add_argument('--external-agent', action='store_true', help='Record a browser-internal agent in an operator-opened browser; attaches no automation driver')
-    parser.add_argument('--environment-label', help='Required with --manual or --external-agent; describe the exact browser and environment')
+    capture_mode.add_argument('--external-driver', action='store_true', help='Record an operator-started external browser automation driver')
+    parser.add_argument('--environment-label', help='Required with --manual/--external-agent/--external-driver; describe the exact browser and environment')
     parser.add_argument('--agent-label', help='Required with --external-agent, e.g. Chrome Auto Browse (Gemini)')
+    parser.add_argument('--driver-name', help='Required with --external-driver, e.g. browser-harness')
+    parser.add_argument('--driver-version', help='Required with --external-driver, e.g. 0.1.13')
+    parser.add_argument('--driver-commit', help='Required with --external-driver; full lowercase Git SHA')
     parser.add_argument('--expected-client-version', help='Require the loopback server to serve this exact FCaptcha client version')
     parser.add_argument('--verdict-log', type=Path, help='Local server verdict log; joins diagnostics missing from /api/score responses')
     parser.add_argument('--observations', action='store_true', help='Collect research probes after scoring; never submitted to FCaptcha')
@@ -496,12 +533,22 @@ def main():
         parser.error('--server must be a loopback HTTP test server')
     if args.repeats < 1 or args.timeout < 1:
         parser.error('--repeats and --timeout must be positive')
-    if (args.manual or args.external_agent) and (not args.environment_label or len(args.modes) != 1):
-        parser.error('--manual/--external-agent requires --environment-label and exactly one --modes value')
+    external_capture = args.manual or args.external_agent or args.external_driver
+    if external_capture and (not args.environment_label or len(args.modes) != 1):
+        parser.error('--manual/--external-agent/--external-driver requires --environment-label and exactly one --modes value')
     if args.external_agent and not args.agent_label:
         parser.error('--external-agent requires --agent-label')
-    if (args.manual or args.external_agent) and not args.expected_client_version:
-        parser.error('--manual/--external-agent requires --expected-client-version')
+    if args.external_driver:
+        if not all((args.driver_name, args.driver_version, args.driver_commit)):
+            parser.error('--external-driver requires --driver-name, --driver-version and --driver-commit')
+        if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', args.driver_name):
+            parser.error('--driver-name must be a lowercase hyphenated slug')
+        if not re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?', args.driver_version):
+            parser.error('--driver-version must be semantic')
+        if not re.fullmatch(r'[a-f0-9]{40}', args.driver_commit):
+            parser.error('--driver-commit must be a full lowercase Git SHA')
+    if external_capture and not args.expected_client_version:
+        parser.error('--manual/--external-agent/--external-driver requires --expected-client-version')
     if args.expected_client_version and not re.fullmatch(r'\d+\.\d+\.\d+', args.expected_client_version):
         parser.error('--expected-client-version must be a semantic version such as 1.51.4')
     args.secret = os.environ.get('FCAPTCHA_VERIFY_SECRET') or os.environ.get('FCAPTCHA_SECRET')
@@ -527,7 +574,7 @@ def main():
         try:
             packages[package] = version(package)
         except PackageNotFoundError:
-            if not args.manual and not args.external_agent:
+            if not external_capture:
                 raise
     report = {
         'schemaVersion': 1, 'startedAt': datetime.now(timezone.utc).isoformat(),
@@ -565,6 +612,19 @@ def main():
             'One capture measures one session, not an agent population.',
         ]
         report['samples'] = [browser_internal_capture(args)]
+        report['summary'] = summarize(report['samples'])
+        write_json(args.out/'report.json', report)
+        print(f'Report: {args.out / "report.json"}', flush=True)
+        return int('error' in report['samples'][0])
+    if args.external_driver:
+        report['camoufoxBuild'] = None
+        report['limitations'] = [
+            'Browser configuration and external driver provenance are operator-declared.',
+            'The recorder does not launch, install, or inspect the external driver.',
+            'Loopback proxy isolates state and removes transport fingerprinting.',
+            'One capture measures one session, not an agent population.',
+        ]
+        report['samples'] = [external_driver_capture(args)]
         report['summary'] = summarize(report['samples'])
         write_json(args.out/'report.json', report)
         print(f'Report: {args.out / "report.json"}', flush=True)
