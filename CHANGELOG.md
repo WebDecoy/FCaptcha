@@ -41,6 +41,15 @@ standalone automation verdict.
 The TLS-family axis is monitoring-only. It does not change production scoring,
 tokens, state, challenge cost, or any existing experimental blocking selector.
 
+### Fixed
+- The widget and `FCaptcha.invisible()` retry once with a fresh challenge when
+  the server withholds a token for the proof of work (`pow_not_satisfied`). A
+  visitor whose device changed networks between loading the page and
+  submitting (wifi to cellular, IPv4 to IPv6) was refused with
+  `challenge_network_mismatch`; an expired or restart-dropped challenge failed
+  the same way. The retry gets a challenge issued to the visitor's current
+  network, so the network binding is unchanged.
+
 ## [1.51.4] — 2026-11-23
 
 ### Added
