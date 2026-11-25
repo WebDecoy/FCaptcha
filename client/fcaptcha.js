@@ -2561,6 +2561,25 @@
   }
 
   // ============================================================
+  // Recoverable proof-of-work failures
+  // ============================================================
+
+  // A proof of work can fail through no fault of the visitor. The challenge is
+  // fetched when the widget loads, and by the time it is submitted the device
+  // may have changed networks (wifi to cellular, IPv4 to IPv6), left the tab
+  // open past expiry, or met a server restart that dropped it. The server then
+  // withholds the token and the visitor sees "Verification failed".
+  //
+  // The client cannot always tell which: /api/score deliberately returns no
+  // detections. So any withheld proof of work gets one retry. A fresh challenge
+  // is issued to, and priced for, the network the visitor is on now, so the
+  // retry costs the visitor a second solve and gives a client nothing it could
+  // not get by asking for a challenge itself.
+  function needsFreshChallenge(result) {
+    return !!result && !result.success && result.reason === 'pow_not_satisfied';
+  }
+
+  // ============================================================
   // SHA-256 Helper (main thread)
   // ============================================================
 
@@ -3255,45 +3274,52 @@
 
         const formAnalysis = this.formAnalyzer.analyze();
 
-        if (this.destroyed) return;
-        const challenge = await this.powManager.ensureChallenge(this.options.siteKey);
-        if (this.destroyed) return;
+        // Retry once with a fresh challenge when the first could not be
+        // honoured for a reason outside the visitor's control.
+        let result;
+        for (let attempt = 0; ; attempt++) {
+          if (this.destroyed) return;
+          const challenge = await this.powManager.ensureChallenge(this.options.siteKey);
+          if (this.destroyed) return;
 
-        // Step 2: Build signals object (without pow timing)
-        const sensorData = this.sensor.analyze();
-        const signals = {
-          behavioral: { ...behavioralData, ...clickData },
-          environmental: { ...envData, rafConsistency: rafData, ...asyncEnvData, sensor: sensorData },
-          temporal: temporalData,
-          formAnalysis: formAnalysis,
-          meta: {
-            widgetId: this.id,
-            siteKey: this.options.siteKey,
-            challengeNonce: challenge.nonce || null,
-            timestamp: Date.now(),
-            userAgent: navigator.userAgent,
-            screenSize: `${screen.width}x${screen.height}`,
-            viewportSize: `${window.innerWidth}x${window.innerHeight}`,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-          }
-        };
+          // Step 2: Build signals object (without pow timing)
+          const sensorData = this.sensor.analyze();
+          const signals = {
+            behavioral: { ...behavioralData, ...clickData },
+            environmental: { ...envData, rafConsistency: rafData, ...asyncEnvData, sensor: sensorData },
+            temporal: temporalData,
+            formAnalysis: formAnalysis,
+            meta: {
+              widgetId: this.id,
+              siteKey: this.options.siteKey,
+              challengeNonce: challenge.nonce || null,
+              timestamp: Date.now(),
+              userAgent: navigator.userAgent,
+              screenSize: `${screen.width}x${screen.height}`,
+              viewportSize: `${window.innerWidth}x${window.innerHeight}`,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            }
+          };
 
-        // Step 3: Serialize and hash signals for PoW binding
-        const signalsJson = JSON.stringify(signals);
-        const signalsHash = await sha256(signalsJson);
+          // Step 3: Serialize and hash signals for PoW binding
+          const signalsJson = JSON.stringify(signals);
+          const signalsHash = await sha256(signalsJson);
 
-        // Step 4: Solve PoW with signalsHash bound
-        const powSolution = await this.powManager.solveWithSignalsHash(this.options.siteKey, signalsHash, challenge);
+          // Step 4: Solve PoW with signalsHash bound
+          const powSolution = await this.powManager.solveWithSignalsHash(this.options.siteKey, signalsHash, challenge);
 
-        // Step 5: Build powTiming separately (not part of committed signals)
-        const powTiming = {
-          duration: powSolution.duration,
-          iterations: powSolution.iterations,
-          difficulty: powSolution.difficulty
-        };
+          // Step 5: Build powTiming separately (not part of committed signals)
+          const powTiming = {
+            duration: powSolution.duration,
+            iterations: powSolution.iterations,
+            difficulty: powSolution.difficulty
+          };
 
-        // Step 6: Submit with signals, signalsJson, signalsHash, and powTiming
-        const result = await this._verify(signals, powSolution, signalsJson, signalsHash, powTiming);
+          // Step 6: Submit with signals, signalsJson, signalsHash, and powTiming
+          result = await this._verify(signals, powSolution, signalsJson, signalsHash, powTiming);
+          if (attempt === 0 && needsFreshChallenge(result)) continue;
+          break;
+        }
 
         if (result.success) {
           this._showSuccess(result.token);
@@ -3594,49 +3620,55 @@
 
         const formAnalysis = this.formAnalyzer.analyze();
 
-        if (this.destroyed) throw new Error('Session destroyed');
-        const challenge = await this.powManager.ensureChallenge(this.options.siteKey);
-        if (this.destroyed) throw new Error('Session destroyed');
+        // Retry once with a fresh challenge, as the checkbox widget does.
+        let result;
+        for (let attempt = 0; ; attempt++) {
+          if (this.destroyed) throw new Error('Session destroyed');
+          const challenge = await this.powManager.ensureChallenge(this.options.siteKey);
+          if (this.destroyed) throw new Error('Session destroyed');
 
-        // Step 2: Build signals object (without pow timing)
-        const sensorData = this.sensor.analyze();
-        const signals = {
-          behavioral: behavioralData,
-          environmental: { ...envData, rafConsistency: rafData, ...asyncEnvData, sensor: sensorData },
-          temporal: temporalData,
-          formAnalysis: formAnalysis,
-          meta: {
-            sessionId: this.id,
-            siteKey: this.options.siteKey,
-            action,
-            challengeNonce: challenge.nonce || null,
-            timestamp: Date.now(),
-            userAgent: navigator.userAgent,
-            screenSize: `${screen.width}x${screen.height}`,
-            viewportSize: `${window.innerWidth}x${window.innerHeight}`,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            sessionDuration: Date.now() - this.startTime,
-            invisible: true
-          }
-        };
+          // Step 2: Build signals object (without pow timing)
+          const sensorData = this.sensor.analyze();
+          const signals = {
+            behavioral: behavioralData,
+            environmental: { ...envData, rafConsistency: rafData, ...asyncEnvData, sensor: sensorData },
+            temporal: temporalData,
+            formAnalysis: formAnalysis,
+            meta: {
+              sessionId: this.id,
+              siteKey: this.options.siteKey,
+              action,
+              challengeNonce: challenge.nonce || null,
+              timestamp: Date.now(),
+              userAgent: navigator.userAgent,
+              screenSize: `${screen.width}x${screen.height}`,
+              viewportSize: `${window.innerWidth}x${window.innerHeight}`,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              sessionDuration: Date.now() - this.startTime,
+              invisible: true
+            }
+          };
 
-        // Step 3: Serialize and hash signals for PoW binding
-        const signalsJson = JSON.stringify(signals);
-        const signalsHash = await sha256(signalsJson);
+          // Step 3: Serialize and hash signals for PoW binding
+          const signalsJson = JSON.stringify(signals);
+          const signalsHash = await sha256(signalsJson);
 
-        // Step 4: Solve PoW with signalsHash bound
-        const powSolution = await this.powManager.solveWithSignalsHash(this.options.siteKey, signalsHash, challenge);
+          // Step 4: Solve PoW with signalsHash bound
+          const powSolution = await this.powManager.solveWithSignalsHash(this.options.siteKey, signalsHash, challenge);
 
-        // Step 5: Build powTiming separately
-        const powTiming = {
-          duration: powSolution.duration,
-          iterations: powSolution.iterations,
-          difficulty: powSolution.difficulty
-        };
+          // Step 5: Build powTiming separately
+          const powTiming = {
+            duration: powSolution.duration,
+            iterations: powSolution.iterations,
+            difficulty: powSolution.difficulty
+          };
 
-        // Step 6: Submit
-        const result = await this._score(signals, action, powSolution, signalsJson, signalsHash, powTiming, cdata);
-        if (this.destroyed) throw new Error('Session destroyed');
+          // Step 6: Submit
+          result = await this._score(signals, action, powSolution, signalsJson, signalsHash, powTiming, cdata);
+          if (this.destroyed) throw new Error('Session destroyed');
+          if (attempt === 0 && needsFreshChallenge(result)) continue;
+          break;
+        }
         this.lastScore = { ...result, timestamp: Date.now() };
         return result;
       } finally {
