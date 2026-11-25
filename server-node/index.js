@@ -196,6 +196,7 @@ const {
   detectTouchAuthenticity,
   detectSensorEntropy,
   detectTouchKinematics,
+  detectCanvasStability,
   calculateCategoryScores,
   calculateFinalScore,
   applyDispositiveFloor,
@@ -271,6 +272,7 @@ class ScoringEngine {
       ...detectTouchAuthenticity(signals, userAgent),
       ...detectSensorEntropy(signals, userAgent),
       ...detectTouchKinematics(signals),
+      ...detectCanvasStability(signals),
       // Stateful detectors stay on the engine, which owns the stores.
       ...this._detectFingerprint(signals, ip, siteKey),
       ...this._detectRateAbuse(ip, siteKey)

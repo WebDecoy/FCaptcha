@@ -23,6 +23,7 @@ from server import (
     apply_dispositive_floor,
     calculate_category_scores,
     calculate_final_score,
+    detect_canvas_stability,
     detect_behavioral,
     detect_vision_ai,
     has_widget_interaction,
@@ -352,6 +353,16 @@ def one_category_alone_never_floors_however_strong():
 @test
 def non_behavioural_categories_do_not_corroborate():
     assert apply_corroboration_floor(0.3, views({"headless": 1.0, "fingerprint": 1.0, "bot": 1.0})) == 0.3
+
+
+@test
+def privacy_ambiguous_canvas_instability_alone_remains_allow():
+    detections = detect_canvas_stability({
+        "environmental": {"canvasHash": {"canvasStable": False}}
+    })
+    score = calculate_final_score(calculate_category_scores(detections))
+    assert abs(score - 0.0112) < 1e-9, score
+    assert detections[0].dispositive is False
 
 
 @test

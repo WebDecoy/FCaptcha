@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from collections import defaultdict, OrderedDict
 from admission import AdmissionLimiter
+from canvasstability import canvas_stability_evidence
 from identity import IDENTITY_POLICY, identity_observation
 
 from fastapi import FastAPI, Request, Response, HTTPException
@@ -1522,6 +1523,26 @@ def detect_fingerprint(signals: Dict, ip: str, site_key: str) -> List[Detection]
     return detections
 
 
+def detect_canvas_stability(signals: Dict) -> List[Detection]:
+    """Return weak evidence for per-read canvas noise.
+
+    Privacy browsers and extensions can intentionally produce this for people,
+    so it stays in the low-weight fingerprint category and outside the
+    behavioral corroboration floor. Missing or non-boolean old-client values
+    are neutral.
+    """
+    evidence = canvas_stability_evidence(signals)
+    if evidence is None:
+        return []
+    return [Detection(
+        ThreatCategory(evidence["category"]),
+        evidence["score"],
+        evidence["confidence"],
+        evidence["reason"],
+        evidence["details"],
+    )]
+
+
 def detect_rate_abuse(ip: str, site_key: str) -> List[Detection]:
     detections = []
     key = f"{site_key}:{ip}"
@@ -2099,6 +2120,7 @@ def run_verification(
     detections.extend(detect_touch_authenticity(signals, user_agent))
     detections.extend(detect_sensor_entropy(signals, user_agent))
     detections.extend(detect_touch_kinematics(signals))
+    detections.extend(detect_canvas_stability(signals))
     detections.extend(detect_fingerprint(signals, ip, site_key))
     detections.extend(detect_rate_abuse(ip, site_key))
 

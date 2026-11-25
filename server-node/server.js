@@ -376,6 +376,7 @@ const {
   detectTouchAuthenticity,
   detectSensorEntropy,
   detectTouchKinematics,
+  detectCanvasStability,
   calculateCategoryScores,
   calculateFinalScore,
   applyDispositiveFloor,
@@ -684,6 +685,7 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
     ...detectSensorEntropy(signals, userAgent),
     ...detectTouchKinematics(signals)
   );
+  detections.push(...detectCanvasStability(signals));
   detections.push(...await detectFingerprint(signals, ip, siteKey));
   detections.push(...await detectRateAbuse(ip, siteKey));
 

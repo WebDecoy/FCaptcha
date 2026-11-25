@@ -578,7 +578,11 @@ correlation and should not grow into it.
 - WebDriver / automation framework detection (Selenium, Puppeteer, Playwright, PhantomJS, Nightmare, Watir)
 - **CDP detection** — legacy ChromeDriver/Selenium globals plus a Runtime/DevTools console-attach probe that catches any attached protocol client, even when JS globals are scrubbed
 - Headless browser indicators, plugin/feature checks, UA ↔ platform consistency
-- Canvas / WebGL / Audio fingerprinting (session-scoped only)
+- Canvas / WebGL / Audio fingerprinting (session-scoped only). The client also
+  repeats one fixed canvas render and reports whether both readbacks match;
+  instability is low-confidence `fingerprint` evidence because Brave, Firefox
+  privacy protections, and extensions can deliberately add noise for people.
+  It is not dispositive and cannot participate in the behavioral score floor.
 - **TLS fingerprinting** — JA3 (client-supplied) and JA4. JA4 is computed **natively from the ClientHello** when the Go server terminates TLS itself (`FCAPTCHA_TLS_CERT`/`FCAPTCHA_TLS_KEY`), which no client can assert; behind a terminating proxy it falls back to a trusted header. Only JA4-TLS is implemented — the rest of the JA4 family is licensed non-commercially and cannot ship here
 
 ### Temporal Signals
