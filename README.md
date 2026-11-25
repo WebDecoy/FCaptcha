@@ -84,6 +84,8 @@ Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is i
 
 - [Next.js App Router form](examples/nextjs/): checkbox widget, server-side
   verification, and replay/failure tests.
+- [SvelteKit contact form](examples/sveltekit/): self-hosted widget, native form
+  action, and tests for server-side hostname and action checks.
 - [Hono middleware with FCaptcha verification](examples/hono/): browser demo,
   server-side token checks, and replay/failure tests.
 - [Supabase Edge Function with FCaptcha verification](examples/supabase/):
