@@ -701,6 +701,24 @@ func TestBehavioral_EarlyPointerMovementAloneIsNotSuspicious(t *testing.T) {
 	}
 }
 
+func TestBehavioral_LongPointerSessionDoesNotRequireScrollOrKeyboard(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	signals := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"totalPoints": 120.0, "trajectoryLength": 900.0,
+			"microTremorScore": 1.0, "directionChanges": 20.0,
+			"velocityVariance": 0.8, "mouseEventRate": 24.0,
+			"interactionDuration": 12000.0,
+			"scrollEvents":        0.0, "keyEvents": 0.0,
+		},
+	}
+
+	got := e.detectBehavioral(signals)
+	if hasReasonContaining(got, "No scroll or keyboard activity during session") {
+		t.Errorf("ordinary pointer-only sessions must not require scroll or keyboard activity, got %+v", got)
+	}
+}
+
 func TestVisionAI_PreciseRealTrackpadClickIsNotSuspiciousOnItsOwn(t *testing.T) {
 	e := NewScoringEngine("test-secret")
 	signals := map[string]interface{}{

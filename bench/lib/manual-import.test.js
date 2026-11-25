@@ -253,6 +253,15 @@ test('imports a pinned external CDP driver capture into its own cohort', () => {
   assert.match(sample.capture.reportSha256, /^[a-f0-9]{64}$/);
 });
 
+test('imports an independent external-driver cohort into a distinct group', () => {
+  const sample = toExternalDriverSample(
+    externalDriverReport(),
+    { ...externalDriverOptions, group: 'browser-harness-macbook-cdp-agent' }
+  );
+
+  assert.equal(sample.group, 'browser-harness-macbook-cdp-agent');
+});
+
 test('external-driver importer rejects takeover and provenance mismatches', () => {
   assert.throws(
     () => toExternalDriverSample(report(), externalDriverOptions),

@@ -13,6 +13,7 @@ function parseArgs(argv) {
     const arg = argv[i];
     if (arg === '--report') args.report = argv[++i];
     else if (arg === '--out') args.out = argv[++i];
+    else if (arg === '--group') args.group = argv[++i];
     else if (arg === '--scenario') args.scenario = argv[++i];
     else if (arg === '--input') args.input = argv[++i];
     else if (arg === '--notes') args.notes = argv[++i];
@@ -32,6 +33,7 @@ function usage() {
   node bench/tools/import-external-driver-capture.js \\
     --report bench/test-results/<capture>/report.json \\
     --out bench/corpus/captured/agent-browser-harness-cdp-form-0000.json \\
+    --group browser-harness-macbook-cdp-agent \\
     --scenario browser-harness-real-chrome-form \\
     --input "Browser Harness over loopback CDP" \\
     --expected-client-version 1.51.4 \\
@@ -72,6 +74,7 @@ function main() {
     throw new Error(`missing required argument(s): ${missing.join(', ')}\n\n${usage()}`);
   }
   requireSlug(args.scenario, 'scenario');
+  if (args.group) requireSlug(args.group, 'group');
   requireSlug(args.expectedDriverName, 'expected-driver-name');
   if (!/^[a-f0-9]{40}$/.test(args.expectedDriverCommit)) {
     throw new Error('--expected-driver-commit must be a full lowercase Git SHA');

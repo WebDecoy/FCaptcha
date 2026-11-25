@@ -873,17 +873,7 @@ function analyzeWebRTC(webrtcInfo) {
 
   const detections = [];
 
-  // Check media devices - headless browsers typically have 0 devices
   const mediaDevices = webrtcInfo.mediaDevices || {};
-  if (mediaDevices.supported && mediaDevices.totalDevices === 0) {
-    detections.push({
-      category: 'headless',
-      score: 0.7,
-      confidence: 0.75,
-      reason: 'No media devices detected (typical of headless browsers)'
-    });
-  }
-
   // Suspicious: has video inputs but no audio (unusual)
   if (mediaDevices.supported && mediaDevices.videoInputs > 0 && mediaDevices.audioInputs === 0) {
     detections.push({
@@ -904,16 +894,6 @@ function analyzeSpeechAPI(speechInfo) {
   if (!speechInfo || !speechInfo.supported) return [];
 
   const detections = [];
-
-  // No voices at all - suspicious
-  if (speechInfo.totalVoices === 0) {
-    detections.push({
-      category: 'headless',
-      score: 0.6,
-      confidence: 0.7,
-      reason: 'No speech synthesis voices available'
-    });
-  }
 
   // Very few voices (less than 5) - could be headless or minimal VM
   if (speechInfo.totalVoices > 0 && speechInfo.totalVoices < 5) {

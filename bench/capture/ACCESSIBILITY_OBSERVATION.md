@@ -113,3 +113,46 @@ profiles, or vault files.
 
 List unavailable operating-system/tool combinations explicitly in the results
 report. Do not synthesize, automate, or relabel a substitute as human evidence.
+
+## MacBook validation results
+
+Issue #231 retained five consented real-operator captures in fresh Chromium
+156.0.8078.79 Linux/arm64 profiles on a MacBook Pro M4 Max. Each used only
+fictional test data; raw reports, clipboards, local address/credential stores,
+and complete browser profiles were destroyed after reviewed import. No retained
+sample contains a token, secret, field value, credential, unrelated URL, or
+unrelated profile metadata.
+
+| Workflow | Measured evidence | Released-client production result | Observation replay |
+|---|---|---|---|
+| Explicit paste | One Control-V paste event and one paste input | 0.124675, allow | clear |
+| Keyboard navigation | 119 key events, zero pointer points, zero touch events | 0.108675, allow | clear |
+| Reduced-motion anchor navigation | Submitted signal and research probe both reported reduced motion | 0.108675, allow | clear |
+| Chromium address autofill | Four browser-managed inputs without ordinary input types | 0.108675, allow | clear |
+| Chromium password manager | Two browser-managed credential inputs; no values retained | 0.108675, allow | clear |
+
+The partial overlaps are intentional evidence for the conjunction boundary.
+Autofill and password-manager fills produced `inputsWithoutInputType`, explicit
+paste produced paste telemetry, keyboard navigation produced a long gradual
+scroll, and ordinary/reduced-motion anchor navigation reached an instant-scroll
+ratio of 0.5. None also produced the synthetic fill, select-all, and repeated-
+instant-scroll requirements together.
+
+Current-source fixed replay across Node, Go, and Python used all 98 base corpus
+samples. Every server completed with zero errors and a passing gate. For
+`external-cdp-input-shape-v1`, the complete 50-human panel reported 0 detected,
+50 clear, and 0 unknown; this accessibility group reported 0 detected, 5 clear,
+and 0 unknown. The independent Browser Harness group reported 7 detected,
+0 clear, and 0 unknown. Production scoring and the observation remained
+separate throughout.
+
+The isolated Linux/noVNC environment did not contain a screen reader, speech
+input/voice-control stack, or physical switch interface. Host VoiceOver or
+Voice Control cannot access the remote Chromium accessibility tree through the
+noVNC canvas; using them would measure translated VNC keyboard events rather
+than the named assistive workflow. Those three combinations remain explicit
+coverage gaps. They were not synthesized or relabeled as human evidence.
+
+No accessibility workflow matched the observation, so no redesign issue was
+opened. The policy remains observe-only, and this work contains no scoring or
+enforcement change.

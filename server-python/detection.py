@@ -93,13 +93,6 @@ def analyze_webrtc(webrtc_info: Optional[Dict]) -> List[Dict]:
         return []
     detections = []
     media_devices = webrtc_info.get("mediaDevices") or {}
-    if media_devices.get("supported") and media_devices.get("totalDevices") == 0:
-        detections.append({
-            "category": "headless",
-            "score": 0.7,
-            "confidence": 0.75,
-            "reason": "No media devices detected (typical of headless browsers)"
-        })
     if media_devices.get("supported") and media_devices.get("videoInputs", 0) > 0 and media_devices.get("audioInputs", 0) == 0:
         detections.append({
             "category": "bot",
@@ -116,14 +109,7 @@ def analyze_speech_api(speech_info: Optional[Dict]) -> List[Dict]:
     detections = []
     total_voices = speech_info.get("totalVoices", 0)
     local_voices = speech_info.get("localVoices", 0)
-    if total_voices == 0:
-        detections.append({
-            "category": "headless",
-            "score": 0.6,
-            "confidence": 0.7,
-            "reason": "No speech synthesis voices available"
-        })
-    elif 0 < total_voices < 5:
+    if 0 < total_voices < 5:
         detections.append({
             "category": "headless",
             "score": 0.3,
