@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Remix contact form with FCaptcha</title>
+  </head>
+  <body>
+    <main>
+      <h1>Remix contact form with FCaptcha</h1>
+      <p>This local demo sends and stores no messages.</p>
+      <form method="post" action="/contact" data-verifier="DEMO_VERIFIER_ORIGIN">
+        <label>Message <textarea name="message" rows="4" maxlength="2000" required></textarea></label>
+        <button type="submit">Verify and submit</button>
+      </form>
+      <p role="status"></p>
+    </main>
+    <script src="DEMO_VERIFIER_ORIGIN/fcaptcha.js"></script>
+    <script>
+      const form = document.querySelector('form');
+      const status = document.querySelector('[role="status"]');
+      const button = form.querySelector('button');
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        button.disabled = true;
+        status.textContent = 'Verifying…';
+        try {
+          window.FCaptcha.configure({ serverUrl: form.dataset.verifier });
+          const result = await window.FCaptcha.execute('remix-contact', { action: 'contact' });
+          if (!result.success || !result.token) {
+            status.textContent = 'Verification was rejected. Try again.';
+            return;
+          }
+          const values = new FormData(form);
+          values.set('fcaptcha_token', result.token);
+          const response = await fetch(form.action, { method: 'POST', body: values });
+          status.textContent = await response.text();
+        } catch {
+          status.textContent = 'Verification is unavailable. Check that both servers are running.';
+        } finally {
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>
