@@ -793,8 +793,8 @@
       }
     },
     {
-      "name": "chrome-tls-family-agrees",
-      "provenance": "FoxIO public JA4 reference mapping",
+      "name": "shared-chrome-tcp-cipher-family-is-unknown",
+      "provenance": "FoxIO Chromium reference, also measured from stock Firefox 160 on macOS",
       "ja4": "t13d1516h2_8daaf6152771_02713d6af862",
       "signals": {
         "environmental": {
@@ -806,7 +806,7 @@
       },
       "expected": {
         "mode": "observe",
-        "status": "clear",
+        "status": "unknown",
         "detections": []
       }
     },
@@ -829,8 +829,8 @@
       }
     },
     {
-      "name": "chrome-extension-drift-keeps-cipher-family",
-      "provenance": "measured Chromium 141 JA4 documented in server-go/detection.go",
+      "name": "shared-chromium-141-cipher-family-is-unknown",
+      "provenance": "measured Chromium 141 JA4; its JA4_b is also measured from stock Firefox 160 on macOS",
       "ja4": "t13i1515h2_8daaf6152771_806a8c22fdea",
       "signals": {
         "environmental": {
@@ -842,7 +842,25 @@
       },
       "expected": {
         "mode": "observe",
-        "status": "clear",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "firefox-160-shared-tcp-cipher-family-is-unknown",
+      "provenance": "measured stock Firefox 160.0 on macOS 26.6.2",
+      "ja4": "t13i1516h2_8daaf6152771_3cbfd9057e0d",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:160.0) Gecko/20100101 Firefox/160.0",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
         "detections": []
       }
     },
