@@ -1244,7 +1244,7 @@ func (e *ScoringEngine) detectVisionAI(signals map[string]interface{}) []Detecti
 	// Click-derived fields only exist when a widget was there to click.
 	isWidget := hasWidgetInteraction(signals)
 
-	if totalPoints < 5 && trajectoryLen < 10 && !isTouchUser && !isKeyboardUser {
+	if isWidget && totalPoints < 5 && trajectoryLen < 10 && !isTouchUser && !isKeyboardUser {
 		results = append(results, DetectionResult{
 			Category:   CategoryVisionAI,
 			Score:      0.9,

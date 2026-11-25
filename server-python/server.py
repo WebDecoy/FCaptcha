@@ -909,7 +909,7 @@ def detect_vision_ai(signals: Dict) -> List[Detection]:
     # Click-derived fields only exist when a widget was there to click.
     is_widget = has_widget_interaction(signals)
 
-    if total_points < 5 and trajectory < 10 and not is_touch_user and not is_keyboard_user:
+    if is_widget and total_points < 5 and trajectory < 10 and not is_touch_user and not is_keyboard_user:
         detections.append(Detection(
             ThreatCategory.VISION_AI, 0.9, 0.85,
             "No mouse movement detected before click (AI agent pattern)",

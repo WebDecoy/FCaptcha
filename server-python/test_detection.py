@@ -273,6 +273,13 @@ def invisible_mode_skips_click_derived_checks():
     for reason in CLICK_DERIVED_REASONS:
         assert reason not in invisible_reasons, (reason, invisible_reasons)
 
+    # /api/score has no click target and may execute before any interaction.
+    pointerless = {"behavioral": {}}
+    invisible_reasons = [d.reason for d in detect_vision_ai(set_interaction_mode(pointerless, False))]
+    assert "No mouse movement detected before click (AI agent pattern)" not in invisible_reasons, invisible_reasons
+    widget_reasons = [d.reason for d in detect_vision_ai(set_interaction_mode(pointerless, True))]
+    assert "No mouse movement detected before click (AI agent pattern)" in widget_reasons, widget_reasons
+
 
 @test
 def human_trackpad_does_not_require_overshoot():

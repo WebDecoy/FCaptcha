@@ -648,6 +648,18 @@ func TestInteractionMode_InvisibleSkipsClickDerivedChecks(t *testing.T) {
 		}
 	}
 
+	// "No mouse movement before click" is also widget-only: /api/score has no
+	// click target, and may legitimately execute before the visitor interacts.
+	pointerless := map[string]interface{}{"behavioral": map[string]interface{}{}}
+	SetInteractionMode(pointerless, false)
+	if got := e.detectVisionAI(pointerless); hasReasonContaining(got, "No mouse movement detected before click") {
+		t.Errorf("invisible mode should not invent a missing click, got %+v", got)
+	}
+	SetInteractionMode(pointerless, true)
+	if got := e.detectVisionAI(pointerless); !hasReasonContaining(got, "No mouse movement detected before click") {
+		t.Errorf("widget mode should still detect a pointerless click, got %+v", got)
+	}
+
 	// Unset context keeps the pre-existing behaviour, so callers on the plain
 	// Verify entry point are unaffected.
 	bare := session()
