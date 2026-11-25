@@ -1799,7 +1799,7 @@ def external_cdp_input_observation(signals: Dict) -> Dict:
     }] if status == "detected" else []}
 
 
-def evaluate_experimental(signals: Dict, production_score: float, detections: List[Detection], blocking: bool = False) -> Dict:
+def evaluate_experimental(signals: Dict, production_score: float, detections: List[Detection], blocking: bool = False, ja4=None) -> Dict:
     """Observe by default: #87's stealth session and a DevTools override can look
     identical. Never merge this evidence into production scoring or state.
     Explicit server configuration can add a separate token gate.
@@ -1828,7 +1828,7 @@ def evaluate_experimental(signals: Dict, production_score: float, detections: Li
         "corroboratingCategories": categories,
         "observations": {
             "animation-consistency-v1": animation_observation(signals),
-            IDENTITY_POLICY: identity_observation(signals),
+            IDENTITY_POLICY: identity_observation(signals, ja4),
             EXTERNAL_CDP_INPUT_POLICY: external_cdp_input_observation(signals),
         },
     }
@@ -2191,8 +2191,9 @@ def run_verification(
             ))
 
     # TLS fingerprint (JA4) — trusted reverse-proxy header, un-spoofable by client
+    ja4 = None
     trusted_ja4_headers = get_trusted_ja4_header_names()
-    if headers and trusted_ja4_headers:
+    if peer_trusted and headers and trusted_ja4_headers:
         ja4 = read_ja4_from_headers(headers, trusted_ja4_headers)
         if ja4:
             for d in check_ja4_fingerprint(ja4):
@@ -2219,7 +2220,8 @@ def run_verification(
         detections,
     )
 
-    experimental = evaluate_experimental(signals, final_score, detections, EXPERIMENTAL_BLOCKING_ENABLED)
+    experimental = evaluate_experimental(
+        signals, final_score, detections, EXPERIMENTAL_BLOCKING_ENABLED, ja4)
     experimental_blocked = EXPERIMENTAL_BLOCKING_ENABLED and experimental["wouldBlock"] and final_score < 0.5
     if experimental_blocked:
         recommendation = "block"

@@ -711,7 +711,7 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	// in front of us to have computed it honestly, which is weaker, so it is only
 	// consulted when there is no local fingerprint to use.
 	ja4 := nativeJA4
-	if ja4 == "" && headers != nil {
+	if ja4 == "" && peerTrusted && headers != nil {
 		if trustedJA4 := GetTrustedJA4HeaderNames(); len(trustedJA4) > 0 {
 			ja4 = ReadJA4FromHeaders(headers, trustedJA4)
 		}
@@ -732,7 +732,7 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	finalScore := applyDispositiveFloor(e.calculateFinalScore(categoryScores), detections)
 	finalScore = applyCorroborationFloor(finalScore, detections)
 
-	experimental := evaluateExperimental(signals, finalScore, detections, e.experimentalBlocking)
+	experimental := evaluateExperimental(signals, finalScore, detections, e.experimentalBlocking, ja4)
 	experimentalBlocked := e.experimentalBlocking && experimental.WouldBlock && finalScore < 0.5
 	// Determine recommendation
 	var recommendation string

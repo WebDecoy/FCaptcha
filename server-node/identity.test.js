@@ -9,9 +9,12 @@ const fixtures = require('../test/fixtures/identity-coherence.json');
 for (const fixture of fixtures.cases) {
   test(`identity parity: ${fixture.name}`, () => {
     const before = JSON.stringify(fixture);
-    assert.deepEqual(identityObservation(fixture.signals), fixture.expected);
+    assert.deepEqual(identityObservation(fixture.signals, fixture.ja4), fixture.expected);
     // Observe-only even when an operator has opted into a blocking policy.
-    assert.equal(evaluateExperimental(fixture.signals, 0.1, [], true).observations[IDENTITY_POLICY].mode, 'observe');
+    assert.deepEqual(
+      evaluateExperimental(fixture.signals, 0.1, [], true, { ja4: fixture.ja4 })
+        .observations[IDENTITY_POLICY],
+      fixture.expected);
     assert.equal(JSON.stringify(fixture), before, 'observations must not mutate inputs');
   });
 }

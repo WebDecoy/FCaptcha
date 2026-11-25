@@ -156,13 +156,13 @@ type ExperimentalDetection struct {
 // evaluateExperimental measures a known-ambiguous hypothesis: #87's stealth
 // session and a DevTools hardware override can look identical. Never merge its
 // evidence into production scoring. Missing/unsupported probes add no evidence.
-func evaluateExperimental(signals map[string]interface{}, productionScore float64, detections []DetectionResult, blocking bool) ExperimentalResult {
+func evaluateExperimental(signals map[string]interface{}, productionScore float64, detections []DetectionResult, blocking bool, ja4 ...string) ExperimentalResult {
 	result := ExperimentalResult{
 		Mode: "observe", Policy: experimentalPolicy, Score: productionScore,
 		Detections: []ExperimentalDetection{}, CorroboratingCategories: []string{},
 		Observations: map[string]ExperimentalObservation{
 			"animation-consistency-v1": animationObservation(signals),
-			identityPolicy:             identityObservation(signals),
+			identityPolicy:             identityObservation(signals, ja4...),
 			externalCDPInputPolicy:     externalCDPInputObservation(signals),
 		},
 	}

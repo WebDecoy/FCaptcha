@@ -36,6 +36,7 @@ jobs:
             docker run -d --name fcaptcha-conformance -p 3000:3000 \
               -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" \
               -e TRUSTED_PROXIES="*" \
+              -e TRUSTED_JA4_HEADERS="x-test-ja4" \
               -e FCAPTCHA_EXPERIMENTAL_BLOCKING="$policy" fcaptcha-conformance
             ready=false
             for _ in $(seq 1 60); do

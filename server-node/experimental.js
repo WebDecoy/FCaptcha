@@ -74,7 +74,7 @@ function animationObservation(signals) {
 // #87's stealth session and a DevTools hardware override can look identical.
 // Never merge these detections into production scoring or state updates. The
 // server's explicit blocking option adds a separate token gate.
-function evaluateExperimental(signals, productionScore, detections, blocking = false) {
+function evaluateExperimental(signals, productionScore, detections, blocking = false, context = {}) {
   const worker = signals.environmental?.workerConsistency;
   const mismatch = worker?.supported === true && worker.consistent === false &&
     Array.isArray(worker.mismatches) && worker.mismatches.includes('hardwareConcurrency');
@@ -96,7 +96,7 @@ function evaluateExperimental(signals, productionScore, detections, blocking = f
     corroboratingCategories,
     observations: {
       [ANIMATION_POLICY]: animationObservation(signals),
-      [IDENTITY_POLICY]: identityObservation(signals),
+      [IDENTITY_POLICY]: identityObservation(signals, context.ja4),
       [EXTERNAL_CDP_INPUT_POLICY]: externalCdpInputObservation(signals),
     },
   };
