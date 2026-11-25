@@ -1874,27 +1874,41 @@
 
     _getCanvasHash() {
       try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 200;
-        canvas.height = 50;
-        const ctx = canvas.getContext('2d');
+        // Read the same fixed scene from two fresh canvases. Stock browsers are
+        // deterministic within a page load; anti-fingerprinting tools can add
+        // new noise on each readback. This remains weak evidence because Brave,
+        // resistFingerprinting and privacy extensions can do that for people.
+        const render = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 200;
+          canvas.height = 50;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('2d canvas unavailable');
 
-        ctx.textBaseline = 'top';
-        ctx.font = '14px Arial';
-        ctx.fillStyle = '#f60';
-        ctx.fillRect(125, 1, 62, 20);
-        ctx.fillStyle = '#069';
-        ctx.fillText('FCaptcha', 2, 15);
-        ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
-        ctx.fillText('FCaptcha', 4, 17);
+          ctx.textBaseline = 'top';
+          ctx.font = '14px Arial';
+          ctx.fillStyle = '#f60';
+          ctx.fillRect(125, 1, 62, 20);
+          ctx.fillStyle = '#069';
+          ctx.fillText('FCaptcha', 2, 15);
+          ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+          ctx.fillText('FCaptcha', 4, 17);
+          return canvas.toDataURL();
+        };
 
-        const dataUrl = canvas.toDataURL();
+        const dataUrl = render();
+        const repeatedDataUrl = render();
         let hash = 0;
         for (let i = 0; i < dataUrl.length; i++) {
           hash = ((hash << 5) - hash) + dataUrl.charCodeAt(i);
           hash = hash & hash;
         }
-        return { hash: hash.toString(16), dataLength: dataUrl.length, supported: true };
+        return {
+          hash: hash.toString(16),
+          dataLength: dataUrl.length,
+          supported: true,
+          canvasStable: dataUrl === repeatedDataUrl,
+        };
       } catch (e) {
         return { error: true, supported: false };
       }

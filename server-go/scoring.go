@@ -662,6 +662,7 @@ func (e *ScoringEngine) verifyWithHeaders(signals map[string]interface{}, ip, si
 	detections = append(detections, e.detectTouchAuthenticity(signals, userAgent)...)
 	detections = append(detections, e.detectSensorEntropy(signals, userAgent)...)
 	detections = append(detections, e.detectTouchKinematics(signals)...)
+	detections = append(detections, detectCanvasStability(signals)...)
 	detections = append(detections, e.detectFingerprint(signals, ip, siteKey)...)
 	detections = append(detections, e.detectRateAbuse(ip, siteKey)...)
 
@@ -2110,6 +2111,25 @@ func (e *ScoringEngine) detectFingerprint(signals map[string]interface{}, ip, si
 	}
 
 	return results
+}
+
+// detectCanvasStability reports per-read canvas noise as weak fingerprint
+// evidence. Privacy browsers and extensions can intentionally produce the same
+// result for people, so it is neither dispositive nor part of the behavioural
+// corroboration floor. Old clients without a real boolean remain neutral.
+func detectCanvasStability(signals map[string]interface{}) []DetectionResult {
+	canvas := getMap(getMap(signals, "environmental"), "canvasHash")
+	stable, present := canvas["canvasStable"].(bool)
+	if !present || stable {
+		return nil
+	}
+	return []DetectionResult{{
+		Category:   CategoryFingerprint,
+		Score:      0.35,
+		Confidence: 0.4,
+		Reason:     "Canvas readback changed between identical renders",
+		Details:    map[string]interface{}{"signal": "canvas_unstable"},
+	}}
 }
 
 // deviceVerificationsPerMinute caps how many tokens one page instance on one

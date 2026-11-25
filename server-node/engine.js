@@ -514,6 +514,24 @@ function detectStealthArtifacts(signals) {
   return detections;
 }
 
+// Identical canvas renders should have identical readbacks within one page
+// load. Per-read noise is useful evidence of anti-detect tooling, but privacy
+// browsers and extensions deliberately do the same thing for real people. Keep
+// this low-confidence and in the fingerprint category, which is not eligible
+// for the behavioural corroboration floor. Missing/malformed old-client data is
+// neutral rather than assumed stable or unstable.
+function detectCanvasStability(signals) {
+  const canvas = signals?.environmental?.canvasHash;
+  if (!canvas || canvas.canvasStable !== false) return [];
+  return [{
+    category: 'fingerprint',
+    score: 0.35,
+    confidence: 0.4,
+    reason: 'Canvas readback changed between identical renders',
+    details: { signal: 'canvas_unstable' },
+  }];
+}
+
 function detectAutomation(signals) {
   const detections = [];
   const env = signals.environmental || {};
@@ -1067,6 +1085,7 @@ module.exports = {
   detectVisionAI,
   detectHeadless,
   detectStealthArtifacts,
+  detectCanvasStability,
   detectAutomation,
   detectCDP,
   detectBehavioral,

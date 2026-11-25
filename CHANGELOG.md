@@ -19,10 +19,20 @@ reading would call major. Read the **Breaking** entries rather than the number.
 - Add an observe-only `external-cdp-input-shape-v1` research observation for
   the complete Browser Harness synthetic-fill, select-all, and repeated instant-
   scroll conjunction. Accessibility-adjacent partial patterns remain clear.
+- Render the fixed canvas fingerprint scene twice and report whether its
+  readback is stable. An explicit unstable result emits low-confidence
+  `fingerprint` evidence with the `canvas_unstable` detail in Go, Node, and
+  Python; missing older-client telemetry remains neutral.
 
 This observation does not alter scores, recommendations, tokens, challenge
 cost, state updates, or blocking policy. Independent accessibility and
 machine/profile replication remain required before any scoring proposal.
+
+Canvas instability does change the production score, but contributes only
+`0.0112` by itself, remains `allow`, is not dispositive, and cannot participate
+in the behavioral corroboration floor. Privacy browsers and extensions can
+produce the signal for legitimate visitors, so it must never be treated as a
+standalone automation verdict.
 
 ## [1.51.4] — 2026-11-23
 

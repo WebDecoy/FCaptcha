@@ -1,0 +1,65 @@
+{
+  "notes": "Shared canvas readback-stability vectors. Missing and malformed old-client fields are neutral; false is weak fingerprint evidence because privacy tools can produce it for people.",
+  "cases": [
+    {
+      "name": "unstable repeated readback",
+      "signals": {
+        "environmental": {
+          "canvasHash": {
+            "supported": true,
+            "canvasStable": false
+          }
+        }
+      },
+      "expected": {
+        "category": "fingerprint",
+        "score": 0.35,
+        "confidence": 0.4,
+        "reason": "Canvas readback changed between identical renders",
+        "details": {
+          "signal": "canvas_unstable"
+        }
+      }
+    },
+    {
+      "name": "stable repeated readback",
+      "signals": {
+        "environmental": {
+          "canvasHash": {
+            "supported": true,
+            "canvasStable": true
+          }
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "older client without stability field",
+      "signals": {
+        "environmental": {
+          "canvasHash": {
+            "supported": true
+          }
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "malformed string is neutral",
+      "signals": {
+        "environmental": {
+          "canvasHash": {
+            "supported": true,
+            "canvasStable": "false"
+          }
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "missing environmental object",
+      "signals": {},
+      "expected": null
+    }
+  ]
+}

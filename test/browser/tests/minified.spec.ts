@@ -72,6 +72,7 @@ function fingerprintOf(env: any) {
   return {
     canvas: env?.canvasHash?.hash ?? null,
     canvasLength: env?.canvasHash?.dataLength ?? null,
+    canvasStable: env?.canvasHash?.canvasStable ?? null,
     webglRenderer: env?.webglInfo?.renderer ?? null,
     webglVendor: env?.webglInfo?.vendor ?? null,
   };
@@ -108,6 +109,7 @@ test.describe('minified bundle', () => {
     expect(present, 'no fingerprints collected — the comparison proves nothing').toBeGreaterThan(0);
 
     expect(b).toEqual(a);
+    expect(a.canvasStable, 'stock Chromium should reproduce an identical canvas readback').toBe(true);
     expect(fromMin.environmental.animationConsistency).toEqual(fromSource.environmental.animationConsistency);
   });
 
