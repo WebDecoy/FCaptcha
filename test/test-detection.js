@@ -1208,7 +1208,7 @@ async function testInvisibleMode() {
 async function testAdvancedDetections() {
   log('\n[Advanced Fingerprint Detection]', colors.cyan);
 
-  // Test WebRTC detection - no media devices (headless indicator)
+  // No media devices is a valid privacy/minimal-device configuration.
   const noMediaDevicesResult = await makeRequest('/api/verify', {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
@@ -1233,9 +1233,9 @@ async function testAdvancedDetections() {
       }
     }
   });
-  assertDetection(noMediaDevicesResult, 'headless', true, 'Detects no media devices via WebRTC');
+  assertDetection(noMediaDevicesResult, 'headless', false, 'No media devices is neutral');
 
-  // Test Speech API - no voices (headless indicator)
+  // No installed speech voices is also valid and must remain neutral.
   const noVoicesResult = await makeRequest('/api/verify', {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
@@ -1255,7 +1255,7 @@ async function testAdvancedDetections() {
       }
     }
   });
-  assertDetection(noVoicesResult, 'headless', true, 'Detects no speech synthesis voices');
+  assertDetection(noVoicesResult, 'headless', false, 'No speech synthesis voices is neutral');
 
   // Test Worker consistency - mismatch detection
   const workerMismatchResult = await makeRequest('/api/verify', {
