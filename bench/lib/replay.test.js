@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const net = require('node:net');
 
 const {
   neutralIpAt,
@@ -33,16 +34,21 @@ test('every position gets a distinct address', () => {
   assert.strictEqual(seen.size, NEUTRAL_POOL_SIZE);
 });
 
-test('addresses stay inside the RFC 5737 documentation ranges', () => {
+test('addresses stay inside RFC 3849 and occupy distinct /56 networks', () => {
   // Reserved, routable nowhere, and in no datacenter CIDR list — so an address
-  // never becomes a signal by accident.
-  const allowed = /^(192\.0\.2|198\.51\.100|203\.0\.113)\.(\d{1,3})$/;
+  // never becomes a signal by accident. The server groups IPv6 sources by /56,
+  // so uniqueness in host bits alone is insufficient.
+  const networks = new Set();
   for (let i = 0; i < NEUTRAL_POOL_SIZE; i++) {
-    const m = allowed.exec(neutralIpAt(i));
-    assert.ok(m, `${neutralIpAt(i)} is outside the documentation ranges`);
-    const host = Number(m[2]);
-    assert.ok(host >= 1 && host <= 254, `${neutralIpAt(i)} is a network or broadcast address`);
+    const ip = neutralIpAt(i);
+    assert.strictEqual(net.isIP(ip), 6, `${ip} is not IPv6`);
+    assert.match(ip, /^2001:db8:[0-9a-f]+:[0-9a-f]+::1$/, `${ip} is outside RFC 3849`);
+    const [, , third, fourth] = ip.split(':');
+    const network = `${third}:${Number.parseInt(fourth, 16) >>> 8}`;
+    assert.ok(!networks.has(network), `position ${i} reused /56 ${network}`);
+    networks.add(network);
   }
+  assert.strictEqual(networks.size, NEUTRAL_POOL_SIZE);
 });
 
 // Silently wrapping around would reintroduce the collisions this replaced.

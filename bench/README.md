@@ -331,13 +331,14 @@ sample and measures nothing but itself. `lib/pow.js` paces the solve and waits
 out the challenge age, so `duration` stays true wall-clock — a fabricated
 duration would be measuring the fabrication.
 
-**Every sample gets its own client IP.** The server keys rate limits and
-accumulated suspicion per `pow:{siteKey}:{ip}`, so a few hundred samples from one
-address would pick up escalations the earlier samples never saw — the measurement
-would drift with position in the corpus. Samples present a distinct RFC 5737
-documentation address via `X-Forwarded-For`, which works because loopback is in
-the default trusted-proxy set. Agent classes that really do arrive from
-datacenter ranges can say so with `clientIp`.
+**Every sample gets its own source network.** The server keys rate limits and
+accumulated suspicion per site key and challenge-network identity (/24 for IPv4,
+/56 for IPv6), so a few hundred samples from one network would pick up
+escalations the earlier samples never saw — the measurement would drift with
+position in the corpus. Samples present distinct RFC 3849 documentation /56s via
+`X-Forwarded-For`, which works because loopback is in the default trusted-proxy
+set. Agent classes that really do arrive from datacenter ranges can say so with
+`clientIp`.
 
 Those addresses are assigned **by position**, not by hashing the sample id, and
 that distinction was learned the hard way. Hashing put 180 samples into a

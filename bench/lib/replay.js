@@ -5,22 +5,21 @@
  *
  * ## Why every sample gets its own client IP
  *
- * The server escalates PoW difficulty per `pow:{siteKey}:{ip}` — 10 challenges
- * in a minute moves it to 5, 20 moves it to 6. A few hundred samples from one
- * address would therefore spend most of the run solving 16.7M-hash challenges,
- * and worse, the later samples would be scored under rate-limit detections the
- * earlier ones never saw. The measurement would drift as a function of position
- * in the corpus.
+ * The server escalates PoW difficulty per site key and challenge-network
+ * identity (/24 for IPv4, /56 for IPv6). A few hundred samples from one source
+ * network would therefore spend most of the run solving harder challenges, and
+ * worse, later samples would be scored under rate-limit detections the earlier
+ * ones never saw. The measurement would drift as a function of corpus position.
  *
- * So each sample presents a distinct address derived from its id. That is only
- * possible because loopback is in the default trusted-proxy set, so a request
+ * So each sample presents a distinct source network derived from its position.
+ * That is only possible because loopback is in the default trusted-proxy set, so a request
  * from 127.0.0.1 may set `X-Forwarded-For` — the same v1.16.0 mechanism that
  * lets Railway's edge do it, used here deliberately.
  *
  * The address is part of the label, not a workaround: a hosted computer-use
  * agent really does arrive from a datacenter range, and a human on a home
  * connection really does not. Samples may set `clientIp` to say so; anything
- * that does not gets a documentation-range address (RFC 5737), which no
+ * that does not gets a documentation-range address (RFC 3849), which no
  * detection treats as anything in particular.
  *
  * Those addresses are assigned by position and must stay unique — see
@@ -79,11 +78,18 @@ function distinguishDevice(signals, id) {
   };
 }
 
-/** RFC 5737 TEST-NET-1, -2 and -3: reserved, routable nowhere, in no CIDR list. */
-const NEUTRAL_PREFIXES = ['192.0.2', '198.51.100', '203.0.113'];
+/**
+ * RFC 3849's documentation-only IPv6 prefix. Each generated address occupies
+ * a distinct /56 because that is the server's challenge-network identity.
+ * Merely changing the host bits would still make samples share source state.
+ */
+const NEUTRAL_POOL_SIZE = 4096;
 
-/** .0 and .255 are the network and broadcast addresses; keep to 1-254. */
-const NEUTRAL_POOL_SIZE = NEUTRAL_PREFIXES.length * 254;
+function neutralIpv6At(index) {
+  const third = Math.floor(index / 256).toString(16);
+  const fourth = ((index % 256) << 8).toString(16);
+  return `2001:db8:${third}:${fourth}::1`;
+}
 
 /**
  * The address for the Nth sample in a corpus.
@@ -100,14 +106,14 @@ const NEUTRAL_POOL_SIZE = NEUTRAL_PREFIXES.length * 254;
  * could not disagree about. Assign by index and the collisions cannot come back.
  */
 function neutralIpAt(index) {
-  if (index >= NEUTRAL_POOL_SIZE) {
+  if (!Number.isInteger(index) || index < 0 || index >= NEUTRAL_POOL_SIZE) {
     throw new Error(
       `corpus has outgrown the neutral address pool (${NEUTRAL_POOL_SIZE} addresses). ` +
-        'Add another RFC 5737 prefix rather than letting samples share an address — ' +
+        'Increase the bounded RFC 3849 /56 pool rather than letting samples share an address — ' +
         'shared addresses silently break every per-source measurement.'
     );
   }
-  return `${NEUTRAL_PREFIXES[Math.floor(index / 254)]}.${(index % 254) + 1}`;
+  return neutralIpv6At(index);
 }
 
 /**
@@ -118,8 +124,7 @@ function neutralIpAt(index) {
  */
 function neutralIpFor(id) {
   const digest = crypto.createHash('sha256').update(id).digest();
-  const prefix = NEUTRAL_PREFIXES[digest[0] % NEUTRAL_PREFIXES.length];
-  return `${prefix}.${(digest[1] % 254) + 1}`;
+  return neutralIpv6At(digest.readUInt16BE(0) % NEUTRAL_POOL_SIZE);
 }
 
 const DEFAULT_UA =
