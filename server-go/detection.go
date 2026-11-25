@@ -172,15 +172,6 @@ func analyzeWebRTC(webrtcInfo map[string]interface{}) []DetectionResult {
 	}
 	mediaDevices := getMap(webrtcInfo, "mediaDevices")
 	if mediaDevices != nil && getBool(mediaDevices, "supported") {
-		totalDevices := int(getFloat(mediaDevices, "totalDevices"))
-		if totalDevices == 0 {
-			detections = append(detections, DetectionResult{
-				Category:   CategoryHeadless,
-				Score:      0.7,
-				Confidence: 0.75,
-				Reason:     "No media devices detected (typical of headless browsers)",
-			})
-		}
 		videoInputs := int(getFloat(mediaDevices, "videoInputs"))
 		audioInputs := int(getFloat(mediaDevices, "audioInputs"))
 		if videoInputs > 0 && audioInputs == 0 {
@@ -202,14 +193,7 @@ func analyzeSpeechAPI(speechInfo map[string]interface{}) []DetectionResult {
 	}
 	totalVoices := int(getFloat(speechInfo, "totalVoices"))
 	localVoices := int(getFloat(speechInfo, "localVoices"))
-	if totalVoices == 0 {
-		detections = append(detections, DetectionResult{
-			Category:   CategoryHeadless,
-			Score:      0.6,
-			Confidence: 0.7,
-			Reason:     "No speech synthesis voices available",
-		})
-	} else if totalVoices < 5 {
+	if totalVoices > 0 && totalVoices < 5 {
 		detections = append(detections, DetectionResult{
 			Category:   CategoryHeadless,
 			Score:      0.3,

@@ -76,6 +76,25 @@ func TestXRequestedWithIgnoresPeerTrust(t *testing.T) {
 	}
 }
 
+func TestMissingMediaDevicesAndSpeechVoicesAreNeutral(t *testing.T) {
+	webrtc := map[string]interface{}{
+		"supported": true,
+		"mediaDevices": map[string]interface{}{
+			"supported": true, "totalDevices": 0.0,
+			"audioInputs": 0.0, "videoInputs": 0.0,
+		},
+	}
+	if got := analyzeWebRTC(webrtc); len(got) != 0 {
+		t.Errorf("zero media devices can be an ordinary human configuration, got %+v", got)
+	}
+	speech := map[string]interface{}{
+		"supported": true, "totalVoices": 0.0, "localVoices": 0.0,
+	}
+	if got := analyzeSpeechAPI(speech); len(got) != 0 {
+		t.Errorf("zero speech voices can be an ordinary human configuration, got %+v", got)
+	}
+}
+
 // Corroborating evidence must never weaken a verdict. Before noisy-OR, adding
 // automation tells to a WebDriver hit pulled the category average down.
 func TestCategoryScoreIsMonotoneInEvidence(t *testing.T) {

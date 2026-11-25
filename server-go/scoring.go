@@ -1791,7 +1791,6 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 	// Exempt: touch users (mobile) and keyboard-only users (accessibility)
 	totalPoints := getFloat(behavioral, "totalPoints")
 	trajectoryLength := getFloat(behavioral, "trajectoryLength")
-	keyEvents := getFloat(behavioral, "keyEvents")
 	isTouchUsr := isTouchModality(behavioral)
 	isKbdUsr := keyboardOnlyUser(signals, behavioral)
 	isWidget := hasWidgetInteraction(signals)
@@ -1873,17 +1872,6 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 			Score:      0.4,
 			Confidence: 0.4,
 			Reason:     "Mouse event rate abnormally low",
-		})
-	}
-
-	// No scroll/keyboard
-	scrollEvents := getFloat(behavioral, "scrollEvents")
-	if scrollEvents == 0 && keyEvents == 0 && interactionTime > 5000 {
-		results = append(results, DetectionResult{
-			Category:   CategoryBehavioral,
-			Score:      0.2,
-			Confidence: 0.2,
-			Reason:     "No scroll or keyboard activity during session",
 		})
 	}
 

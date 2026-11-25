@@ -124,8 +124,8 @@ class CaptureServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, backend, mode, observations=False, expected_client_version=None,
-                 form_fixture='basic'):
-        super().__init__(('127.0.0.1', 0), CaptureHandler)
+                 form_fixture='basic', listen_port=0):
+        super().__init__(('127.0.0.1', listen_port), CaptureHandler)
         self.backend = backend
         self.mode = mode
         self.site_key = 'browser-bench-' + uuid.uuid4().hex
@@ -234,8 +234,10 @@ class CaptureHandler(BaseHTTPRequestHandler):
 
 @contextmanager
 def capture_server(backend, mode, observations=False, expected_client_version=None,
-                   form_fixture='basic'):
-    server = CaptureServer(backend, mode, observations, expected_client_version, form_fixture)
+                   form_fixture='basic', listen_port=0):
+    server = CaptureServer(
+        backend, mode, observations, expected_client_version, form_fixture, listen_port
+    )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -363,7 +365,7 @@ def run_case(args, case, index):
               'startedAt': datetime.now(timezone.utc).isoformat()}
     started = time.monotonic()
     with capture_server(args.server, case['mode'], args.observations,
-                        args.expected_client_version) as (server, url):
+                        args.expected_client_version, listen_port=args.capture_port) as (server, url):
         try:
             if case['browser'] == 'camoufox':
                 from camoufox.sync_api import Camoufox
@@ -483,7 +485,8 @@ def manual_capture(args):
     if workflow:
         sample['manualWorkflow'] = workflow
     with capture_server(args.server, args.modes[0], args.observations,
-                        args.expected_client_version, args.form_fixture) as (server, url):
+                        args.expected_client_version, args.form_fixture,
+                        args.capture_port) as (server, url):
         print(f'Open {url} in your own browser and complete the page. Waiting {args.timeout}s.', flush=True)
         if not server.finished.wait(args.timeout):
             sample['error'] = 'No manual submission received; human baseline remains unmeasured'
@@ -510,7 +513,7 @@ def browser_internal_capture(args):
               'privacy': 'operator-described', 'mode': args.modes[0],
               'normalization': 'none'}
     with capture_server(args.server, args.modes[0], args.observations,
-                        args.expected_client_version) as (server, url):
+                        args.expected_client_version, listen_port=args.capture_port) as (server, url):
         print(f'Open {url} in {args.environment_label}, then ask {args.agent_label} '
               f'to complete the page. Waiting {args.timeout}s.', flush=True)
         if not server.finished.wait(args.timeout):
@@ -541,7 +544,7 @@ def external_driver_capture(args):
               'privacy': 'operator-described', 'mode': args.modes[0],
               'normalization': 'none'}
     with capture_server(args.server, args.modes[0], args.observations,
-                        args.expected_client_version) as (server, url):
+                        args.expected_client_version, listen_port=args.capture_port) as (server, url):
         print(f'Direct {args.driver_name} {args.driver_version} ({args.driver_commit}) '
               f'in {args.environment_label} to {url} and have it complete the page. '
               f'Waiting {args.timeout}s.', flush=True)
@@ -573,6 +576,7 @@ def main():
     parser.add_argument('--repeats', type=int, default=3)
     parser.add_argument('--seed', type=int, default=87)
     parser.add_argument('--timeout', type=int, default=90)
+    parser.add_argument('--capture-port', type=int, default=0, help='Optional fixed loopback recorder port; zero selects an ephemeral port')
     parser.add_argument('--out', type=Path, default=ROOT/'bench/test-results/camoufox')
     capture_mode = parser.add_mutually_exclusive_group()
     capture_mode.add_argument('--manual', action='store_true', help='Record one person using their own browser; launches no browser automation')
@@ -607,6 +611,8 @@ def main():
         parser.error('--server must be a loopback HTTP test server')
     if args.repeats < 1 or args.timeout < 1:
         parser.error('--repeats and --timeout must be positive')
+    if args.capture_port != 0 and not 1024 <= args.capture_port <= 65535:
+        parser.error('--capture-port must be zero or between 1024 and 65535')
     external_capture = args.manual or args.accessibility_manual or args.external_agent or args.external_driver
     if external_capture and (not args.environment_label or len(args.modes) != 1):
         parser.error('--manual/--accessibility-manual/--external-agent/--external-driver requires --environment-label and exactly one --modes value')

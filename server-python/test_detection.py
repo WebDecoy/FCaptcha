@@ -10,7 +10,13 @@ Run: python test_detection.py
 
 from testkit import TestRegistry
 
-from detection import analyze_headers, check_declared_ai_agent, check_ip_reputation
+from detection import (
+    analyze_headers,
+    analyze_speech_api,
+    analyze_webrtc,
+    check_declared_ai_agent,
+    check_ip_reputation,
+)
 from server import (
     Detection,
     ThreatCategory,
@@ -109,6 +115,24 @@ def x_requested_with_ignores_peer_trust():
         h = {**browser_headers(), "x-requested-with": "XMLHttpRequest"}
         hits = suspicious(analyze_headers(h, peer_trusted))
         assert len(hits) == 1, f"peer_trusted={peer_trusted}: {hits}"
+
+
+@test
+def absence_of_media_devices_and_speech_voices_is_neutral():
+    assert analyze_webrtc({
+        "supported": True,
+        "mediaDevices": {
+            "supported": True,
+            "totalDevices": 0,
+            "audioInputs": 0,
+            "videoInputs": 0,
+        },
+    }) == []
+    assert analyze_speech_api({
+        "supported": True,
+        "totalVoices": 0,
+        "localVoices": 0,
+    }) == []
 
 
 @test

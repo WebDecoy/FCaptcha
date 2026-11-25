@@ -13,6 +13,7 @@ test('parses pinned external-driver importer arguments', () => {
     'node', 'import-external-driver-capture.js',
     '--report', 'report.json',
     '--out', 'sample.json',
+    '--group', 'browser-harness-macbook-cdp-agent',
     '--scenario', 'browser-harness-real-chrome-form',
     '--input', 'Browser Harness over loopback CDP',
     '--expected-client-version', '1.51.4',
@@ -23,6 +24,7 @@ test('parses pinned external-driver importer arguments', () => {
   ]);
 
   assert.equal(args.report, 'report.json');
+  assert.equal(args.group, 'browser-harness-macbook-cdp-agent');
   assert.equal(args.scenario, 'browser-harness-real-chrome-form');
   assert.equal(args.expectedDriverName, 'browser-harness');
   assert.equal(args.expectedDriverVersion, '0.1.13');
@@ -32,6 +34,7 @@ test('parses pinned external-driver importer arguments', () => {
 
 test('requires stable external-driver slugs', () => {
   assert.doesNotThrow(() => requireSlug('browser-harness', 'expected-driver-name'));
+  assert.doesNotThrow(() => requireSlug('browser-harness-macbook-cdp-agent', 'group'));
   assert.throws(() => requireSlug('../escape', 'scenario'), /lowercase hyphenated slug/);
   assert.throws(() => requireSlug('BrowserHarness', 'expected-driver-name'), /lowercase hyphenated slug/);
 });

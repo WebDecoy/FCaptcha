@@ -7,7 +7,7 @@
 // deployment behind a reverse proxy carried a permanent bot detection.
 
 const assert = require('assert');
-const { analyzeHeaders, analyzeWebRTC } = require('./detection');
+const { analyzeHeaders, analyzeSpeechAPI, analyzeWebRTC } = require('./detection');
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -95,6 +95,18 @@ test('WebRTC local-address availability does not affect the score', () => {
   ]) {
     assert.deepStrictEqual(analyzeWebRTC({ supported: true, mediaDevices, ...addresses }), []);
   }
+});
+
+test('absence of media devices and speech voices is neutral', () => {
+  assert.deepStrictEqual(analyzeWebRTC({
+    supported: true,
+    mediaDevices: { supported: true, totalDevices: 0, audioInputs: 0, videoInputs: 0 },
+  }), []);
+  assert.deepStrictEqual(analyzeSpeechAPI({
+    supported: true,
+    totalVoices: 0,
+    localVoices: 0,
+  }), []);
 });
 
 let failed = 0;

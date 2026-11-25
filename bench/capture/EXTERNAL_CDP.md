@@ -148,3 +148,66 @@ accessibility testing before it can be considered for scoring.
 
 Use the consent, isolation, provenance, exclusion, and teardown protocol in
 [`ACCESSIBILITY_OBSERVATION.md`](ACCESSIBILITY_OBSERVATION.md) for that testing.
+
+## Independent MacBook replication
+
+Issue #230 was replicated on a second physical machine, a MacBook Pro
+`Mac16,6` with an Apple M4 Max and 36 GB RAM, running macOS 26.6.2 on arm64.
+The browser and driver ran inside fresh Linux/arm64 containers, so the captured
+browser environment was Chromium 156.0.8078.79 with a new unsigned profile for
+every attempt. The pinned inputs were:
+
+- Browser Harness 0.1.13 at
+  `c24e5072ee66f8499bacd663f4f4bcb089bc4492`;
+- capture image `webdecoy/browser-harness-capture:0.1.13`, image ID
+  `sha256:fb77195989c998f150e9e01fd1c71f5d19814ca0e21d10b4a69337e88ba0e06f`;
+- FCaptcha 1.51.4 client SHA-256
+  `4e1e903bb1a12b61e441e84859f18247cda3aad1cd0308c20a04e99b2431c653`;
+- FCaptcha source commit
+  `c3920f5801cd29e963c6dcffb5df1cdd0ff77bfa` at capture time.
+
+The target browser and driver had a read-only source mount, scratch-only tmpfs,
+an internal Docker network with no external egress, a loopback relay to the
+test server, no ambient account or profile data, and explicit CPU, memory, PID,
+open-file, file-size, disk, and wall-clock limits. `browser_harness_task.py` and
+`run_browser_harness_capture.sh` encode the fixed choreography: enter the made-
+up name `Browser test`, follow the page anchor, produce one return scroll, and
+complete the mode-specific form, widget, or invisible control. Raw reports and
+profiles were destroyed after reviewed import.
+
+The retained cohort contains five form pairs plus one widget and one invisible
+pair. Every agent replay had production score 0.600; the observation stayed
+separate and non-gating. The released-client manual controls were all allowed
+at 0.108675. Current-source replay after the false-positive repairs below also
+keeps all controls below the production threshold.
+
+| Mode | Agent/control pairs | Observation agent result | Observation control result |
+|---|---:|---:|---:|
+| Form | 5 | 5 detected, 0 clear, 0 unknown | 0 detected, 5 clear, 0 unknown |
+| Widget | 1 | 1 detected, 0 clear, 0 unknown | 0 detected, 1 clear, 0 unknown |
+| Invisible | 1 | 1 detected, 0 clear, 0 unknown | 0 detected, 1 clear, 0 unknown |
+
+The form-only analysis screened five complete pairs against all 50 captured
+human samples. The cross-mode analysis screened seven complete pairs against
+the same 50-human panel. In both reports, `instantRatio > 0.5`,
+`inputsWithoutKeys > 0`, and `selectAllShortcuts > 0` caught every agent with
+zero human hits, complete field coverage, a consistent direction, and complete
+leave-one-pair-out survival. `inputsWithoutInputType` alone is no longer a
+zero-human separator because the real Chromium autofill and password-manager
+workflows produce that partial shape. The versioned observation deliberately
+requires the full conjunction and detected 7/7 independent agents with 0/50
+captured-human matches and no unknowns.
+
+Fixed replay of all 98 base corpus samples completed on the current Node, Go,
+and Python servers with zero errors and a passing gate on each implementation.
+All three reported the same observation result: 7/7 for the independent
+Browser Harness group, 0/50 for captured humans, and 0/5 for the accessibility
+validation group.
+
+The expanded human evidence exposed two unrelated absence-only false positives:
+Go alone scored a long pointer-only session for having no scroll or keyboard,
+and all three servers scored browsers with no media devices or speech voices as
+headless. Those rules were removed with regression tests. No scoring or
+enforcement change for `external-cdp-input-shape-v1` is included here; any such
+proposal remains a separate versioned policy change with its own review and
+false-positive budget.

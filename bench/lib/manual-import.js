@@ -279,7 +279,7 @@ function toExternalDriverSample(report, options, reportBytes = null) {
   return {
     id: `agent/${options.scenario}/${String(options.index).padStart(4, '0')}`,
     label: 'agent',
-    group: `${driver.name}-cdp-agent`,
+    group: options.group || `${driver.name}-cdp-agent`,
     scenario: options.scenario,
     provenance: 'captured',
     notes,
