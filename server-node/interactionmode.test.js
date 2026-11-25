@@ -56,6 +56,20 @@ test('invisible mode fires none of them', () => {
   }
 });
 
+test('invisible mode does not invent a missing click', () => {
+  const pointerless = { behavioral: {} };
+  const invisible = reasonsFor(setInteractionMode(pointerless, false));
+  assert.ok(
+    !invisible.includes('No mouse movement detected before click (AI agent pattern)'),
+    `invisible mode has no click target: ${JSON.stringify(invisible)}`
+  );
+  const widget = reasonsFor(setInteractionMode(pointerless, true));
+  assert.ok(
+    widget.includes('No mouse movement detected before click (AI agent pattern)'),
+    `widget mode should still detect a pointerless click: ${JSON.stringify(widget)}`
+  );
+});
+
 test('an unset mode defaults to widget, so existing callers are unaffected', () => {
   const reasons = reasonsFor(clickDerivedSession());
   for (const reason of CLICK_DERIVED_REASONS) {

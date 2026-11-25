@@ -239,7 +239,7 @@ function detectVisionAI(signals) {
   // Click-derived fields only exist when a widget was there to click.
   const isWidget = hasWidgetInteraction(signals);
 
-  if (totalPoints < 5 && trajectory < 10 && !isTouchUser && !isKeyboardUser) {
+  if (isWidget && totalPoints < 5 && trajectory < 10 && !isTouchUser && !isKeyboardUser) {
     detections.push({
       category: 'vision_ai', score: 0.9, confidence: 0.85,
       reason: 'No mouse movement detected before click (AI agent pattern)'
