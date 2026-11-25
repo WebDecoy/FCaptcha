@@ -23,6 +23,10 @@ reading would call major. Read the **Breaking** entries rather than the number.
   readback is stable. An explicit unstable result emits low-confidence
   `fingerprint` evidence with the `canvas_unstable` detail in Go, Node, and
   Python; missing older-client telemetry remains neutral.
+- Add a trusted-JA4 TLS-family axis to the observe-only
+  `identity-coherence-v1` observation. It recognizes only FoxIO reference
+  cipher-set hashes for Blink, Gecko, and WebKit; malformed, unfamiliar, or
+  TLS-intercepted fingerprints remain unknown.
 
 This observation does not alter scores, recommendations, tokens, challenge
 cost, state updates, or blocking policy. Independent accessibility and
@@ -33,6 +37,9 @@ Canvas instability does change the production score, but contributes only
 in the behavioral corroboration floor. Privacy browsers and extensions can
 produce the signal for legitimate visitors, so it must never be treated as a
 standalone automation verdict.
+
+The TLS-family axis is monitoring-only. It does not change production scoring,
+tokens, state, challenge cost, or any existing experimental blocking selector.
 
 ## [1.51.4] — 2026-11-23
 

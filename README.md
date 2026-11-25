@@ -777,10 +777,17 @@ observations for access decisions.
 
 `identity-coherence-v1` compares the browser and OS claimed by the User-Agent
 with independently measured WebGL backend, font-set, JavaScript error, math,
-and engine-probe evidence. An engine family is reported only when at least two
-measurements agree; missing, unfamiliar, or conflicting measurements remain
-`unknown`. All browsers on iOS are treated as WebKit, including Chrome and
-Firefox. This observation never changes the production score.
+engine-probe, and trusted JA4 TLS evidence. The TLS axis uses the cipher-set
+component of
+[FoxIO's public Chromium, Firefox, and Safari references](https://github.com/FoxIO-LLC/ja4/blob/f1fea2e2313b5fd57de313fd5882eeacb3bd22ef/ja4plus-mapping.csv)
+rather than exact full-fingerprint matches; extension drift therefore does not change
+the family. Only a natively computed JA4 or a header admitted through both
+`TRUSTED_PROXIES` and `TRUSTED_JA4_HEADERS` reaches the axis. Client-supplied
+JA3 never does. Malformed or unfamiliar cipher-set hashes—including a TLS-
+intercepting proxy—or a browser whose TLS cipher set has changed—remain
+`unknown`, never a mismatch. All browsers on iOS are
+treated as WebKit, including Chrome and Firefox. This observation never changes
+the production score, token issuance, or any blocking selector.
 
 Experimental checks **default to monitoring only** (`experimental.mode: "observe"`).
 To opt into blocking, set

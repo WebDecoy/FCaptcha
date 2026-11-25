@@ -16,6 +16,20 @@ const IDENTITY_POLICY = 'identity-coherence-v1';
 const OS_LABELS = { windows: 'Windows', macos: 'macOS', ios: 'iOS', android: 'Android', chromeos: 'ChromeOS', linux: 'Linux' };
 const ENGINE_LABELS = { blink: 'Blink', gecko: 'Gecko', webkit: 'WebKit' };
 
+// JA4_b is the hash of the sorted TLS cipher-suite set. Unlike the complete
+// fingerprint, it is unaffected by extension-count drift and session-resumption
+// extensions. These values come from FoxIO's public, license-free reference
+// mapping at commit f1fea2e2313b5fd57de313fd5882eeacb3bd22ef. Unknown hashes
+// stay unknown: this is deliberately not a generic "browser-like" heuristic,
+// and a TLS-intercepting proxy must never become a contradiction.
+const JA4_CIPHER_FAMILIES = {
+  '8daaf6152771': 'blink',  // Chromium over TCP
+  '55b375c5d22e': 'blink',  // Chromium over QUIC
+  '5b57614c22b0': 'gecko',  // Firefox/NSS
+  'a09f3c656075': 'webkit', // Safari
+};
+const JA4 = /^[tqd](?:13|12|11|10|s[123])[di][0-9]{4}[A-Za-z0-9]{2}_([0-9a-f]{12})_[0-9a-f]{12}$/;
+
 // ANGLE names its backend in the renderer string. Direct3D exists only on
 // Windows and Metal only on Apple platforms. Deliberately absent: GPU model
 // names. An Apple GPU runs Linux under Asahi, and Adreno/Mali ship in Windows
@@ -110,20 +124,29 @@ function jsEngineAxis(env) {
   return { ...axis, observed: [measured[0]], subject: `JavaScript engine (${ENGINE_LABELS[measured[0]]})` };
 }
 
+function tlsFamilyAxis(ja4) {
+  const axis = { id: 'tls-family-mismatch', dimension: 'engine', observed: null };
+  if (typeof ja4 !== 'string') return axis;
+  const match = JA4.exec(ja4.trim());
+  const engine = match && JA4_CIPHER_FAMILIES[match[1]];
+  if (!engine) return axis;
+  return { ...axis, observed: [engine], subject: `TLS client family (${ENGINE_LABELS[engine]})` };
+}
+
 const overlap = (a, b) => a.some((x) => b.includes(x));
 const label = (dimension, set) => {
   const labels = dimension === 'engine' ? ENGINE_LABELS : OS_LABELS;
   return Object.keys(labels).filter((value) => set.includes(value)).map((value) => labels[value]).join('/');
 };
 
-function identityObservation(signals) {
+function identityObservation(signals, ja4 = null) {
   const result = { mode: 'observe', status: 'unknown', detections: [] };
   const env = signals?.environmental;
   const nav = env?.navigator;
   const touch = typeof nav?.maxTouchPoints === 'number' ? nav.maxTouchPoints : 0;
   const claims = { os: claimedOS(nav?.userAgent, touch), engine: claimedEngine(nav?.userAgent, touch) };
 
-  const known = [gpuBackendAxis(env), fontSetAxis(env), jsEngineAxis(env)]
+  const known = [gpuBackendAxis(env), fontSetAxis(env), jsEngineAxis(env), tlsFamilyAxis(ja4)]
     .filter((axis) => axis.observed && claims[axis.dimension]);
   if (known.length === 0) return result;
 
@@ -139,15 +162,19 @@ function identityObservation(signals) {
     (b) => a.dimension === b.dimension && !overlap(a.observed, b.observed)));
   if (disagree) {
     result.detections.push({ id: 'identity-axes-disagree', reason: 'Measured properties disagree with each other' });
-  } else if (contradicting.some((axis, i) => contradicting.slice(i + 1).some(
-    (other) => axis.dimension === other.dimension && overlap(axis.observed, other.observed)))) {
-    result.detections.push({
-      id: 'identity-claim-contradicted',
-      reason: 'Several measured properties agree with each other and contradict the claimed OS',
-    });
+  } else {
+    const agreedDimension = contradicting.find((axis, i) => contradicting.slice(i + 1).some(
+      (other) => axis.dimension === other.dimension && overlap(axis.observed, other.observed)))?.dimension;
+    if (agreedDimension) {
+      const claimedSubject = agreedDimension === 'engine' ? 'browser engine' : 'OS';
+      result.detections.push({
+        id: 'identity-claim-contradicted',
+        reason: `Several measured properties agree with each other and contradict the claimed ${claimedSubject}`,
+      });
+    }
   }
   result.status = result.detections.length > 0 ? 'detected' : 'clear';
   return result;
 }
 
-module.exports = { identityObservation, claimedOS, claimedEngine, IDENTITY_POLICY };
+module.exports = { identityObservation, claimedOS, claimedEngine, tlsFamilyAxis, IDENTITY_POLICY };

@@ -182,11 +182,29 @@ test('fingerprint churn is bounded and old suspicion expires', () => {
 test('malformed public requests return errors while the server stays available', async () => {
   process.env.FCAPTCHA_SECRET = 'test-secret-0123456789abcdef0123456789abcdef';
   process.env.REDIS_URL = '';
+  process.env.TRUSTED_PROXIES = '';
+  process.env.TRUSTED_JA4_HEADERS = 'x-test-ja4';
   const { app } = require('./server');
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
+    const spoofedJA4 = await fetch(base + '/api/score', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-test-ja4': 't13d1715h2_5b57614c22b0_7121afd63204',
+      },
+      body: JSON.stringify({ signals: { environmental: { navigator: {
+        userAgent: 'Mozilla/5.0 AppleWebKit/537.36 Chrome/156.0.0.0 Safari/537.36',
+        maxTouchPoints: 0,
+      } } } }),
+    });
+    assert.equal(spoofedJA4.status, 200);
+    const spoofedResult = await spoofedJA4.json();
+    assert.equal(spoofedResult.experimental.observations['identity-coherence-v1'].status, 'unknown',
+      'an untrusted client must not choose its own TLS family');
+
     const legacyChallenge = await fetch(base + '/api/pow/challenge?siteKey=protocol-test');
     assert.equal(legacyChallenge.status, 200);
     assert.equal(legacyChallenge.headers.get('cache-control'), 'no-store');

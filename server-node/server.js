@@ -729,8 +729,9 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
   }
 
   // Add JA4 fingerprint check from trusted proxy headers (un-spoofable by client)
-  if (TRUSTED_JA4_HEADERS.length > 0) {
-    const ja4 = detection.readJA4FromHeaders(headers, TRUSTED_JA4_HEADERS);
+  let ja4 = null;
+  if (opts.peerTrusted === true && TRUSTED_JA4_HEADERS.length > 0) {
+    ja4 = detection.readJA4FromHeaders(headers, TRUSTED_JA4_HEADERS);
     if (ja4) {
       detections.push(...detection.checkJA4Fingerprint(ja4));
     }
@@ -757,7 +758,8 @@ async function runVerification(signals, ip, siteKey, userAgent, headers = {}, ja
     detections
   );
 
-  const experimental = evaluateExperimental(signals, finalScore, detections, EXPERIMENTAL_BLOCKING_ENABLED);
+  const experimental = evaluateExperimental(
+    signals, finalScore, detections, EXPERIMENTAL_BLOCKING_ENABLED, { ja4 });
   const experimentalBlocked = EXPERIMENTAL_BLOCKING_ENABLED && experimental.wouldBlock && finalScore < 0.5;
   let recommendation;
   if (experimentalBlocked) recommendation = 'block';

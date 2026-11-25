@@ -182,7 +182,7 @@ async function run() {
   // Only server configuration may enable the gate. Challenge cost and the
   // baseline score stay independent in either mode.
   for (const endpoint of ['verify', 'score']) {
-    for (const [index, scenario] of ['stealth-shaped', 'devtools-warning', 'clean', 'animation-only', 'identity-only'].entries()) {
+    for (const [index, scenario] of ['stealth-shaped', 'devtools-warning', 'clean', 'animation-only', 'identity-only', 'tls-identity-only'].entries()) {
       const candidate = scenario === 'stealth-shaped' || scenario === 'devtools-warning';
       const blocked = EXPERIMENTAL_BLOCKING && candidate;
       const siteKey = `experimental-${endpoint}-${scenario}`;
@@ -191,6 +191,9 @@ async function run() {
         'Accept-Language': 'en-US', 'Accept-Encoding': 'gzip',
         Origin: 'https://example.test',
         'X-Real-IP': `203.0.113.${80 + (endpoint === 'score' ? 5 : 0) + index}`,
+        ...(scenario === 'tls-identity-only'
+          ? { 'X-Test-JA4': 't13d1715h2_5b57614c22b0_7121afd63204' }
+          : {}),
       };
       const signals = {
         behavioral: {
@@ -204,6 +207,10 @@ async function run() {
         environmental: {
           ...(scenario === 'animation-only' ? { animationConsistency: animationProbe } : {}),
           ...(scenario === 'identity-only' ? identityProbe : {}),
+          ...(scenario === 'tls-identity-only' ? { navigator: {
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/156.0.0.0 Safari/537.36',
+            maxTouchPoints: 0,
+          } } : {}),
           workerConsistency: { supported: true, consistent: !candidate,
             mismatches: candidate ? ['hardwareConcurrency'] : [], mismatchCount: candidate ? 1 : 0 },
           cdpRuntime: { consoleAttached: true },
@@ -229,9 +236,11 @@ async function run() {
       // Observe-only: it never selects the blocking policy, whatever the server runs.
       const identity = result.experimental.observations['identity-coherence-v1'];
       assert.strictEqual(identity.mode, 'observe');
-      assert.strictEqual(identity.status, scenario === 'identity-only' ? 'detected' : 'unknown');
+      const identityDetected = scenario === 'identity-only' || scenario === 'tls-identity-only';
+      assert.strictEqual(identity.status, identityDetected ? 'detected' : 'unknown');
       assert.deepStrictEqual(identity.detections.map((d) => d.id),
-        scenario === 'identity-only' ? ['gpu-backend-os-mismatch'] : []);
+        scenario === 'identity-only' ? ['gpu-backend-os-mismatch']
+          : scenario === 'tls-identity-only' ? ['tls-family-mismatch'] : []);
       const externalCdpInput = result.experimental.observations['external-cdp-input-shape-v1'];
       assert.strictEqual(externalCdpInput.mode, 'observe');
       assert.strictEqual(externalCdpInput.status, 'unknown');

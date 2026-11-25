@@ -31,6 +31,17 @@ var identityEngineLabels = map[string]string{
 	"blink": "Blink", "gecko": "Gecko", "webkit": "WebKit",
 }
 
+// JA4_b is the hash of the sorted TLS cipher-suite set. These values come from
+// FoxIO's public, license-free reference mapping at commit
+// f1fea2e2313b5fd57de313fd5882eeacb3bd22ef. Unknown hashes stay unknown so a
+// TLS interceptor or a future browser release cannot manufacture a contradiction.
+var identityJA4CipherFamilies = map[string]string{
+	"8daaf6152771": "blink",  // Chromium over TCP
+	"55b375c5d22e": "blink",  // Chromium over QUIC
+	"5b57614c22b0": "gecko",  // Firefox/NSS
+	"a09f3c656075": "webkit", // Safari
+}
+
 var (
 	// ANGLE names its backend in the renderer string. Direct3D exists only on
 	// Windows and Metal only on Apple platforms. Deliberately absent: GPU model
@@ -42,6 +53,7 @@ var (
 	identityBlinkErr  = regexp.MustCompile(`(?i)Cannot read propert(?:y|ies) of null`)
 	identityGeckoErr  = regexp.MustCompile(`(?i)null has no properties|can't access property ["']foo["'] of null`)
 	identityWebKitErr = regexp.MustCompile(`(?i)null is not an object`)
+	identityJA4       = regexp.MustCompile(`^[tqd](?:13|12|11|10|s[123])[di][0-9]{4}[A-Za-z0-9]{2}_([0-9a-f]{12})_[0-9a-f]{12}$`)
 )
 
 // claimedOS returns the OS families the User-Agent is consistent with, or nil.
@@ -201,6 +213,21 @@ func jsEngineAxis(env map[string]interface{}) identityAxis {
 	return axis
 }
 
+func tlsFamilyAxis(ja4 string) identityAxis {
+	axis := identityAxis{id: "tls-family-mismatch", dimension: "engine"}
+	match := identityJA4.FindStringSubmatch(strings.TrimSpace(ja4))
+	if len(match) != 2 {
+		return axis
+	}
+	engine := identityJA4CipherFamilies[match[1]]
+	if engine == "" {
+		return axis
+	}
+	axis.observed = []string{engine}
+	axis.subject = "TLS client family (" + identityEngineLabels[engine] + ")"
+	return axis
+}
+
 func identityOverlap(a, b []string) bool {
 	for _, x := range a {
 		for _, y := range b {
@@ -228,7 +255,7 @@ func identityLabel(dimension string, set []string) string {
 	return strings.Join(labels, "/")
 }
 
-func identityObservation(signals map[string]interface{}) ExperimentalObservation {
+func identityObservation(signals map[string]interface{}, ja4 ...string) ExperimentalObservation {
 	result := ExperimentalObservation{Mode: "observe", Status: "unknown", Detections: []ExperimentalDetection{}}
 	env := getMap(signals, "environmental")
 	nav := getMap(env, "navigator")
@@ -236,8 +263,12 @@ func identityObservation(signals map[string]interface{}) ExperimentalObservation
 	touch, _ := nav["maxTouchPoints"].(float64)
 	claims := map[string][]string{"os": claimedOS(ua, touch), "engine": claimedEngine(ua, touch)}
 
-	known := make([]identityAxis, 0, 3)
-	for _, axis := range []identityAxis{gpuBackendAxis(env), fontSetAxis(env), jsEngineAxis(env)} {
+	tlsFingerprint := ""
+	if len(ja4) > 0 {
+		tlsFingerprint = ja4[0]
+	}
+	known := make([]identityAxis, 0, 4)
+	for _, axis := range []identityAxis{gpuBackendAxis(env), fontSetAxis(env), jsEngineAxis(env), tlsFamilyAxis(tlsFingerprint)} {
 		if axis.observed != nil && claims[axis.dimension] != nil {
 			known = append(known, axis)
 		}
@@ -269,15 +300,20 @@ func identityObservation(signals map[string]interface{}) ExperimentalObservation
 			}
 		}
 	}
+	agreedDimension := identityContradictionsAgree(contradicting)
 	switch {
 	case disagree:
 		result.Detections = append(result.Detections, ExperimentalDetection{
 			ID: "identity-axes-disagree", Reason: "Measured properties disagree with each other",
 		})
-	case identityContradictionsAgree(contradicting):
+	case agreedDimension != "":
+		claimedSubject := "OS"
+		if agreedDimension == "engine" {
+			claimedSubject = "browser engine"
+		}
 		result.Detections = append(result.Detections, ExperimentalDetection{
 			ID:     "identity-claim-contradicted",
-			Reason: "Several measured properties agree with each other and contradict the claimed OS",
+			Reason: "Several measured properties agree with each other and contradict the claimed " + claimedSubject,
 		})
 	}
 
@@ -288,13 +324,13 @@ func identityObservation(signals map[string]interface{}) ExperimentalObservation
 	return result
 }
 
-func identityContradictionsAgree(axes []identityAxis) bool {
+func identityContradictionsAgree(axes []identityAxis) string {
 	for i := range axes {
 		for j := i + 1; j < len(axes); j++ {
 			if axes[i].dimension == axes[j].dimension && identityOverlap(axes[i].observed, axes[j].observed) {
-				return true
+				return axes[i].dimension
 			}
 		}
 	}
-	return false
+	return ""
 }

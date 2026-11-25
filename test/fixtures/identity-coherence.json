@@ -791,6 +791,218 @@
         "status": "unknown",
         "detections": []
       }
+    },
+    {
+      "name": "chrome-tls-family-agrees",
+      "provenance": "FoxIO public JA4 reference mapping",
+      "ja4": "t13d1516h2_8daaf6152771_02713d6af862",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "chrome-quic-tls-family-agrees",
+      "provenance": "FoxIO public JA4 reference mapping",
+      "ja4": "q13d0312h3_55b375c5d22e_06cda9e17597",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "chrome-extension-drift-keeps-cipher-family",
+      "provenance": "measured Chromium 141 JA4 documented in server-go/detection.go",
+      "ja4": "t13i1515h2_8daaf6152771_806a8c22fdea",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "firefox-tls-family-agrees",
+      "provenance": "FoxIO public JA4 reference mapping",
+      "ja4": "t13d1715h2_5b57614c22b0_7121afd63204",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:156.0) Gecko/20100101 Firefox/156.0",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "safari-tls-family-agrees",
+      "provenance": "FoxIO public JA4 reference mapping",
+      "ja4": "t13d2014h2_a09f3c656075_14788d8d241b",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "chrome-ios-webkit-tls-is-honest",
+      "provenance": "synthetic UA with FoxIO Safari JA4 reference",
+      "ja4": "t13d2014h2_a09f3c656075_14788d8d241b",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/156.0.0.0 Mobile/15E148 Safari/604.1",
+            "maxTouchPoints": 5
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "clear",
+        "detections": []
+      }
+    },
+    {
+      "name": "firefox-tls-under-chrome-claim",
+      "provenance": "synthetic contradiction from FoxIO reference components",
+      "ja4": "t13d1715h2_5b57614c22b0_7121afd63204",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "detected",
+        "detections": [
+          {
+            "id": "tls-family-mismatch",
+            "reason": "TLS client family (Gecko) contradicts claimed browser engine (Blink)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "js-and-tls-agree-against-chrome-claim",
+      "provenance": "synthetic contradiction from measured JS and FoxIO JA4 references",
+      "ja4": "t13d1715h2_5b57614c22b0_7121afd63204",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          },
+          "errorFingerprint": {
+            "supported": true,
+            "typeError": "null has no properties"
+          },
+          "mathFingerprint": {
+            "supported": true,
+            "hash": "97ad9"
+          },
+          "engineProbes": {
+            "supported": true,
+            "errorCaptureStackTrace": false,
+            "mozAppearance": true,
+            "webkitTouchCallout": false
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "detected",
+        "detections": [
+          {
+            "id": "js-engine-mismatch",
+            "reason": "JavaScript engine (Gecko) contradicts claimed browser engine (Blink)"
+          },
+          {
+            "id": "tls-family-mismatch",
+            "reason": "TLS client family (Gecko) contradicts claimed browser engine (Blink)"
+          },
+          {
+            "id": "identity-claim-contradicted",
+            "reason": "Several measured properties agree with each other and contradict the claimed browser engine"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tls-intercepting-proxy-is-unknown",
+      "provenance": "synthetic unknown cipher-set hash",
+      "ja4": "t13d1812h2_111111111111_222222222222",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
+    },
+    {
+      "name": "malformed-ja4-is-unknown",
+      "provenance": "synthetic malformed input",
+      "ja4": "8daaf6152771",
+      "signals": {
+        "environmental": {
+          "navigator": {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
+            "maxTouchPoints": 0
+          }
+        }
+      },
+      "expected": {
+        "mode": "observe",
+        "status": "unknown",
+        "detections": []
+      }
     }
   ]
 }

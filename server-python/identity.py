@@ -19,6 +19,18 @@ OS_LABELS = {"windows": "Windows", "macos": "macOS", "ios": "iOS",
              "android": "Android", "chromeos": "ChromeOS", "linux": "Linux"}
 ENGINE_LABELS = {"blink": "Blink", "gecko": "Gecko", "webkit": "WebKit"}
 
+# JA4_b hashes the sorted TLS cipher-suite set. Values are from FoxIO's public,
+# license-free reference mapping at commit
+# f1fea2e2313b5fd57de313fd5882eeacb3bd22ef. Unknown hashes remain unknown so
+# TLS interception or browser-version drift cannot manufacture a contradiction.
+JA4_CIPHER_FAMILIES = {
+    "8daaf6152771": "blink",   # Chromium over TCP
+    "55b375c5d22e": "blink",   # Chromium over QUIC
+    "5b57614c22b0": "gecko",   # Firefox/NSS
+    "a09f3c656075": "webkit",  # Safari
+}
+JA4 = re.compile(r"^[tqd](?:13|12|11|10|s[123])[di][0-9]{4}[A-Za-z0-9]{2}_([0-9a-f]{12})_[0-9a-f]{12}$")
+
 # ANGLE names its backend in the renderer string. Direct3D exists only on
 # Windows and Metal only on Apple platforms. Deliberately absent: GPU model
 # names. An Apple GPU runs Linux under Asahi, and Adreno/Mali ship in Windows
@@ -145,6 +157,18 @@ def _js_engine_axis(env: Dict) -> Dict:
             "subject": f"JavaScript engine ({ENGINE_LABELS[measured[0]]})"}
 
 
+def _tls_family_axis(ja4) -> Dict:
+    axis = {"id": "tls-family-mismatch", "dimension": "engine", "observed": None}
+    if not isinstance(ja4, str):
+        return axis
+    match = JA4.fullmatch(ja4.strip())
+    engine = JA4_CIPHER_FAMILIES.get(match.group(1)) if match else None
+    if not engine:
+        return axis
+    return {**axis, "observed": [engine],
+            "subject": f"TLS client family ({ENGINE_LABELS[engine]})"}
+
+
 def _overlap(a: List[str], b: List[str]) -> bool:
     return any(x in b for x in a)
 
@@ -154,7 +178,7 @@ def _label(dimension: str, claim: List[str]) -> str:
     return "/".join(label for name, label in labels.items() if name in claim)
 
 
-def identity_observation(signals: Dict) -> Dict:
+def identity_observation(signals: Dict, ja4=None) -> Dict:
     result = {"mode": "observe", "status": "unknown", "detections": []}
     env = signals.get("environmental") if isinstance(signals, dict) else None
     env = env if isinstance(env, dict) else {}
@@ -165,7 +189,8 @@ def identity_observation(signals: Dict) -> Dict:
         "engine": claimed_engine(nav.get("userAgent"), _number(nav.get("maxTouchPoints"))),
     }
 
-    known = [a for a in (_gpu_backend_axis(env), _font_set_axis(env), _js_engine_axis(env))
+    known = [a for a in (_gpu_backend_axis(env), _font_set_axis(env), _js_engine_axis(env),
+                         _tls_family_axis(ja4))
              if a["observed"] and claims.get(a["dimension"])]
     if not known:
         return result
@@ -183,11 +208,18 @@ def identity_observation(signals: Dict) -> Dict:
     if disagree:
         result["detections"].append({"id": "identity-axes-disagree",
                                      "reason": "Measured properties disagree with each other"})
-    elif any(a["dimension"] == b["dimension"] and _overlap(a["observed"], b["observed"])
-             for i, a in enumerate(contradicting) for b in contradicting[i + 1:]):
-        result["detections"].append({
-            "id": "identity-claim-contradicted",
-            "reason": "Several measured properties agree with each other and contradict the claimed OS",
-        })
+    else:
+        agreed_dimension = next((a["dimension"]
+                                 for i, a in enumerate(contradicting)
+                                 for b in contradicting[i + 1:]
+                                 if a["dimension"] == b["dimension"]
+                                 and _overlap(a["observed"], b["observed"])), None)
+        if agreed_dimension:
+            claimed_subject = "browser engine" if agreed_dimension == "engine" else "OS"
+            result["detections"].append({
+                "id": "identity-claim-contradicted",
+                "reason": "Several measured properties agree with each other and contradict "
+                          f"the claimed {claimed_subject}",
+            })
     result["status"] = "detected" if result["detections"] else "clear"
     return result
