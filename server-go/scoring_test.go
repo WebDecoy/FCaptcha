@@ -800,11 +800,28 @@ func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {
 		"textareaKeyboard": map[string]interface{}{
 			"comment": map[string]interface{}{
 				"contentLength": 50.0, "keyCount": 0.0, "pasteCount": 0.0,
+				"noKeyboardEvents": true,
 			},
 		},
 	}
-	if got := e.AnalyzeFormInteraction(filled, false); !hasReasonContaining(got, "filled programmatically") {
+	got := e.AnalyzeFormInteraction(filled, false)
+	if !hasReasonContaining(got, "filled programmatically") {
 		t.Errorf("expected programmatic-fill detection, got %+v", got)
+	}
+	if !hasReasonContaining(got, "no keyboard events") {
+		t.Errorf("expected no-keyboard-events detection, got %+v", got)
+	}
+	var sawAutomation, sawBot bool
+	for _, result := range got {
+		if strings.Contains(result.Reason, "filled programmatically") && result.Category == CategoryAutomation {
+			sawAutomation = true
+		}
+		if strings.Contains(result.Reason, "no keyboard events") && result.Category == CategoryBot {
+			sawBot = true
+		}
+	}
+	if !sawAutomation || !sawBot {
+		t.Errorf("expected automation fill plus bot DOM-manipulation categories, got %+v", got)
 	}
 
 	// Genuinely typed content must not trip it.
@@ -818,6 +835,27 @@ func TestAnalyzeFormInteraction_ProgrammaticFill(t *testing.T) {
 	}
 	if got := e.AnalyzeFormInteraction(typed, false); hasReasonContaining(got, "filled programmatically") {
 		t.Errorf("typed content should not trip programmatic-fill, got %+v", got)
+	}
+}
+
+func TestBehavioral_StraightLineRatioMatchesOtherServers(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	signals := map[string]interface{}{
+		"behavioral": map[string]interface{}{
+			"totalPoints": 40.0, "trajectoryLength": 500.0,
+			"straightLineRatio": 0.95,
+		},
+	}
+	if got := e.detectBehavioral(signals); !hasReasonContaining(got, "Mouse movements too straight") {
+		t.Errorf("expected straight-line movement detection, got %+v", got)
+	}
+}
+
+func TestBrowserConsistencyMatchesCanonicalDeclaredCrawlerReason(t *testing.T) {
+	e := NewScoringEngine("test-secret")
+	got := e.CheckBrowserConsistency("Googlebot/2.1 (+http://www.google.com/bot.html)", nil)
+	if !hasReasonContaining(got, "User-Agent indicates bot: bot") {
+		t.Errorf("expected canonical crawler reason, got %+v", got)
 	}
 }
 

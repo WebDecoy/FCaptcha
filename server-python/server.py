@@ -1512,9 +1512,10 @@ def detect_fingerprint(signals: Dict, ip: str, site_key: str) -> List[Detection]
             {"count": fp_ip_count}
         ))
 
-    # Canvas issues
+    # Canvas issues. Missing support metadata is neutral for older clients;
+    # only an explicit false value means collection was blocked.
     canvas = env.get("canvasHash", {})
-    if canvas.get("error") or not canvas.get("supported"):
+    if canvas.get("error") or canvas.get("supported") is False:
         detections.append(Detection(
             ThreatCategory.FINGERPRINT, 0.4, 0.4,
             "Canvas fingerprinting blocked or failed"
@@ -2217,9 +2218,15 @@ def run_verification(
     # Form interaction analysis (credential stuffing & spam detection)
     form_analysis = signals.get("formAnalysis")
     if form_analysis:
-        for d in analyze_form_interaction(form_analysis, _has_human_presence(signals.get('behavioral') or {})):
+        human_present = _has_human_presence(signals.get("behavioral") or {})
+        for d in analyze_form_interaction(form_analysis, human_present):
+            category = (
+                ThreatCategory(d["category"])
+                if d["category"] in [e.value for e in ThreatCategory]
+                else ThreatCategory.BOT
+            )
             detections.append(Detection(
-                ThreatCategory.BOT, d["score"], d["confidence"], d["reason"]
+                category, d["score"], d["confidence"], d["reason"]
             ))
 
     category_scores = calculate_category_scores(detections)

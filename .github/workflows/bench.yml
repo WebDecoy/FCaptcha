@@ -129,12 +129,13 @@ jobs:
 
       - name: Start all production servers
         run: |
+          proxy_ip="$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')"
           docker run -d --name parity-node -p 3001:3000 \
-            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" -e TRUSTED_PROXIES="*" fcaptcha-parity-node
+            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" -e TRUSTED_PROXIES="$proxy_ip" fcaptcha-parity-node
           docker run -d --name parity-go -p 3002:3000 \
-            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" -e TRUSTED_PROXIES="*" fcaptcha-parity-go
+            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" -e TRUSTED_PROXIES="$proxy_ip" fcaptcha-parity-go
           docker run -d --name parity-python -p 3003:3000 \
-            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" -e TRUSTED_PROXIES="*" fcaptcha-parity-python
+            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" -e TRUSTED_PROXIES="$proxy_ip" fcaptcha-parity-python
           for port in 3001 3002 3003; do
             ready=false
             for _ in $(seq 1 60); do
@@ -151,6 +152,7 @@ jobs:
             --server node=http://localhost:3001 \
             --server go=http://localhost:3002 \
             --server python=http://localhost:3003 \
+            --strict \
             --json > server-parity.json
 
       - name: Upload parity report
