@@ -73,7 +73,7 @@ launching an automation driver:
 ```sh
 python3 bench/capture/camoufox_bench.py --manual --modes invisible \
   --environment-label 'Firefox, default settings' --timeout 600 \
-  --expected-client-version 1.51.4 \
+  --expected-client-version 1.52.0 \
   --out bench/test-results/firefox-manual
 ```
 

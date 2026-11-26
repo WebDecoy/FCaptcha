@@ -15,6 +15,8 @@ reading would call major. Read the **Breaking** entries rather than the number.
 
 ## [Unreleased]
 
+## [1.52.0] — 2026-11-25
+
 ### Added
 - Add an observe-only `external-cdp-input-shape-v1` research observation for
   the complete Browser Harness synthetic-fill, select-all, and repeated instant-
@@ -49,6 +51,23 @@ tokens, state, challenge cost, or any existing experimental blocking selector.
   `challenge_network_mismatch`; an expired or restart-dropped challenge failed
   the same way. The retry gets a challenge issued to the visitor's current
   network, so the network binding is unchanged.
+- Scope click-derived missing-movement evidence to widget interactions. An
+  invisible-mode request has no target to approach or click, so missing mouse
+  movement there is neutral instead of producing a Vision AI false positive.
+  The fix is identical in Go, Node.js, and Python.
+- Treat JA4 cipher-set hashes shared by more than one browser family as unknown.
+  Stock Firefox 160 now shares Chromium's historical TCP cipher-set hash, so
+  continuing to label it Blink-only produced an observe-only identity
+  contradiction. Unknown and shared hashes fail open across all three servers.
+
+### Documentation
+- Add runnable SvelteKit and Remix 3 contact-form examples with server-side
+  token verification, expected hostname/action checks, and loopback tests.
+
+This minor release adds one weak production signal and two monitoring-only
+observations. Canvas instability contributes `0.0112` by itself and cannot
+block alone; the CDP and TLS-family observations remain non-scoring. The two
+stock-browser false positives found during validation are fixed before release.
 
 ## [1.51.4] — 2026-11-23
 

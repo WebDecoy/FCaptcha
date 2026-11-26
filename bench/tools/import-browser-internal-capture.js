@@ -30,7 +30,7 @@ function usage() {
     --report bench/test-results/<capture>/report.json \\
     --out bench/corpus/captured/agent-browser-internal.json \\
     --scenario chrome-auto-browse-widget --input "browser-internal pointer/keyboard" \\\\
-    --expected-client-version 1.51.4
+    --expected-client-version 1.52.0
 
 The output path must not exist. The report must come from camoufox_bench.py's
 --external-agent mode. The importer refuses manual-human, Playwright-driven,

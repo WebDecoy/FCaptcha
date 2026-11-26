@@ -43,7 +43,7 @@ python3 bench/capture/camoufox_bench.py \
   --driver-name browser-harness \
   --driver-version 0.1.13 \
   --driver-commit c24e5072ee66f8499bacd663f4f4bcb089bc4492 \
-  --expected-client-version 1.51.4 \
+  --expected-client-version 1.52.0 \
   --server http://127.0.0.1:18881 \
   --out bench/test-results/browser-harness-form-0000
 ```
@@ -62,7 +62,7 @@ configuration, machine, mode, FCaptcha release, and network boundary:
 python3 bench/capture/camoufox_bench.py \
   --manual --modes form --observations --timeout 600 \
   --environment-label 'Chrome <same version>, macOS, ephemeral unsigned profile' \
-  --expected-client-version 1.51.4 \
+  --expected-client-version 1.52.0 \
   --server http://127.0.0.1:18881 \
   --out bench/test-results/browser-harness-manual-form-0000
 ```
@@ -82,7 +82,7 @@ node bench/tools/import-external-driver-capture.js \
   --out bench/corpus/captured/agent-browser-harness-cdp-form-0000.json \
   --scenario browser-harness-real-chrome-form \
   --index 0 --input 'Browser Harness over loopback CDP' \
-  --expected-client-version 1.51.4 \
+  --expected-client-version 1.52.0 \
   --expected-driver-name browser-harness \
   --expected-driver-version 0.1.13 \
   --expected-driver-commit c24e5072ee66f8499bacd663f4f4bcb089bc4492

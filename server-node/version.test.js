@@ -1,6 +1,7 @@
 'use strict';
 
-// The version string lives in twelve places (run: `node version.test.js`).
+// The release version lives in package metadata, runtime code, deployment
+// defaults, capture tooling, and runnable demos (run: `node version.test.js`).
 //
 // Nothing checked they agreed, and they did not: the CDN snippet in README.md
 // sat at 1.24.0 while the packages were at 1.28.1 — five minor versions of
@@ -40,6 +41,13 @@ const LOCATIONS = [
   ['charts/fcaptcha/Chart.yaml', /^appVersion: "([^"]+)"/m],
   // Integrators copy this snippet verbatim, so a stale pin ships a stale widget.
   ['README.md', /@webdecoy\/fcaptcha-client@([0-9]+\.[0-9]+\.[0-9]+)/],
+  ['docker/README.md', /docker pull ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)/],
+  ['docker/unraid/fcaptcha.xml', /<Repository>ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)<\/Repository>/],
+  ['examples/better-auth/README.md', /ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)/],
+  ['examples/remix/README.md', /ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)/],
+  ['examples/sveltekit/README.md', /ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)/],
+  ['bench/capture/run_manual_browser_capture.sh', /FCAPTCHA_EXPECTED_CLIENT_VERSION:-([0-9]+\.[0-9]+\.[0-9]+)/],
+  ['bench/capture/run_browser_harness_capture.sh', /FCAPTCHA_EXPECTED_CLIENT_VERSION:-([0-9]+\.[0-9]+\.[0-9]+)/],
 ];
 
 test('the version string agrees everywhere it appears', () => {
