@@ -471,6 +471,8 @@
       "mode": "widget",
       "normalization": "none",
       "reportSha256": "590e107ac463f2cd0be864fddbc9c13500cdca03718cb6ce69e9cdec864905c2"
-    }
+    },
+    "captureMethod": "manual-browser",
+    "labelEvidence": "verified-human"
   }
 ]

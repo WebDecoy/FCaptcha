@@ -475,6 +475,8 @@
       "clientVersion": "1.51.4",
       "clientSha256": "4e1e903bb1a12b61e441e84859f18247cda3aad1cd0308c20a04e99b2431c653",
       "reportSha256": "5857b21fccbd0f14e137c743c6d0b27cc38341bd7177380fb919fa0845bd8793"
-    }
+    },
+    "captureMethod": "external-cdp",
+    "labelEvidence": "observed-agent"
   }
 ]

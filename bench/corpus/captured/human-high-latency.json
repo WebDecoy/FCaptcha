@@ -389,6 +389,8 @@
     "caveats": [
       "environment-normalized",
       "console-attached-cleared"
-    ]
+    ],
+    "captureMethod": "automated-browser",
+    "labelEvidence": "simulated-human"
   }
 ]

@@ -6,12 +6,13 @@
  *
  * The design rule here: any figure that could be quoted out of context carries
  * its provenance in the same line. "FPR 0.00%" is a claim about people;
- * "FPR 0.00% (11 captured+derived samples, environment-normalized)" is a claim
- * about this corpus, which is the only claim we can support.
+ * "Observed FP rate 0.00% (11 independently observed captures)" is a claim
+ * about this corpus, which is the only claim we can support. Derived variants
+ * are reported as capture-family robustness and never enlarge the denominator.
  */
 
 const { pct } = require('./metrics');
-const { EVIDENTIAL } = require('./corpus');
+const { HUMAN_FP_EVIDENCE } = require('./corpus');
 
 const C = {
   reset: '\x1b[0m',
@@ -73,27 +74,33 @@ function renderReport(metrics, corpus, gate) {
   out.push(heading('Human panel — false positives'));
 
   const evid = metrics.humanPanel.evidential;
-  const caveats = summarizeCaveats(
-    corpus.filter((s) => s.label === 'human' && EVIDENTIAL.has(s.provenance))
-  );
+  const caveats = summarizeCaveats(corpus.filter((s) =>
+    s.label === 'human' && s.provenance === 'captured' && HUMAN_FP_EVIDENCE.has(s.labelEvidence)
+  ));
   const caveatNote = caveats.size
     ? ` ${C.yellow}[${[...caveats.entries()].map(([k, n]) => `${k} ×${n}`).join(', ')}]${C.reset}`
     : '';
 
   if (evid.total === 0) {
-    out.push(`  ${C.yellow}no captured or derived human samples — nothing here supports an FP claim${C.reset}`);
+    out.push(`  ${C.yellow}no independently observed human captures — nothing here supports an FP observation${C.reset}`);
   } else {
     const bad = evid.rate > cfg.panelFpBudget;
     out.push(
-      `  ${bad ? C.red : C.green}FPR ${pct(evid.rate)}${C.reset} ` +
-        `(${evid.hits}/${evid.total} captured+derived, target < ${pct(cfg.panelFpBudget)})${caveatNote}`
+      `  ${bad ? C.red : C.green}Observed FP rate ${pct(evid.rate)}${C.reset} ` +
+        `(${evid.hits}/${evid.total} independently observed captures, target < ${pct(cfg.panelFpBudget)})${caveatNote}`
+    );
+    const neighborhood = metrics.humanPanel.neighborhood;
+    out.push(
+      `  ${C.dim}Neighborhood robustness ${pct(neighborhood.rate)} ` +
+        `(${neighborhood.hits}/${neighborhood.total} capture families had any base or derived variant cross the threshold; ` +
+        `derived rows never increase N)${C.reset}`
     );
     if (metrics.counts.humans > evid.total) {
-      const excluded = metrics.humanPanel.excludedByProvenance
-        .map((row) => `${row.provenance || row.group} ×${row.total}`)
+      const excluded = metrics.humanPanel.excludedByEvidence
+        .map((row) => `${row.labelEvidence || row.group} ×${row.total}`)
         .join(', ');
       out.push(
-        `  ${C.dim}${metrics.counts.humans - evid.total} non-evidential human sample(s) measured but excluded ` +
+        `  ${C.dim}${metrics.counts.humans - evid.total} structural or self-reported human fixture(s) measured but excluded ` +
           `from this figure (${excluded}) — see bench/README.md${C.reset}`
       );
     }
@@ -108,15 +115,15 @@ function renderReport(metrics, corpus, gate) {
       { header: 'RATE', value: (r) => pct(r.rate), right: true },
       { header: 'MED SCORE', value: (r) => r.medianScore?.toFixed(3) ?? '-', right: true },
       { header: 'MAX SCORE', value: (r) => r.maxScore?.toFixed(3) ?? '-', right: true },
-      { header: 'PROVENANCE', value: (r) => r.provenance },
+      { header: 'LABEL EVIDENCE', value: (r) => r.labelEvidence || '-' },
     ])
   );
 
   if (metrics.humanPanel.exploratorySignals.length) {
     out.push(heading('Non-evidential human labels — exploratory only'));
     out.push(
-      `  ${C.yellow}Self-reported and synthetic labels are not trusted ground truth. ` +
-        `These clusters never affect FPR figures or gates.${C.reset}`
+      `  ${C.yellow}Simulated and self-reported human labels are not observed-human ground truth. ` +
+        `These clusters never affect observed-human figures or gates.${C.reset}`
     );
     out.push('');
     out.push(
@@ -164,21 +171,21 @@ function renderReport(metrics, corpus, gate) {
   );
 
   // ---- Per-signal --------------------------------------------------------
-  out.push(heading(`Per-signal false positives (budget ${pct(cfg.perSignalFpBudget)})`));
+  out.push(heading(`Per-signal human capture-family robustness (budget ${pct(cfg.perSignalFpBudget)})`));
   out.push(
-    `  ${C.dim}A signal is over budget when it fires on human samples more often than the ` +
-      `budget allows,${C.reset}`
+    `  ${C.dim}A signal is over budget when it fires in observed-human capture families more often than the ` +
+      `budget allows. A family counts once even when many derived variants fire.${C.reset}`
   );
-  out.push(`  ${C.dim}regardless of how the category it belongs to performs overall.${C.reset}`);
   out.push('');
 
-  const firing = metrics.perSignal.filter((s) => s.humanHits > 0);
+  const firing = metrics.perSignal.filter((s) => s.familyHits > 0);
   out.push(
     table(firing, [
       { header: 'SIGNAL', value: (r) => truncate(r.signal, 44) },
       { header: 'CAT', value: (r) => r.category || '-' },
-      { header: 'HUMAN', value: (r) => `${r.humanHits}/${r.humanTotal}`, right: true },
-      { header: 'FPR', value: (r) => pct(r.humanFpr), right: true, flag: (r) => r.overBudget },
+      { header: 'BASE', value: (r) => `${r.humanHits}/${r.humanTotal}`, right: true },
+      { header: 'FAMILY', value: (r) => `${r.familyHits}/${r.familyTotal}`, right: true },
+      { header: 'FAMILY RATE', value: (r) => pct(r.familyRate), right: true, flag: (r) => r.overBudget },
       { header: 'AGENT', value: (r) => `${r.agentHits}/${r.agentTotal}`, right: true },
       { header: 'PERSONAS', value: (r) => truncate(r.firesOnPersonas.join(','), 34) },
     ])
@@ -189,7 +196,7 @@ function renderReport(metrics, corpus, gate) {
   }
 
   // Signals that only ever fire on agents are the ones earning their keep.
-  const agentOnly = metrics.perSignal.filter((s) => s.humanHits === 0 && s.agentHits > 0);
+  const agentOnly = metrics.perSignal.filter((s) => s.familyHits === 0 && s.agentHits > 0);
   if (agentOnly.length) {
     out.push('');
     out.push(`  ${C.dim}Fires on agents only (${agentOnly.length}):${C.reset}`);

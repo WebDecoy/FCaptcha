@@ -163,6 +163,8 @@ function toCorpusSample(record, lineNumber = null, sampleIndex = 0) {
     group: `self-reported-${record.browser}-${record.os}-${record.inputMethod}`,
     scenario,
     provenance: 'self-reported',
+    captureMethod: 'production-export',
+    labelEvidence: 'self-reported-human',
     notes: 'explicitly consented hosted-demo trace; visitor supplied the human label; not verified ground truth',
     headers: {},
     signals,

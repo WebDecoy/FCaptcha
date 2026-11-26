@@ -521,6 +521,8 @@
       "clientVersion": "1.51.4",
       "clientSha256": "4e1e903bb1a12b61e441e84859f18247cda3aad1cd0308c20a04e99b2431c653",
       "reportSha256": "897de3fc1bc8d8cbbf26a7fb09ac1e2f6807abcafd9c0d34cee4d5a6d52bd7a9"
-    }
+    },
+    "captureMethod": "manual-browser",
+    "labelEvidence": "paired-human-control"
   }
 ]

@@ -13,7 +13,7 @@
  * and per persona first, and aggregated only for display.
  */
 
-const { EVIDENTIAL } = require('./corpus');
+const { HUMAN_FP_EVIDENCE } = require('./corpus');
 
 /**
  * Thresholds from PRD §2. Both sides are decision thresholds, not score
@@ -50,6 +50,21 @@ function rate(hits, total) {
   return total === 0 ? null : hits / total;
 }
 
+function isObservedHuman(sample) {
+  return sample.label === 'human' && sample.provenance === 'captured' &&
+    HUMAN_FP_EVIDENCE.has(sample.labelEvidence);
+}
+
+function isHumanNeighborhood(sample) {
+  return sample.label === 'human' &&
+    (sample.provenance === 'captured' || sample.provenance === 'derived') &&
+    HUMAN_FP_EVIDENCE.has(sample.labelEvidence);
+}
+
+function familyKey(row) {
+  return row.sample.provenance === 'derived' ? row.sample.source : row.sample.id;
+}
+
 function experimentalStats(rows, policy) {
   const counts = { detected: 0, clear: 0, unknown: 0 };
   for (const row of rows) {
@@ -77,8 +92,8 @@ function computeExperimental(ok) {
 
   return [...policies].sort().map((policy) => {
     const humans = base.filter((row) => row.sample.label === 'human');
-    const evidentialHumans = humans.filter((row) => EVIDENTIAL.has(row.sample.provenance));
-    const exploratoryHumans = humans.filter((row) => !EVIDENTIAL.has(row.sample.provenance));
+    const evidentialHumans = humans.filter((row) => isObservedHuman(row.sample));
+    const exploratoryHumans = humans.filter((row) => !isObservedHuman(row.sample));
     const agents = base.filter((row) => row.sample.label === 'agent');
     const groups = new Map();
 
@@ -122,23 +137,36 @@ function computeMetrics(results, opts = {}) {
   const errors = results.filter((r) => r.error);
   const ok = results.filter((r) => !r.error);
 
-  const humans = ok.filter((r) => r.sample.label === 'human');
-  const agents = ok.filter((r) => r.sample.label === 'agent');
+  const replayedHumans = ok.filter((r) => r.sample.label === 'human');
+  const replayedAgents = ok.filter((r) => r.sample.label === 'agent');
+  const humans = replayedHumans.filter((r) => r.sample.provenance !== 'derived');
+  const agents = replayedAgents.filter((r) => r.sample.provenance !== 'derived');
 
-  // Only captured and derived samples can support a false-positive claim.
-  // Self-reported and hand-authored labels are still replayed and shown by
-  // persona, but they cannot establish that a detection is a false positive.
-  const evidentialHumans = humans.filter((r) => EVIDENTIAL.has(r.sample.provenance));
-  const nonEvidentialHumans = humans.filter((r) => !EVIDENTIAL.has(r.sample.provenance));
+  // A real browser payload is not automatically a real-human observation.
+  // Only independently verified human sessions and legitimate paired controls
+  // support the observed panel. Derived children remain useful, but only as a
+  // capture-family robustness check: changing --derive must never manufacture
+  // independent people or change a denominator.
+  const evidentialHumans = humans.filter((r) => isObservedHuman(r.sample));
+  const neighborhoodHumans = replayedHumans.filter((r) => isHumanNeighborhood(r.sample));
+  const nonEvidentialHumans = humans.filter((r) => !isObservedHuman(r.sample));
 
   const byGroup = (rows, isHit, keyFor = (r) => r.sample.group) => {
     const groups = new Map();
     for (const r of rows) {
       const key = keyFor(r);
-      const g = groups.get(key) || { group: key, total: 0, hits: 0, provenance: new Set(), scores: [] };
+      const g = groups.get(key) || {
+        group: key,
+        total: 0,
+        hits: 0,
+        provenance: new Set(),
+        labelEvidence: new Set(),
+        scores: [],
+      };
       g.total++;
       if (isHit(r)) g.hits++;
       g.provenance.add(r.sample.provenance);
+      if (r.sample.labelEvidence) g.labelEvidence.add(r.sample.labelEvidence);
       g.scores.push(r.score);
       groups.set(key, g);
     }
@@ -149,6 +177,7 @@ function computeMetrics(results, opts = {}) {
         hits: g.hits,
         rate: rate(g.hits, g.total),
         provenance: [...g.provenance].sort().join('+'),
+        labelEvidence: [...g.labelEvidence].sort().join('+'),
         medianScore: median(g.scores),
         maxScore: Math.max(...g.scores),
       }))
@@ -161,13 +190,13 @@ function computeMetrics(results, opts = {}) {
   // Per-signal false positives. A signal counts once per human sample it fires
   // on, regardless of how many times it appears in that sample's detections.
   const signals = new Map();
-  const touch = (key, bucket) => {
+  const touch = (key) => {
     const s = signals.get(key) || {
       signal: key,
       category: null,
-      humanHits: 0,
-      agentHits: 0,
       humanSamples: new Set(),
+      humanFamilies: new Set(),
+      humanFamilyPersonas: new Set(),
       agentSamples: new Set(),
     };
     signals.set(key, s);
@@ -182,8 +211,19 @@ function computeMetrics(results, opts = {}) {
       seen.add(key);
       const s = touch(key);
       s.category = s.category || d.category;
-      s.humanHits++;
-      s.humanSamples.add(r.sample.group);
+      s.humanSamples.add(r.sample.id);
+    }
+  }
+  for (const r of neighborhoodHumans) {
+    const seen = new Set();
+    for (const d of r.detections) {
+      const key = signalKey(d.reason);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const s = touch(key);
+      s.category = s.category || d.category;
+      s.humanFamilies.add(familyKey(r));
+      s.humanFamilyPersonas.add(r.sample.group);
     }
   }
   for (const r of agents) {
@@ -194,8 +234,7 @@ function computeMetrics(results, opts = {}) {
       seen.add(key);
       const s = touch(key);
       s.category = s.category || d.category;
-      s.agentHits++;
-      s.agentSamples.add(r.sample.group);
+      s.agentSamples.add(r.sample.id);
     }
   }
 
@@ -203,16 +242,19 @@ function computeMetrics(results, opts = {}) {
     .map((s) => ({
       signal: s.signal,
       category: s.category,
-      humanHits: s.humanHits,
+      humanHits: s.humanSamples.size,
       humanTotal: evidentialHumans.length,
-      humanFpr: rate(s.humanHits, evidentialHumans.length),
-      firesOnPersonas: [...s.humanSamples].sort(),
-      agentHits: s.agentHits,
+      humanFpr: rate(s.humanSamples.size, evidentialHumans.length),
+      familyHits: s.humanFamilies.size,
+      familyTotal: evidentialHumans.length,
+      familyRate: rate(s.humanFamilies.size, evidentialHumans.length),
+      firesOnPersonas: [...s.humanFamilyPersonas].sort(),
+      agentHits: s.agentSamples.size,
       agentTotal: agents.length,
-      agentTpr: rate(s.agentHits, agents.length),
-      overBudget: rate(s.humanHits, humans.length) > cfg.perSignalFpBudget,
+      agentTpr: rate(s.agentSamples.size, agents.length),
+      overBudget: rate(s.humanFamilies.size, evidentialHumans.length) > cfg.perSignalFpBudget,
     }))
-    .sort((a, b) => (b.humanFpr || 0) - (a.humanFpr || 0) || a.signal.localeCompare(b.signal));
+    .sort((a, b) => (b.familyRate || 0) - (a.familyRate || 0) || a.signal.localeCompare(b.signal));
 
   const nonEvidentialSignals = new Map();
   for (const r of nonEvidentialHumans) {
@@ -255,6 +297,8 @@ function computeMetrics(results, opts = {}) {
       humans: humans.length,
       humansEvidential: evidentialHumans.length,
       agents: agents.length,
+      replayedHumans: replayedHumans.length,
+      replayedAgents: replayedAgents.length,
     },
     errors: errors.map((e) => ({ id: e.sample.id, error: e.error })),
     humanPanel: {
@@ -264,10 +308,15 @@ function computeMetrics(results, opts = {}) {
         hits: evidentialHumans.filter(isFalsePositive).length,
         rate: rate(evidentialHumans.filter(isFalsePositive).length, evidentialHumans.length),
       },
-      excludedByProvenance: byGroup(
+      neighborhood: (() => {
+        const families = new Set(evidentialHumans.map(familyKey));
+        const hits = new Set(neighborhoodHumans.filter(isFalsePositive).map(familyKey));
+        return { total: families.size, hits: hits.size, rate: rate(hits.size, families.size) };
+      })(),
+      excludedByEvidence: byGroup(
         nonEvidentialHumans,
         isFalsePositive,
-        (r) => r.sample.provenance
+        (r) => r.sample.labelEvidence
       ),
       exploratorySignals,
       byPersona: byGroup(humans, isFalsePositive),
@@ -318,12 +367,13 @@ function evaluateGate(metrics, knownArtifacts = [], agentRegressionFloors = {}) 
     knownArtifacts.find((a) => signalKey(a.signal) === signal);
 
   for (const s of metrics.perSignal) {
-    if (s.humanFpr <= cfg.perSignalFpBudget) continue;
+    if (s.familyRate <= cfg.perSignalFpBudget) continue;
 
     const artifact = artifactFor(s.signal);
     const detail =
-      `"${s.signal}" fired on ${s.humanHits}/${s.humanTotal} human samples ` +
-      `(${pct(s.humanFpr)}, budget ${pct(cfg.perSignalFpBudget)}) ` +
+      `"${s.signal}" fired in ${s.familyHits}/${s.familyTotal} observed-human capture families ` +
+      `(${pct(s.familyRate)}, budget ${pct(cfg.perSignalFpBudget)}; ` +
+      `${s.humanHits}/${s.humanTotal} base captures) ` +
       `— personas: ${s.firesOnPersonas.join(', ')}`;
 
     if (artifact) {
@@ -343,8 +393,8 @@ function evaluateGate(metrics, knownArtifacts = [], agentRegressionFloors = {}) 
   const panel = metrics.humanPanel.evidential;
   if (panel.total > 0 && panel.rate > cfg.panelFpBudget) {
     warnings.push(
-      `human panel FPR ${pct(panel.rate)} exceeds the ${pct(cfg.panelFpBudget)} target ` +
-        `(${panel.hits}/${panel.total} captured+derived samples)`
+      `observed human FP rate ${pct(panel.rate)} exceeds the ${pct(cfg.panelFpBudget)} target ` +
+        `(${panel.hits}/${panel.total} independently observed captures)`
     );
   }
 

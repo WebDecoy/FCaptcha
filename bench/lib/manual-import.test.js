@@ -51,6 +51,8 @@ test('imports manual signals without stale challenge state or transport litter',
   assert.equal(sample.headers.Host, undefined);
   assert.equal(sample.headers.Origin, undefined);
   assert.equal(sample.capture.endpoint, '/api/verify');
+  assert.equal(sample.captureMethod, 'manual-browser');
+  assert.equal(sample.labelEvidence, 'verified-human');
   assert.match(sample.capture.reportSha256, /^[a-f0-9]{64}$/);
 });
 
@@ -113,6 +115,21 @@ test('imports pinned accessibility workflow provenance', () => {
   });
   assert.equal(sample.capture.workflow.unrelatedProfileData, undefined);
   assert.notEqual(sample.capture.workflow, manualWorkflow);
+  assert.equal(sample.labelEvidence, 'verified-human');
+});
+
+test('labels only explicit agent-paired controls as paired human evidence', () => {
+  const browserInternal = toCorpusSample(report(), {
+    ...options,
+    group: 'browser-internal-control',
+  });
+  const externalCDP = toCorpusSample(report(), {
+    ...options,
+    group: 'browser-harness-cdp-control',
+  });
+
+  assert.equal(browserInternal.labelEvidence, 'paired-human-control');
+  assert.equal(externalCDP.labelEvidence, 'paired-human-control');
 });
 
 test('rejects unpinned or unconfirmed accessibility workflow provenance', () => {

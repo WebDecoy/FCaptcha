@@ -2,12 +2,10 @@ name: Detection benchmark
 
 # Guards the per-signal false-positive budget against the committed corpus.
 #
-# The gate deliberately fails on only two things: a signal firing on the human
-# panel more often than its budget allows, and a replay error (an incomplete run
-# must not read as a pass). Aggregate FPR and per-class TPR are reported as
-# warnings — those are population claims and this corpus is not a population
-# sample, so gating on them would dress a regression check up as evidence about
-# real users. See bench/README.md.
+# The gate fails on an observed-human capture family crossing a per-signal
+# budget, an incomplete replay, or a fixed-corpus agent regression. Aggregate
+# population claims remain warnings: this corpus is captured, not sampled. See
+# bench/README.md.
 
 on:
   push:
@@ -111,3 +109,65 @@ jobs:
             bench/bench-results.json
             bench/paired-observations.json
           if-no-files-found: ignore
+
+  detector-parity:
+    runs-on: ubuntu-latest
+    env:
+      FCAPTCHA_SECRET: benchmark-test-secret-0123456789abcdef0123456789abcdef
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+
+      - name: Build all production servers
+        run: |
+          docker build -f server-node/Dockerfile -t fcaptcha-parity-node .
+          docker build -f docker/Dockerfile -t fcaptcha-parity-go .
+          docker build -f server-python/Dockerfile -t fcaptcha-parity-python .
+
+      - name: Start all production servers
+        run: |
+          docker run -d --name parity-node -p 3001:3000 \
+            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" -e TRUSTED_PROXIES="*" fcaptcha-parity-node
+          docker run -d --name parity-go -p 3002:3000 \
+            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" -e TRUSTED_PROXIES="*" fcaptcha-parity-go
+          docker run -d --name parity-python -p 3003:3000 \
+            -e FCAPTCHA_SECRET="$FCAPTCHA_SECRET" -e TRUSTED_PROXIES="*" fcaptcha-parity-python
+          for port in 3001 3002 3003; do
+            ready=false
+            for _ in $(seq 1 60); do
+              if curl -sf "http://localhost:${port}/health" >/dev/null; then ready=true; break; fi
+              sleep 0.5
+            done
+            if [ "$ready" != true ]; then echo "server on ${port} did not become healthy"; exit 1; fi
+          done
+
+      - name: Compare base-corpus detector verdicts
+        working-directory: bench
+        run: |
+          node tools/compare-server-parity.js \
+            --server node=http://localhost:3001 \
+            --server go=http://localhost:3002 \
+            --server python=http://localhost:3003 \
+            --json > server-parity.json
+
+      - name: Upload parity report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: server-parity
+          path: bench/server-parity.json
+          if-no-files-found: ignore
+
+      - name: Server logs
+        if: failure()
+        run: |
+          docker logs parity-node || true
+          docker logs parity-go || true
+          docker logs parity-python || true
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f parity-node parity-go parity-python >/dev/null 2>&1 || true

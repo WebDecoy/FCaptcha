@@ -491,7 +491,9 @@
         "timezone": "America/Chicago"
       }
     },
-    "scenario": "stealth-wave"
+    "scenario": "stealth-wave",
+    "captureMethod": "external-cdp",
+    "labelEvidence": "observed-agent"
   },
   {
     "id": "agent/stealth-wave/0001",
@@ -985,7 +987,9 @@
         "timezone": "America/Chicago"
       }
     },
-    "scenario": "stealth-wave"
+    "scenario": "stealth-wave",
+    "captureMethod": "external-cdp",
+    "labelEvidence": "observed-agent"
   },
   {
     "id": "agent/stealth-wave/0002",
@@ -1479,7 +1483,9 @@
         "timezone": "America/Chicago"
       }
     },
-    "scenario": "stealth-wave"
+    "scenario": "stealth-wave",
+    "captureMethod": "external-cdp",
+    "labelEvidence": "observed-agent"
   },
   {
     "id": "agent/stealth-wave/0003",
@@ -1973,7 +1979,9 @@
         "timezone": "America/Chicago"
       }
     },
-    "scenario": "stealth-wave"
+    "scenario": "stealth-wave",
+    "captureMethod": "external-cdp",
+    "labelEvidence": "observed-agent"
   },
   {
     "id": "agent/stealth-wave/0004",
@@ -2467,6 +2475,8 @@
         "timezone": "America/Chicago"
       }
     },
-    "scenario": "stealth-wave"
+    "scenario": "stealth-wave",
+    "captureMethod": "external-cdp",
+    "labelEvidence": "observed-agent"
   }
 ]

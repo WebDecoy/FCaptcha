@@ -176,7 +176,17 @@ function toSample({ id, label, group, scenario, payload, notes, headers, clientI
     caveats.push(...repaired.caveats);
   }
 
-  const sample = { id, label, group, scenario, provenance: 'captured', notes, signals };
+  const sample = {
+    id,
+    label,
+    group,
+    scenario,
+    provenance: 'captured',
+    captureMethod: 'automated-browser',
+    labelEvidence: label === 'human' ? 'simulated-human' : 'simulated-agent',
+    notes,
+    signals,
+  };
   if (caveats.length) sample.caveats = caveats;
   if (headers) sample.headers = headers;
   if (clientIp) sample.clientIp = clientIp;
