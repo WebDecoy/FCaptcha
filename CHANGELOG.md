@@ -26,6 +26,14 @@ reading would call major. Read the **Breaking** entries rather than the number.
 - Document Authentik's Captcha Stage configuration using FCaptcha's paired
   Turnstile-compatible widget and verification endpoints, including the score
   direction caveat.
+- Add cryptographic Web Bot Auth verification to the Python server, bringing
+  signed-agent handling into parity with the Node.js and Go implementations.
+
+### Fixed
+- Bring the Go and Python detectors into strict parity for DOM content without
+  keyboard events, straight-line pointer movement, missing canvas-support
+  metadata, and the canonical known-bot reason. Missing telemetry remains
+  neutral rather than becoming automation evidence.
 
 ### Documentation
 - Replace absolute AI-agent blocking claims with the measured boundary: FCaptcha
@@ -33,8 +41,10 @@ reading would call major. Read the **Breaking** entries rather than the number.
   that overlap their human controls remain observations rather than unsafe
   blocking rules.
 
-This release does not add or change a detector, score, threshold, token format,
-or blocking policy.
+This release does not change score thresholds, token formats, or blocking
+policy. It does add Python Web Bot Auth verification and correct detector
+parity gaps so equivalent evidence receives equivalent treatment across the
+Go, Node.js, and Python servers.
 
 ## [1.52.0] — 2026-11-25
 
