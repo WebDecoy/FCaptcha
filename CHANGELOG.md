@@ -15,6 +15,27 @@ reading would call major. Read the **Breaking** entries rather than the number.
 
 ## [Unreleased]
 
+## [1.53.0] — 2026-11-26
+
+### Added
+- Publish the tested `@webdecoy/fcaptcha-nuxt` module for Nuxt 4, including its
+  SSR build fixture, secret-leak check, package-content check, and release job.
+- Add runnable Django 5.2 LTS and Laravel 13 forms with fail-closed server-side
+  verification, hostname/action binding checks, and accepted, replayed, and
+  missing-token tests.
+- Document Authentik's Captcha Stage configuration using FCaptcha's paired
+  Turnstile-compatible widget and verification endpoints, including the score
+  direction caveat.
+
+### Documentation
+- Replace absolute AI-agent blocking claims with the measured boundary: FCaptcha
+  scores browser-automation evidence, while paired browser-internal captures
+  that overlap their human controls remain observations rather than unsafe
+  blocking rules.
+
+This release does not add or change a detector, score, threshold, token format,
+or blocking policy.
+
 ## [1.52.0] — 2026-11-25
 
 ### Added

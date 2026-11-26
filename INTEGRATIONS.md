@@ -1,4 +1,4 @@
-# Use FCaptcha with Gitea, Django and Flask-WTF
+# Use FCaptcha with Authentik, Gitea, Django and Flask-WTF
 
 FCaptcha is a self-hosted CAPTCHA designed to detect bots and AI agents
 operating browsers. Its reCAPTCHA-compatible endpoints let applications
@@ -62,6 +62,55 @@ for the flows you intend to protect.
 verification paths. An equivalent backend form request accepted a signed
 local fixture and rejected a forged token against FCaptcha 1.50.1. This
 check did not run a full Gitea registration UI.
+
+## Authentik
+
+Authentik's CAPTCHA stage accepts custom JavaScript and verification URLs, so
+it can use FCaptcha through the Turnstile-compatible endpoints. In the
+Authentik admin interface, create or edit a **Captcha Stage** and set:
+
+| Authentik field | Value |
+| --- | --- |
+| Public key | your FCaptcha site key |
+| Private key | your `FCAPTCHA_VERIFY_SECRET` |
+| JS URL | `https://captcha.example.com/turnstile/v0/api.js` |
+| API URL | `https://captcha.example.com/turnstile/v0/siteverify` |
+| Interactive | enabled |
+| Score minimum threshold | `0` |
+| Score maximum threshold | `1` |
+| Request content type | `application/x-www-form-urlencoded` |
+
+Add the stage to the flow you want to protect. Both the visitor's browser and
+the Authentik server must be able to reach the FCaptcha hostname. Configure
+that hostname in Authentik's Content Security Policy if your deployment has
+customized its default CSP.
+
+Use interactive mode. Authentik defaults the minimum score to `0.5`, following
+reCAPTCHA's convention that a higher score is more human. FCaptcha's native
+Turnstile-compatible `score` is the opposite: **lower is more human**. Set the
+range to `0`–`1`, so Authentik accepts the full score range and FCaptcha's
+`success` verdict remains the gate. Leaving Authentik's `0.5` minimum in place
+rejects a valid low-risk FCaptcha response.
+
+Authentik includes `remoteip` in its verification request. FCaptcha must derive
+the same visitor address when it issues the token, so configure trusted proxies
+correctly on both services. Do not solve a mismatch by trusting arbitrary
+forwarding headers or disabling IP binding.
+
+The private key is a backend verification credential, not FCaptcha's signing
+key. Keep `FCAPTCHA_SECRET` only on the FCaptcha server. A successful stage
+does not replace Authentik's other authentication, rate-limit, or recovery
+controls.
+
+**Checked:** Authentik **2026.8.7** loaded FCaptcha **1.52.0** through the
+configured Turnstile script path in a real browser flow. Its backend stage
+accepted a signed, low-risk token, advanced the flow, and rejected the same
+token in a new flow session as a replay. The test also confirmed that the
+default `0.5` minimum is incompatible with FCaptcha's score direction; the
+documented `0`–`1` range passed. The headless browser used to inspect the flow
+was independently blocked by FCaptcha's normal WebDriver/headless signals, as
+expected, so the accepted fixture was signed with the same ephemeral test key
+and visitor-IP binding rather than weakening detection.
 
 ## Django with django-recaptcha
 

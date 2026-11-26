@@ -15,7 +15,7 @@ docker run --rm -d --name fcaptcha-sveltekit-demo \
   -e FCAPTCHA_SECRET -e FCAPTCHA_VERIFY_SECRET \
   -e FCAPTCHA_ALLOWED_HOSTNAMES=127.0.0.1 \
   -e FCAPTCHA_SITE_KEYS=sveltekit-contact \
-  ghcr.io/webdecoy/fcaptcha:1.52.0
+  ghcr.io/webdecoy/fcaptcha:1.53.0
 
 npm ci
 npm run dev

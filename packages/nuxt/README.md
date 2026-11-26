@@ -2,16 +2,20 @@
 
 A client-only `<FCaptcha>` component with public runtime configuration, self-hosted script loading, and cleanup when a route or component changes.
 
-This module is **unreleased**. It is available from source in this repository; do not assume `@webdecoy/fcaptcha-nuxt` is published to npm or listed in the Nuxt directory.
+Install the official module from npm:
 
-## Try from source
+```sh
+npm install @webdecoy/fcaptcha-nuxt
+```
 
-Copy `packages/nuxt` into your application's `modules/fcaptcha` directory (excluding `node_modules` and `test`). Add `@nuxt/kit` matching your Nuxt version if your project does not already depend on it.
+## Configure it
+
+Add the module and public widget settings to `nuxt.config.ts`:
 
 ```ts
 // nuxt.config.ts
 export default defineNuxtConfig({
-  modules: ['./modules/fcaptcha/module.mjs'],
+  modules: ['@webdecoy/fcaptcha-nuxt'],
   fcaptcha: {
     siteKey: 'contact-form',
     serverUrl: 'https://captcha.example.com',

@@ -1,7 +1,6 @@
 {
   "name": "@webdecoy/fcaptcha-nuxt",
-  "version": "1.52.0",
-  "private": true,
+  "version": "1.53.0",
   "description": "Nuxt 4 module for the self-hosted FCaptcha widget",
   "type": "module",
   "exports": {
@@ -32,5 +31,25 @@
   "overrides": {
     "minimatch": "11.0.9"
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WebDecoy/FCaptcha",
+    "directory": "packages/nuxt"
+  },
+  "keywords": [
+    "nuxt",
+    "captcha",
+    "bot-detection",
+    "proof-of-work",
+    "turnstile-alternative"
+  ],
+  "author": "WebDecoy",
+  "bugs": {
+    "url": "https://github.com/WebDecoy/FCaptcha/issues"
+  },
+  "homepage": "https://github.com/WebDecoy/FCaptcha/tree/main/packages/nuxt#readme",
   "license": "MIT"
 }
