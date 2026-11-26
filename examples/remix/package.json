@@ -1,0 +1,17 @@
+{
+  "name": "fcaptcha-remix-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node start.mjs",
+    "test": "node --test test.mjs"
+  },
+  "dependencies": {
+    "@sdxc/captcha": "2026.11.10",
+    "@sdxc/result": "2026.10.13",
+    "remix": "3.2.0"
+  },
+  "engines": {
+    "node": ">=24.3.0"
+  }
+}
