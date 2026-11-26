@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const { computeMetrics } = require('./metrics');
-const { renderHostedSmokeReport, renderResearchReport } = require('./report');
+const { renderHostedSmokeReport, renderReport, renderResearchReport } = require('./report');
 
 test('research-only report is explicitly exploratory and contains no gate claims', () => {
   const results = [{
@@ -75,4 +75,31 @@ test('hosted smoke report is operational and makes no detection-rate claims', ()
   assert.match(report, /returned 503/);
   assert.doesNotMatch(report, /0\.950|block|shared egress artifact/);
   assert.doesNotMatch(report, /Human panel|Agent corpus|Gate/);
+});
+
+test('repeated community captures report one family without inventing exclusions', () => {
+  const familyId = 'a'.repeat(64);
+  const result = (id) => ({
+    sample: {
+      id,
+      label: 'human',
+      group: 'community-keyboard',
+      provenance: 'captured',
+      captureMethod: 'manual-browser',
+      labelEvidence: 'verified-human',
+      caveats: ['One operator.'],
+      capture: { community: { familyId } },
+    },
+    score: 0.1,
+    detections: [],
+  });
+  const results = [result('human/community/0000'), result('human/community/0001')];
+  const report = renderReport(
+    computeMetrics(results),
+    results.map((row) => row.sample),
+    { failures: [], warnings: [], exempted: [] }
+  );
+
+  assert.match(report, /0\/1 independently observed capture families; 0\/2 base captures/);
+  assert.doesNotMatch(report, /fixture\(s\) measured but excluded/);
 });

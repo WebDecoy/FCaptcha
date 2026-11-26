@@ -19,14 +19,14 @@ them in step.
 **Captured traces from real browsers driven by real people.** The benchmark
 corpus is scripted personas from a single machine, which bounds what any
 false-positive number derived from it can mean. `bench/corpus/captured/` takes
-new samples directly — see [bench/README.md](bench/README.md). This is the single
-highest-value contribution to the project, above any feature.
+new samples only through the permanent-consent, local-sanitization, and review
+process in [bench/COMMUNITY-CONTRIBUTIONS.md](bench/COMMUNITY-CONTRIBUTIONS.md).
+The hosted demo's short-lived research consent is not enough to publish a
+sample. This is the single highest-value contribution to the project, above any
+feature.
 
 Other open areas:
 
-- Web Bot Auth verification for the Python server. Go and Node verify
-  cryptographically against the agent's published key directory; Python still
-  identifies by header presence, because there is no maintained Python library.
 - Cross-session / per-fingerprint behavioural correlation — the durable defence
   against source-patched browsers.
 - An escalation path for a flagged visitor. Today a false positive is a dead end

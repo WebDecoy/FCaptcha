@@ -106,6 +106,37 @@ function validate(sample, where) {
   if (sample.caveats && !Array.isArray(sample.caveats)) {
     fail(`${sample.id}: caveats must be an array of strings`);
   }
+  if (sample.capture?.community) {
+    const community = sample.capture.community;
+    if (!community || typeof community !== 'object' || Array.isArray(community)) {
+      fail(`${sample.id}: community metadata must be an object`);
+    }
+    const communityFields = Object.keys(community).sort();
+    const expectedCommunityFields = [
+      'familyId',
+      'publicationConsent',
+      'sampleFingerprint',
+      'schemaVersion',
+    ];
+    if (communityFields.length !== expectedCommunityFields.length ||
+        communityFields.some((field, index) => field !== expectedCommunityFields[index])) {
+      fail(`${sample.id}: community metadata contains unknown or missing fields`);
+    }
+    if (community.schemaVersion !== 1) fail(`${sample.id}: unsupported community schema version`);
+    if (!/^[a-f0-9]{64}$/.test(community.familyId || '')) {
+      fail(`${sample.id}: community familyId must be a SHA-256 digest`);
+    }
+    if (!/^[a-f0-9]{64}$/.test(community.sampleFingerprint || '')) {
+      fail(`${sample.id}: community sampleFingerprint must be a SHA-256 digest`);
+    }
+    if (community.publicationConsent !== 'permanent-publication-mit-v1') {
+      fail(`${sample.id}: community publication consent is missing`);
+    }
+    if (!Array.isArray(sample.caveats) || sample.caveats.length === 0 ||
+        sample.caveats.some((value) => typeof value !== 'string' || !value)) {
+      fail(`${sample.id}: community samples must declare limitations`);
+    }
+  }
   // A gap entry documents a class we have no data for. It carries no signals
   // because inventing them is exactly what it exists to avoid.
   if (sample.unmeasured) {
@@ -140,7 +171,25 @@ function loadCorpus(dir = CORPUS_DIR) {
   };
 
   walk(dir);
-  return out;
+  return validateCorpusIntegrity(out);
+}
+
+function validateCorpusIntegrity(samples) {
+  const ids = new Set();
+  const fingerprints = new Map();
+  for (const sample of samples) {
+    if (ids.has(sample.id)) throw new Error(`duplicate corpus id ${sample.id}`);
+    ids.add(sample.id);
+    const fingerprint = sample.capture?.community?.sampleFingerprint;
+    if (!fingerprint) continue;
+    if (fingerprints.has(fingerprint)) {
+      throw new Error(
+        `duplicate community capture fingerprint in ${fingerprints.get(fingerprint)} and ${sample.id}`
+      );
+    }
+    fingerprints.set(fingerprint, sample.id);
+  }
+  return samples;
 }
 
 function saveSamples(file, samples) {
@@ -224,4 +273,5 @@ module.exports = {
   loadCorpus,
   saveSamples,
   validate,
+  validateCorpusIntegrity,
 };

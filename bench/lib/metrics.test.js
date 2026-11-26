@@ -168,3 +168,40 @@ test('derived variants count once per capture family and never change the eviden
     assert.equal(evaluateGate(metrics).passed, false);
   }
 });
+
+test('community repeats count as one independent capture family', () => {
+  const familyId = 'a'.repeat(64);
+  const row = (id, score, detections) => ({
+    sample: {
+      id,
+      label: 'human',
+      group: 'community-trackpad',
+      provenance: 'captured',
+      captureMethod: 'manual-browser',
+      labelEvidence: 'verified-human',
+      capture: { community: { familyId } },
+    },
+    score,
+    detections,
+  });
+  const metrics = computeMetrics([
+    row('human/community/0000', 0.1, []),
+    row('human/community/0001', 0.7, [
+      { reason: 'Repeated-family signal', category: 'behavioral' },
+    ]),
+  ]);
+
+  assert.equal(metrics.counts.humansEvidential, 2);
+  assert.equal(metrics.counts.humanCaptureFamilies, 1);
+  assert.deepEqual(metrics.humanPanel.evidential, {
+    total: 1,
+    hits: 1,
+    rate: 1,
+    captures: 2,
+    captureHits: 1,
+  });
+  assert.equal(metrics.perSignal[0].humanHits, 1);
+  assert.equal(metrics.perSignal[0].humanTotal, 2);
+  assert.equal(metrics.perSignal[0].familyHits, 1);
+  assert.equal(metrics.perSignal[0].familyTotal, 1);
+});

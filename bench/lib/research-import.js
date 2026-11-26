@@ -72,9 +72,10 @@ function validateTimestamp(value, field) {
   return parsed;
 }
 
-function sanitizeSignals(signals) {
+function sanitizeSignals(signals, options = {}) {
   if (!isPlainObject(signals)) fail('signals must be an object');
   const state = { nodes: 0 };
+  const onRedact = typeof options.onRedact === 'function' ? options.onRedact : () => {};
 
   const visit = (value, depth, path) => {
     state.nodes++;
@@ -101,8 +102,14 @@ function sanitizeSignals(signals) {
     for (const [key, child] of Object.entries(value)) {
       if (FORBIDDEN_OBJECT_KEYS.has(key)) fail(`${path} contains forbidden key ${key}`);
       if (Buffer.byteLength(key, 'utf8') > 128) fail(`${path} contains an oversized key`);
-      if (PRIVATE_SIGNAL_KEYS.has(key.toLowerCase())) continue;
-      if (path === 'signals.environmental' && key.toLowerCase() === 'screen') continue;
+      if (PRIVATE_SIGNAL_KEYS.has(key.toLowerCase())) {
+        onRedact({ path: `${path}.${key}`, action: 'removed-private-field' });
+        continue;
+      }
+      if (path === 'signals.environmental' && key.toLowerCase() === 'screen') {
+        onRedact({ path: `${path}.${key}`, action: 'removed-screen-geometry' });
+        continue;
+      }
       out[key] = visit(child, depth + 1, `${path}.${key}`);
     }
     return out;
@@ -113,7 +120,13 @@ function sanitizeSignals(signals) {
   if (isPlainObject(keyboard)) {
     const anonymized = Object.create(null);
     Object.keys(keyboard).sort().forEach((key, index) => {
-      anonymized[`field_${index + 1}`] = keyboard[key];
+      const replacement = `field_${index + 1}`;
+      anonymized[replacement] = keyboard[key];
+      onRedact({
+        path: `signals.formAnalysis.textareaKeyboard.${key}`,
+        action: 'anonymized-field-name',
+        replacement,
+      });
     });
     clean.formAnalysis.textareaKeyboard = anonymized;
   }

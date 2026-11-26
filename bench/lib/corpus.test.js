@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { deriveVariant, loadCorpus, validate } = require('./corpus');
+const { deriveVariant, loadCorpus, validate, validateCorpusIntegrity } = require('./corpus');
 
 test('every committed sample declares capture method and label evidence', () => {
   const corpus = loadCorpus();
@@ -46,4 +46,59 @@ test('derived variants preserve evidence metadata without becoming independent c
   assert.equal(derived.captureMethod, sample.captureMethod);
   assert.equal(derived.labelEvidence, sample.labelEvidence);
   assert.doesNotThrow(() => validate(derived));
+});
+
+test('community captures require permanent consent metadata and declared limitations', () => {
+  const sample = {
+    id: 'human/community/0000',
+    label: 'human',
+    group: 'community',
+    provenance: 'captured',
+    captureMethod: 'manual-browser',
+    labelEvidence: 'verified-human',
+    caveats: ['One operator.'],
+    signals: {},
+    capture: {
+      community: {
+        schemaVersion: 1,
+        familyId: 'a'.repeat(64),
+        sampleFingerprint: 'b'.repeat(64),
+        publicationConsent: 'permanent-publication-mit-v1',
+      },
+    },
+  };
+  assert.doesNotThrow(() => validate(sample));
+  assert.throws(
+    () => validate({ ...sample, caveats: [] }),
+    /must declare limitations/
+  );
+  assert.throws(
+    () => validate({
+      ...sample,
+      capture: { community: { ...sample.capture.community, publicationConsent: 'seven-day-research' } },
+    }),
+    /publication consent is missing/
+  );
+  assert.throws(
+    () => validate({
+      ...sample,
+      capture: { community: { ...sample.capture.community, contributorName: 'not allowed' } },
+    }),
+    /unknown or missing fields/
+  );
+});
+
+test('corpus integrity rejects duplicate ids and community fingerprints', () => {
+  const first = {
+    id: 'human/community/0000',
+    capture: { community: { sampleFingerprint: 'c'.repeat(64) } },
+  };
+  assert.throws(() => validateCorpusIntegrity([first, { ...first }]), /duplicate corpus id/);
+  assert.throws(
+    () => validateCorpusIntegrity([first, {
+      id: 'human/community/0001',
+      capture: { community: { sampleFingerprint: 'c'.repeat(64) } },
+    }]),
+    /duplicate community capture fingerprint/
+  );
 });
