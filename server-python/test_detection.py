@@ -58,15 +58,13 @@ def suspicious(dets):
 
 
 @test
-def unverified_web_bot_auth_headers_fail_closed():
+def signature_headers_are_not_classified_without_http_layer_verification():
     detections = check_declared_ai_agent("Mozilla/5.0", {
         "signature": "sig1=:ZmFrZQ==:",
         "signature-input": 'sig1=("@authority" "signature-agent")',
         "signature-agent": "https://agent.example/.well-known/http-message-signatures-directory",
     })
-    assert len(detections) == 1
-    assert detections[0]["category"] == "bot"
-    assert detections[0]["details"]["verified"] is False
+    assert detections == []
 
 
 @test

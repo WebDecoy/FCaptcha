@@ -3,3 +3,4 @@ uvicorn>=0.54.0
 pydantic>=2.14.4
 redis>=8.1.0
 python-multipart>=0.0.34
+http-message-signatures>=3.0.0,<4

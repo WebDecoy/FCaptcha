@@ -11,9 +11,18 @@ const assert = require('assert');
 const { sign: signRequest } = require('web-bot-auth');
 const { signerFromJWK } = require('web-bot-auth/crypto');
 const wba = require('./webbotauth');
+const outcomes = require('../test/fixtures/web-bot-auth-outcomes.json').cases;
 
 const AGENT_ORIGIN = 'https://agent.example';
 const SIGNATURE_AGENT_VALUE = `"${AGENT_ORIGIN}"`; // RFC 8941 bare string form
+
+function assertOutcome(name, detection) {
+  const expected = outcomes.find((entry) => entry.name === name);
+  assert.ok(expected, `missing shared outcome fixture: ${name}`);
+  assert.strictEqual(detection.category, expected.expectedCategory);
+  assert.strictEqual(detection.details.verified, expected.expectedVerified);
+  assert.ok(detection.reason.toLowerCase().includes(expected.reasonContains.toLowerCase()));
+}
 
 async function generateSigner() {
   const kp = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
@@ -197,8 +206,7 @@ async function testVerified() {
 
   const dets = await wba.checkWebBotAuth(req);
   assert.strictEqual(dets.length, 1);
-  assert.strictEqual(dets[0].category, 'declared_ai');
-  assert.strictEqual(dets[0].details.verified, true, 'expected verified:true');
+  assertOutcome('verified', dets[0]);
   console.log('  ✓ verified signature → declared_ai (verified:true)');
 }
 
@@ -260,8 +268,7 @@ async function testForged() {
 
   const dets = await wba.checkWebBotAuth(req);
   assert.strictEqual(dets.length, 1);
-  assert.strictEqual(dets[0].category, 'bot', 'crypto failure must score as bot');
-  assert.strictEqual(dets[0].details.verified, false);
+  assertOutcome('invalid-signature', dets[0]);
   console.log('  ✓ forged signature (authority mismatch) → bot');
 }
 
@@ -297,10 +304,24 @@ async function testFailOpen() {
 
   const dets = await wba.checkWebBotAuth(req);
   assert.strictEqual(dets.length, 1);
-  assert.strictEqual(dets[0].category, 'declared_ai');
-  assert.strictEqual(dets[0].details.verified, false, 'fail-open must be verified:false');
-  assert.ok(/unverified/.test(dets[0].reason));
+  assertOutcome('unavailable-verifier', dets[0]);
   console.log('  ✓ unresolvable signer → fail open to presence-only');
+}
+
+async function testUnknownKey() {
+  const { signer } = await generateSigner();
+  const { pubJwk: unrelated } = await generateSigner();
+  wba._internal.seedDirectoryCache(AGENT_ORIGIN, [unrelated]);
+  const message = {
+    method: 'POST', url: 'https://example.com/api/verify',
+    headers: { host: 'example.com', 'signature-agent': SIGNATURE_AGENT_VALUE },
+  };
+  const signed = await sign(signer, message);
+  const [detection] = await wba.checkWebBotAuth(fakeReq({
+    host: 'example.com', extraHeaders: { 'signature-agent': SIGNATURE_AGENT_VALUE, ...signed },
+  }));
+  assertOutcome('unknown-key', detection);
+  console.log('  ✓ unknown key → fail open to presence-only');
 }
 
 async function testNoSignature() {
@@ -320,6 +341,7 @@ async function main() {
   await testForged();
   await testCoveredMember();
   await testFailOpen();
+  await testUnknownKey();
   await testNoSignature();
   console.log('All webbotauth tests passed.');
 }

@@ -3,9 +3,9 @@ name: Cross-server conformance
 on:
   push:
     branches: [main]
-    paths: ['server-go/**', 'server-node/**', 'server-python/**', 'test/conformance.js', 'bench/lib/pow.js', '.github/workflows/conformance.yml']
+    paths: ['server-go/**', 'server-node/**', 'server-python/**', 'test/conformance.js', 'test/fixtures/**', 'bench/lib/pow.js', '.github/workflows/conformance.yml']
   pull_request:
-    paths: ['server-go/**', 'server-node/**', 'server-python/**', 'test/conformance.js', 'bench/lib/pow.js', '.github/workflows/conformance.yml']
+    paths: ['server-go/**', 'server-node/**', 'server-python/**', 'test/conformance.js', 'test/fixtures/**', 'bench/lib/pow.js', '.github/workflows/conformance.yml']
 
 jobs:
   conformance:

@@ -1,0 +1,29 @@
+{
+  "_comment": "Shared Web Bot Auth trust outcomes. Runtime tests supply dummy keys and real signatures; this file pins the classification contract without production identities or network access.",
+  "cases": [
+    {
+      "name": "verified",
+      "expectedCategory": "declared_ai",
+      "expectedVerified": true,
+      "reasonContains": "Verified AI agent"
+    },
+    {
+      "name": "invalid-signature",
+      "expectedCategory": "bot",
+      "expectedVerified": false,
+      "reasonContains": "crypto verification failed"
+    },
+    {
+      "name": "unknown-key",
+      "expectedCategory": "declared_ai",
+      "expectedVerified": false,
+      "reasonContains": "unverified"
+    },
+    {
+      "name": "unavailable-verifier",
+      "expectedCategory": "declared_ai",
+      "expectedVerified": false,
+      "reasonContains": "unverified"
+    }
+  ]
+}
