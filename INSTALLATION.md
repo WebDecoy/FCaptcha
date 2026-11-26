@@ -179,6 +179,26 @@ curl -I http://localhost:3000/fcaptcha.js
 # HTTP/1.1 200 OK
 ```
 
+#### Python Web Bot Auth deployment conditions
+
+The Python server verifies signed-agent requests at the HTTP boundary before
+normal detector scoring. Verification needs outbound DNS and HTTPS access to
+the `Signature-Agent` key-set URL. A legacy bare origin is resolved at
+`/.well-known/http-message-signatures-directory`; a URL with a path is fetched
+directly. Preserve the original `Host` header and forward the public scheme in
+`X-Forwarded-Proto` when TLS terminates at a reverse proxy, because those values
+may be covered by the signature.
+
+Directory URLs are untrusted input. The verifier permits HTTPS only, connects
+to the exact public IP address it validated, refuses private/loopback/link-local
+destinations and redirects, and bounds the full operation to three seconds. It
+also caps response size, key count, concurrent discovery, and its one-hour
+in-process cache. A blocked network, timeout, unsupported signature, unknown
+key, or missing runtime dependency never earns verified identity and never
+becomes a forgery accusation; it remains the existing `declared_ai`,
+`verified:false` presence signal. Only a resolved key that cryptographically
+rejects the request produces the low-confidence forged-signature signal.
+
 By default, `server-python` serves `client/fcaptcha.js` at `/fcaptcha.js` so integrators that expose a single `serverUrl` to their clients (and load the widget from `<serverUrl>/fcaptcha.js`) work out of the box. Set `FCAPTCHA_SERVE_CLIENT=false` to opt out (e.g. when hosting the widget on a CDN), or `FCAPTCHA_CLIENT_PATH=/abs/path/to/fcaptcha.js` to override the default lookup when `server-python/` is deployed without the sibling `client/` directory.
 
 ---

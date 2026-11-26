@@ -6,9 +6,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -265,6 +268,36 @@ func TestCheckDeclaredAIAgent(t *testing.T) {
 // TestClassifyWebBotAuth pins the verdict policy that maps a verification
 // outcome to detections. Pure mapping — no live directory needed.
 func TestClassifyWebBotAuth(t *testing.T) {
+	type outcome struct {
+		Name             string `json:"name"`
+		ExpectedCategory string `json:"expectedCategory"`
+		ExpectedVerified bool   `json:"expectedVerified"`
+		ReasonContains   string `json:"reasonContains"`
+	}
+	var fixture struct {
+		Cases []outcome `json:"cases"`
+	}
+	data, err := os.ReadFile(filepath.Join("..", "test", "fixtures", "web-bot-auth-outcomes.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	assertOutcome := func(name string, detection DetectionResult) {
+		t.Helper()
+		for _, expected := range fixture.Cases {
+			if expected.Name != name {
+				continue
+			}
+			if string(detection.Category) != expected.ExpectedCategory || detection.Details["verified"] != expected.ExpectedVerified || !strings.Contains(strings.ToLower(detection.Reason), strings.ToLower(expected.ReasonContains)) {
+				t.Errorf("%s: detection does not match shared fixture: %+v", name, detection)
+			}
+			return
+		}
+		t.Fatalf("missing shared outcome fixture %q", name)
+	}
+
 	// Verified → declared_ai, verified:true, high confidence.
 	verified := classifyWebBotAuth(&webbotauth.Result{
 		Status:    webbotauth.StatusVerified,
@@ -278,6 +311,7 @@ func TestClassifyWebBotAuth(t *testing.T) {
 	if verified[0].Details["verified"] != true {
 		t.Errorf("verified: expected verified:true, got %+v", verified[0].Details)
 	}
+	assertOutcome("verified", verified[0])
 
 	// Invalid due to a genuine crypto failure → bot, contributory, verified:false.
 	forged := classifyWebBotAuth(&webbotauth.Result{
@@ -290,6 +324,7 @@ func TestClassifyWebBotAuth(t *testing.T) {
 	if forged[0].Confidence >= 0.9 {
 		t.Errorf("forged: expected low (contributory) confidence, got %v", forged[0].Confidence)
 	}
+	assertOutcome("invalid-signature", forged[0])
 
 	// Invalid due to a directory we could not reach → fail open to presence-only,
 	// NOT a bot accusation. This is the false-positive guard.
@@ -303,6 +338,16 @@ func TestClassifyWebBotAuth(t *testing.T) {
 	if failOpen[0].Details["verified"] != false {
 		t.Errorf("fail-open: expected verified:false, got %+v", failOpen[0].Details)
 	}
+	assertOutcome("unavailable-verifier", failOpen[0])
+
+	unknownKey := classifyWebBotAuth(&webbotauth.Result{
+		Status: webbotauth.StatusInvalid,
+		Errors: []error{errors.New(`sig1: keyid "missing" not found in directory https://agent.example`)},
+	}, "https://agent.example")
+	if len(unknownKey) != 1 {
+		t.Fatalf("unknown-key: expected one presence detection, got %+v", unknownKey)
+	}
+	assertOutcome("unknown-key", unknownKey[0])
 
 	// No signature → no detection.
 	if got := classifyWebBotAuth(&webbotauth.Result{Status: webbotauth.StatusNoSignature}, ""); len(got) != 0 {

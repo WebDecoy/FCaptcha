@@ -313,10 +313,11 @@ DECLARED_AI_AGENT_PATTERNS = [
 
 
 def check_declared_ai_agent(user_agent: str, headers: Optional[Dict[str, str]] = None) -> List[Dict]:
-    """Flag self-identifying AI agents via the User-Agent and detect Web Bot Auth
-    signed requests (RFC 9421 HTTP Message Signatures). Both are high-confidence
-    identifications surfaced as the declared_ai category so callers can apply an
-    allow/block policy instead of relying on a hard score.
+    """Flag self-identifying AI agents via the User-Agent.
+
+    Web Bot Auth is handled at the HTTP boundary in ``webbotauth.py`` because a
+    cryptographic signature must be checked against the original request, not a
+    normalized detector header map. ``headers`` remains for API compatibility.
     """
     detections: List[Dict] = []
     ua = user_agent or ""
@@ -332,19 +333,6 @@ def check_declared_ai_agent(user_agent: str, headers: Optional[Dict[str, str]] =
                 "details": {"matched": match.group(0)},
             })
             break
-
-    # Python does not yet implement the bounded Web Bot Auth verifier used by
-    # the Go and Node servers. Fail closed: header presence alone must never be
-    # surfaced as an identified agent that a relying policy might trust.
-    h = headers or {}
-    if h.get("signature") and h.get("signature-input") and h.get("signature-agent"):
-        detections.append({
-            "category": "bot",
-            "score": 0.5,
-            "confidence": 0.5,
-            "reason": "Unverified Web Bot Auth signature headers",
-            "details": {"signatureAgent": h.get("signature-agent"), "verified": False},
-        })
 
     return detections
 

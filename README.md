@@ -605,7 +605,7 @@ correlation and should not grow into it.
 
 ### Declared Agents & Reputation
 - Self-identifying AI-agent user-agents (ClaudeBot, Claude-User, GPTBot, ChatGPT-User, OAI-SearchBot, PerplexityBot, Google-Extended, CCBot, Bytespider, meta-externalagent, Amazonbot, cohere-ai, …)
-- Web Bot Auth (RFC 9421 HTTP Message Signatures) — cryptographic signature verification against the agent's published key directory (verified / forged / unverified), Go + Node
+- Web Bot Auth (RFC 9421 HTTP Message Signatures) — cryptographic signature verification against the agent's published key directory (verified / forged / unverified), Go + Node + Python
 - Local datacenter-range reputation checks; FCaptcha does not perform visitor-derived reverse-DNS lookups
 
 ## AI Agent Detection
@@ -644,7 +644,7 @@ Many legitimate agents and crawlers identify themselves — by user-agent (Claud
 - **forged** (signature fails cryptographic verification) → a contributory bot signal — affirmative evidence of a spoofed identity claim.
 - **unverified** (unreachable/blocked directory, timeout) → fails open to a presence-only signal; a directory it couldn't fetch is never treated as proof of spoofing.
 
-So declared and verified agents get policy handling instead of being treated as attackers, and a bot can't buy leniency just by attaching three unsigned headers. (Go + Node verify cryptographically; the Python server still identifies by header presence.)
+So declared and verified agents get policy handling instead of being treated as attackers, and a bot can't buy leniency just by attaching three unsigned headers. All three servers verify cryptographically; unsupported claims, unknown keys, and unavailable directories remain explicitly unverified.
 
 ## API Reference
 

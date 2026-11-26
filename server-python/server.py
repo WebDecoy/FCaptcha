@@ -1996,7 +1996,8 @@ def run_verification(
     peer_trusted: bool = False,
     action: str = "",
     cdata: str = "",
-    widget_interaction: bool = True
+    widget_interaction: bool = True,
+    web_bot_auth: List[Dict[str, Any]] = None,
 ) -> Dict:
     from detection import (
         check_ip_reputation, analyze_headers,
@@ -2005,7 +2006,13 @@ def run_verification(
         analyze_form_interaction, check_declared_ai_agent, analyze_advanced_signals
     )
 
-    detections = []
+    detections = [
+        Detection(
+            ThreatCategory(item["category"]), item["score"], item["confidence"],
+            item["reason"], item.get("details") or {},
+        )
+        for item in (web_bot_auth or [])
+    ]
 
     client_signals_hash = pow_solution.signalsHash if pow_solution else None
     commitment_valid = True
@@ -2153,8 +2160,9 @@ def run_verification(
             ThreatCategory.BOT, d["score"], d["confidence"], d["reason"]
         ))
 
-    # Self-identifying UAs are declared agents. Signature headers are treated
-    # as bot evidence until Python has performed cryptographic verification.
+    # Self-identifying UAs are declared agents. Web Bot Auth is verified at the
+    # HTTP boundary above and injected through web_bot_auth so the signature
+    # base is reconstructed from the real request rather than a header map.
     for d in check_declared_ai_agent(user_agent, headers):
         category = ThreatCategory(d["category"]) if d["category"] in [e.value for e in ThreatCategory] else ThreatCategory.BOT
         detections.append(Detection(
@@ -2374,6 +2382,25 @@ async def run_stateful(fn, *args, **kwargs):
     return fn(*args, **kwargs)
 
 
+def web_bot_auth_detections(request: Request) -> List[Dict[str, Any]]:
+    """Verify Web Bot Auth before request data is normalized for detectors."""
+    from webbotauth import request_detections
+
+    raw_headers = [
+        (name.decode("ascii"), value.decode("latin-1"))
+        for name, value in request.scope.get("headers", [])
+    ]
+    host = request.headers.get("host", "")
+    scheme = request.url.scheme
+    forwarded = request.headers.get("x-forwarded-proto", "")
+    if forwarded:
+        scheme = forwarded.split(",", 1)[0].strip().lower()
+    raw_path = request.scope.get("raw_path", b"/").decode("ascii", "surrogateescape")
+    query = request.scope.get("query_string", b"").decode("ascii", "surrogateescape")
+    target = f"{scheme}://{host}{raw_path}" + (f"?{query}" if query else "")
+    return request_detections(request.method, target, raw_headers)
+
+
 def stateful_route(fn):
     @wraps(fn)
     async def route(*args, **kwargs):
@@ -2395,7 +2422,8 @@ def verify(req: VerifyRequest, request: Request):
 
     # Reached by clicking a rendered widget, so the client's click analysis is
     # present and meaningful.
-    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata, widget_interaction=True)
+    web_bot_auth = web_bot_auth_detections(request)
+    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata, widget_interaction=True, web_bot_auth=web_bot_auth)
     log_verdict("verify", req.siteKey, result)
     return result
 
@@ -2411,7 +2439,8 @@ def score(req: ScoreRequest, request: Request):
     headers = collect_headers(request)
 
     # Invisible scoring: no widget, so no click analysis in the signals.
-    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata, widget_interaction=False)
+    web_bot_auth = web_bot_auth_detections(request)
+    result = run_verification(req.signals, ip, req.siteKey, user_agent, headers, ja3_hash, req.powSolution, req.signalsJson, req.powTiming, PROXY_TRUST.peer_trusted(request), req.action, req.cdata, widget_interaction=False, web_bot_auth=web_bot_auth)
     log_verdict("score", req.siteKey, result)
     return {
         "success": result["success"],
