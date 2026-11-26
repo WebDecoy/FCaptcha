@@ -33,8 +33,9 @@ node tools/analyze-paired-observations.js
 node tools/compare-server-parity.js \
   --server node=http://localhost:3001 \
   --server go=http://localhost:3002 \
-  --server python=http://localhost:3003
-                                      # compare base-corpus detector verdicts
+  --server python=http://localhost:3003 \
+  --strict
+                                      # require exact base-corpus detector parity
 
 On macOS, run the server and the harness under `caffeinate -i -s` for anything
 unattended. Maintenance Sleep pauses both processes together; a challenge
@@ -87,14 +88,13 @@ population FPR below 0.3%.
 The shared conformance suite protects token, proof-of-work, and wire-contract
 security invariants. The benchmark additionally compares detector verdicts
 across the Go, Node, and Python production servers. It replays base samples only
-with one isolated site key per sample. Recommendation, experimental blocking
-decision, and observation statuses are a hard outcome-parity CI gate. Exact
-score, normalized detections, category scores, and full experimental details
-are retained in the artifact as a stricter migration report; run with `--strict`
-to gate on those as well. This two-tier result keeps non-decision drift from
-blocking a release while making scoring and detector-detail differences visible
-until all implementations converge. Floating-point output is normalized to
-eight decimal places.
+with one isolated site key per sample. CI runs the comparison with `--strict`,
+so recommendation, experimental blocking decision, observation statuses,
+normalized detections, category scores, full experimental details, and exact
+scores must all match before a release can pass. The non-strict mode remains
+available for local diagnosis when a change intentionally starts as an
+outcome-only comparison. Floating-point output is normalized to eight decimal
+places.
 
 Derived variants run only in the primary regression job because they add
 robustness coverage, not another server contract.

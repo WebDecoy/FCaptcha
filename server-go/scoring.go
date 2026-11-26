@@ -1876,6 +1876,18 @@ func (e *ScoringEngine) detectBehavioral(signals map[string]interface{}) []Detec
 		})
 	}
 
+	// Straight-line ratio
+	straight := getFloat(behavioral, "straightLineRatio")
+	if straight > 0.8 && trajectoryLength > 100 {
+		results = append(results, DetectionResult{
+			Category:   CategoryBehavioral,
+			Score:      0.5,
+			Confidence: 0.5,
+			Reason:     "Mouse movements too straight",
+			Details:    map[string]interface{}{"straightLineRatio": straight},
+		})
+	}
+
 	// Direction changes
 	dirChanges := getFloat(behavioral, "directionChanges")
 	if totalPoints > 50 && dirChanges < 3 {
@@ -2088,9 +2100,11 @@ func (e *ScoringEngine) detectFingerprint(signals map[string]interface{}, ip, si
 		})
 	}
 
-	// Canvas hash anomalies
+	// Canvas hash anomalies. Missing support metadata is neutral for older
+	// clients; only an explicit false value means collection was blocked.
 	canvas := getMap(env, "canvasHash")
-	if getBool(canvas, "error") || !getBool(canvas, "supported") {
+	supported, supportDeclared := canvas["supported"].(bool)
+	if getBool(canvas, "error") || (supportDeclared && !supported) {
 		results = append(results, DetectionResult{
 			Category:   CategoryFingerprint,
 			Score:      0.4,

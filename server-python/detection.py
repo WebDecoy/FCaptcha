@@ -1010,6 +1010,17 @@ def analyze_form_interaction(form_analysis: Optional[Dict], human_present: bool 
                     "reason": f'Textarea "{field_id}" has abnormal keydown/keyup ratio ({keydown_up_ratio:.2f})'
                 })
 
+            # Content reported without any keyboard events is independent
+            # evidence of DOM manipulation. Keep this separate from the
+            # zero-key/zero-paste programmatic-fill signal above.
+            if stats.get("noKeyboardEvents") and content_length > 0:
+                detections.append({
+                    "category": "bot",
+                    "score": 0.75,
+                    "confidence": 0.8,
+                    "reason": f'Textarea "{field_id}" has {content_length} chars but no keyboard events (DOM manipulation)'
+                })
+
             # Keystroke cadence analysis
             cadence_result = _analyze_keystroke_cadence(stats)
             if cadence_result:

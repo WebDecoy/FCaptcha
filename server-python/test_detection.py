@@ -11,6 +11,7 @@ Run: python test_detection.py
 from testkit import TestRegistry
 
 from detection import (
+    analyze_form_interaction,
     analyze_headers,
     analyze_speech_api,
     analyze_webrtc,
@@ -24,6 +25,7 @@ from server import (
     calculate_category_scores,
     calculate_final_score,
     detect_canvas_stability,
+    detect_fingerprint,
     detect_behavioral,
     detect_vision_ai,
     has_widget_interaction,
@@ -55,6 +57,48 @@ def browser_headers():
 
 def suspicious(dets):
     return [d["reason"] for d in dets if d["reason"].startswith("Suspicious header present")]
+
+
+@test
+def missing_canvas_support_metadata_is_neutral():
+    legacy = {"environmental": {"canvasHash": {"hash": "legacy-client"}}}
+    blocked = {"environmental": {"canvasHash": {"supported": False}}}
+    reason = "Canvas fingerprinting blocked or failed"
+    legacy_reasons = [
+        d.reason
+        for d in detect_fingerprint(legacy, "192.0.2.201", "canvas-legacy")
+    ]
+    blocked_reasons = [
+        d.reason
+        for d in detect_fingerprint(blocked, "192.0.2.202", "canvas-blocked")
+    ]
+    assert reason not in legacy_reasons
+    assert reason in blocked_reasons
+
+
+@test
+def programmatic_fill_preserves_category_and_reports_missing_keyboard_events():
+    form = {"textareaKeyboard": {"comment": {
+        "contentLength": 50,
+        "keyCount": 0,
+        "pasteCount": 0,
+        "noKeyboardEvents": True,
+    }}}
+    detections = analyze_form_interaction(form)
+    fill = next(d for d in detections if "filled programmatically" in d["reason"])
+    keyboard = next(d for d in detections if "no keyboard events" in d["reason"])
+    assert fill["category"] == "automation", fill
+    assert keyboard["category"] == "bot", keyboard
+
+    result = run_verification(
+        {"formAnalysis": form}, "192.0.2.203", "form-category", "Mozilla/5.0"
+    )
+    fill = next(
+        d
+        for d in result["detections"]
+        if "filled programmatically" in d["reason"]
+    )
+    assert fill["category"] == "automation", fill
 
 
 @test

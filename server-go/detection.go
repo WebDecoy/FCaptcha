@@ -637,7 +637,7 @@ func (e *ScoringEngine) CheckBrowserConsistency(ua string, signals map[string]in
 			Category:   CategoryBot,
 			Score:      0.9,
 			Confidence: 0.95,
-			Reason:     "User-Agent indicates bot/automation tool",
+			Reason:     fmt.Sprintf("User-Agent indicates bot: %s", uaInfo.BotName),
 			Details:    map[string]interface{}{"bot": uaInfo.BotName},
 		})
 		return detections
@@ -1397,6 +1397,18 @@ func (e *ScoringEngine) AnalyzeFormInteraction(formAnalysis map[string]interface
 					Score:      0.4,
 					Confidence: 0.5,
 					Reason:     fmt.Sprintf("Textarea %q has abnormal keydown/keyup ratio (%.2f)", fieldId, keydownUpRatio),
+				})
+			}
+
+			// Content reported without any keyboard events is independent
+			// evidence of DOM manipulation. Keep this separate from the
+			// zero-key/zero-paste programmatic-fill signal above.
+			if getBool(stats, "noKeyboardEvents") && contentLength > 0 {
+				detections = append(detections, DetectionResult{
+					Category:   CategoryBot,
+					Score:      0.75,
+					Confidence: 0.8,
+					Reason:     fmt.Sprintf("Textarea %q has %d chars but no keyboard events (DOM manipulation)", fieldId, contentLength),
 				})
 			}
 
