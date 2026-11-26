@@ -177,7 +177,7 @@ import its request into the corpus with explicit browser and input labels:
 ```bash
 python3 capture/camoufox_bench.py --manual --modes widget \
   --environment-label 'Chrome 156, macOS, default settings' \
-  --expected-client-version 1.51.4 \
+  --expected-client-version 1.52.0 \
   --out test-results/chrome-trackpad
 
 node tools/import-manual-capture.js \
@@ -185,7 +185,7 @@ node tools/import-manual-capture.js \
   --out corpus/captured/human-chrome-macos-trackpad.json \
   --group real-trackpad --scenario chrome-macos-trackpad \
   --input 'built-in trackpad and keyboard' \
-  --expected-client-version 1.51.4
+  --expected-client-version 1.52.0
 ```
 
 The importer refuses automated or normalized reports, strips the consumed

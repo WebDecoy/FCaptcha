@@ -86,11 +86,14 @@ Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is i
   verification, and replay/failure tests.
 - [SvelteKit contact form](examples/sveltekit/): self-hosted widget, native form
   action, and tests for server-side hostname and action checks.
+- [Remix 3 contact form](examples/remix/): `@sdxc/captcha` middleware,
+  self-hosted verification, and hostname/action contract tests.
+- [Better Auth email sign-up](examples/better-auth/): CAPTCHA plugin wiring,
+  server-only verification credentials, and a runnable browser form.
 - [Hono middleware with FCaptcha verification](examples/hono/): browser demo,
   server-side token checks, and replay/failure tests.
 - [Supabase Edge Function with FCaptcha verification](examples/supabase/):
   local browser demo, CORS handling, and single-use token validation.
-
 - [FastAPI application with server-side FCaptcha verification](examples/fastapi/):
   invisible-mode browser form, an async verification dependency, and replay/failure tests.
 - [Node.js contact form](examples/contact-form/): Japanese/English local demo.
@@ -159,7 +162,7 @@ is in `fcaptcha_score` there.
 
 ### Docker (recommended)
 
-A **prebuilt public image** is available at [`ghcr.io/webdecoy/fcaptcha`](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) for **Linux AMD64 and ARM64**. No GitHub login or source build is required. Use `:latest` to try the current image, or pin a release tag (for example, `:1.51.4`) or digest for reproducible deployments.
+A **prebuilt public image** is available at [`ghcr.io/webdecoy/fcaptcha`](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) for **Linux AMD64 and ARM64**. No GitHub login or source build is required. Use `:latest` to try the current image, or pin a release tag (for example, `:1.52.0`) or digest for reproducible deployments.
 
 See the [Docker guide](docker/README.md) for local startup, Compose, version pinning, and upgrades. If you already run CapRover, [install FCaptcha from One-Click Apps](docker/README.md#deploy-with-caprover). If you run Unraid, [install FCaptcha from Community Apps](https://ca.unraid.net/apps/fcaptcha-1sjnpad0cymf0h).
 
@@ -261,7 +264,7 @@ Two options, and the tradeoff is real:
 
 <!-- CDN widget: still requires a running FCaptcha API. -->
 <script
-  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.51.4/dist/fcaptcha.min.js"
+  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.52.0/dist/fcaptcha.min.js"
   integrity="sha384-…"
   crossorigin="anonymous"></script>
 ```

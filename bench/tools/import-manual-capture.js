@@ -33,7 +33,7 @@ function usage() {
     --out bench/corpus/captured/human-<scenario>.json \\
     --group <input-persona> --scenario <browser-input-slug> --input <description> \\\\
     [--expected-workflow <accessibility-workflow-slug>] \\
-    [--expected-client-version 1.51.4]
+    [--expected-client-version 1.52.0]
 
 The output path must not exist. Group is the human input persona (for example
 real-trackpad); scenario identifies the browser/configuration (for example

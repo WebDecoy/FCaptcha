@@ -36,7 +36,7 @@ function usage() {
     --group browser-harness-macbook-cdp-agent \\
     --scenario browser-harness-real-chrome-form \\
     --input "Browser Harness over loopback CDP" \\
-    --expected-client-version 1.51.4 \\
+    --expected-client-version 1.52.0 \\
     --expected-driver-name browser-harness \\
     --expected-driver-version 0.1.13 \\
     --expected-driver-commit c24e5072ee66f8499bacd663f4f4bcb089bc4492

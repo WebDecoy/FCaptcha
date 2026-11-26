@@ -49,7 +49,7 @@ python3 bench/capture/camoufox_bench.py \
   --input-tool-settings 'state the exact navigation and selection settings' \
   --form-fixture basic \
   --consent-confirmed --isolated-test-context \
-  --expected-client-version 1.51.4 \
+  --expected-client-version 1.52.0 \
   --out bench/test-results/a11y-screen-reader-keyboard-0000
 ```
 
@@ -85,7 +85,7 @@ node bench/tools/import-manual-capture.js \
   --scenario chrome-macos-screen-reader-keyboard \
   --input 'VoiceOver and keyboard only' \
   --expected-workflow screen-reader-keyboard-selection \
-  --expected-client-version 1.51.4
+  --expected-client-version 1.52.0
 ```
 
 Before committing an imported sample, inspect both files and verify:

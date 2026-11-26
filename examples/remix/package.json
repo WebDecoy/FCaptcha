@@ -11,6 +11,9 @@
     "@sdxc/result": "2026.10.13",
     "remix": "3.2.0"
   },
+  "overrides": {
+    "esbuild": "0.28.1"
+  },
   "engines": {
     "node": ">=24.3.0"
   }
