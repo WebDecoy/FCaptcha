@@ -4,7 +4,7 @@
 
 # F***Captcha
 
-**Open source CAPTCHA that blocks bots, vision AI agents, and automation - with a single click or less.**
+**Open source CAPTCHA with auditable bot and browser-automation signals — no image puzzle required.**
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Go](https://img.shields.io/badge/Go-1.26.11+-00ADD8?logo=go)
@@ -19,7 +19,10 @@
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/WebDecoy/FCaptcha)
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template?referralCode=webdecoy&template=https://github.com/WebDecoy/FCaptcha)
 
-FCaptcha is a modern CAPTCHA system designed to detect everything: traditional bots, headless browsers, automation frameworks, CAPTCHA farms, and the new generation of AI agents — from vision models that screenshot-and-click to computer-use agents that drive a real browser over the Chrome DevTools Protocol.
+FCaptcha is a self-hosted CAPTCHA for traditional bots, headless browsers,
+automation frameworks, and browser-driving AI agents. It combines proof of
+work with environmental and interaction evidence, exposes every scored reason,
+and publishes the benchmark traces used to decide what is safe to ship.
 
 ## Try it in 60 seconds
 
@@ -61,7 +64,12 @@ Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is i
 
 ## Why FCaptcha
 
-- **It catches AI agents, not just bots.** Vision agents that screenshot and click, and computer-use agents that drive a real browser over CDP, leave input-event traces that FCaptcha scores. [How](#ai-agent-detection)
+- **It measures AI-agent behavior, not just bot labels.** Vision agents that
+  screenshot and click, and computer-use agents that drive a browser over CDP,
+  can leave input-event traces that FCaptcha scores. Some browser-internal
+  agents remain indistinguishable from a person in current paired tests; those
+  observations are retained instead of being promoted into unsafe detectors.
+  [Evidence and limits](bench/README.md#paired-observation-analysis)
 - **It replaces Turnstile, reCAPTCHA or hCaptcha by changing a base URL.** It serves the same `siteverify` contract on the same paths.
 - **It runs on your server.** No cookies, no third parties, no phone-home. [COMPLIANCE.md](COMPLIANCE.md) lists every retention window. An optional [hosted service](https://docs.webdecoy.com/fcaptcha/webdecoy-hosted/) is run by WebDecoy, with its own [data handling](https://docs.webdecoy.com/fcaptcha/webdecoy-hosted/#privacy-and-data-handling).
 - **No puzzle to fail.** Screen-reader, keyboard-only, tremor and elderly personas run against a false-positive budget in CI that fails the build when exceeded.
@@ -96,11 +104,15 @@ Production setup (Compose, Helm, Fly.io, building from source, native SDKs) is i
   local browser demo, CORS handling, and single-use token validation.
 - [FastAPI application with server-side FCaptcha verification](examples/fastapi/):
   invisible-mode browser form, an async verification dependency, and replay/failure tests.
+- [Django 5.2 LTS form](examples/django/): checkbox widget, server-side
+  hostname/action checks, and accepted/replayed/missing-token tests.
+- [Laravel 13 form](examples/laravel/): Blade widget, a fail-closed validation
+  rule, and HTTP-faked feature tests for the verifier contract.
 - [Node.js contact form](examples/contact-form/): Japanese/English local demo.
 
 ## Integrations
 
-[Setup recipes for Gitea, Django and Flask-WTF](INTEGRATIONS.md) cover paired
+[Setup recipes for Authentik, Gitea, Django and Flask-WTF](INTEGRATIONS.md) cover paired
 widget/verifier URLs, server-only credentials and the checks performed.
 
 - **Statamic:** the [Captcha addon](https://statamic.com/addons/aryeh-raber/captcha)
@@ -142,7 +154,7 @@ is in `fcaptcha_score` there.
 
 - **Drop-in for Turnstile / reCAPTCHA / hCaptcha** - Serves the same `siteverify` contract on the same paths, so migrating an existing backend is a base-URL change; tokens carry a signed `hostname` and `action` your app can check
 - **Single click or invisible** - Checkbox mode like Turnstile/reCAPTCHA v2, or invisible mode like reCAPTCHA v3
-- **AI agent detection** - Catches vision agents (screenshot→API→click), DOM/CDP-driven agents (Claude in Chrome, Operator-style computer use), and synthetic input that reports `isTrusted: true` — via input-event forensics and LLM think-time cadence
+- **AI-agent signals** - Scores measured traces from vision agents, DOM/CDP-driven tools, and synthetic input that reports `isTrusted: true`; no single signal is claimed to identify every agent or model
 - **Declared & verified agents** - Flags self-declaring agents (ClaudeBot, GPTBot, ChatGPT-User, PerplexityBot, Bytespider…) and *cryptographically verifies* Web Bot Auth (RFC 9421) signed requests against the agent's published key directory, surfaced as a distinct category so your app can *allow* polite/verified agents and block the rest
 - **Proof of Work** - Server-verified SHA-256 hashcash with 256-bit HMAC signing, per-challenge nonces, and signal commitment that binds the challenge to the collected signals. A liveness and timing gate rather than a cost function — see [what it does and does not buy you](#what-the-proof-of-work-does-and-does-not-buy-you)
 - **Comprehensive bot detection** - Headless browsers, WebDriver, Puppeteer, Playwright, Selenium, plus CDP console-attach detection
@@ -162,7 +174,7 @@ is in `fcaptcha_score` there.
 
 ### Docker (recommended)
 
-A **prebuilt public image** is available at [`ghcr.io/webdecoy/fcaptcha`](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) for **Linux AMD64 and ARM64**. No GitHub login or source build is required. Use `:latest` to try the current image, or pin a release tag (for example, `:1.52.0`) or digest for reproducible deployments.
+A **prebuilt public image** is available at [`ghcr.io/webdecoy/fcaptcha`](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha) for **Linux AMD64 and ARM64**. No GitHub login or source build is required. Use `:latest` to try the current image, or pin a release tag (for example, `:1.53.0`) or digest for reproducible deployments.
 
 See the [Docker guide](docker/README.md) for local startup, Compose, version pinning, and upgrades. If you already run CapRover, [install FCaptcha from One-Click Apps](docker/README.md#deploy-with-caprover). If you run Unraid, [install FCaptcha from Community Apps](https://ca.unraid.net/apps/fcaptcha-1sjnpad0cymf0h).
 
@@ -264,7 +276,7 @@ Two options, and the tradeoff is real:
 
 <!-- CDN widget: still requires a running FCaptcha API. -->
 <script
-  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.52.0/dist/fcaptcha.min.js"
+  src="https://cdn.jsdelivr.net/npm/@webdecoy/fcaptcha-client@1.53.0/dist/fcaptcha.min.js"
   integrity="sha384-…"
   crossorigin="anonymous"></script>
 ```
@@ -621,12 +633,17 @@ A vision agent takes a screenshot, sends it to a vision model (GPT-4V, Claude, e
 | Mouse movement | Natural curves, micro-tremor | Smooth/linear paths |
 | Pre-click behavior | Exploration, hesitation | Direct path to target |
 | Click trajectory | Approach path to the target | Teleport — click with no preceding movement |
-| Coordinate precision | Slight variance | Pixel-perfect |
+| Coordinate precision | Slight variance | Can be exact, but is not safe as a standalone detector |
 | PoW timing | Consistent with local execution | Delayed by API round-trip |
 
 ### 2. Computer-use / CDP agents (driving a real browser)
 
-Agents like Claude in Chrome (via `chrome.debugger`) or Operator-style tools (via Playwright/CDP) drive a *real* browser, so their input events report `isTrusted: true` and slip past global-based checks. Their **shape** still betrays them:
+Agents such as browser extensions and Playwright/CDP tools drive a *real*
+browser, so their input events can report `isTrusted: true` and slip past
+global-based checks. Some external drivers leave the shapes below. Paired
+Chrome Auto Browse and Claude in Chrome captures also demonstrate that a
+browser-internal agent can currently look like the human control; FCaptcha does
+not turn that overlap into a blocking rule.
 
 | Signal | Human | CDP-driven agent |
 |--------|-------|-----------|
@@ -1185,7 +1202,11 @@ MIT License - use freely, contribute back if you can.
 
 ## Nuxt integration
 
-An unreleased Nuxt 4 module is available in [`packages/nuxt`](packages/nuxt). It provides a client-only `<FCaptcha>` component, public runtime defaults, self-hosted script loading and lifecycle cleanup. Follow the source-install instructions there; this package is not yet published to npm.
+Install `@webdecoy/fcaptcha-nuxt` from npm and add it to `modules` in
+`nuxt.config.ts`. The official Nuxt 4 module provides a client-only `<FCaptcha>`
+component, public runtime defaults, self-hosted script loading and lifecycle
+cleanup. See the [module guide](packages/nuxt/) for configuration and the
+required server-side verification step.
 
 ## Development provenance
 

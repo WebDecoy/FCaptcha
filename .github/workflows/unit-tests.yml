@@ -100,6 +100,45 @@ jobs:
       - name: Verify private fixture config is absent from browser assets
         run: node test/check-public-assets.mjs
         working-directory: packages/nuxt
+      - name: Verify package contents
+        run: npm pack --dry-run
+        working-directory: packages/nuxt
+
+  django-example:
+    name: Django 5.2 integration example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: examples/django/requirements.lock
+      - name: Install dependencies
+        run: python -m pip install -r requirements.lock
+        working-directory: examples/django
+      - name: Test application integration
+        run: python manage.py test -v 2
+        working-directory: examples/django
+
+  laravel-example:
+    name: Laravel 13 integration example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+        working-directory: examples/laravel
+      - name: Validate package and style
+        run: composer validate --strict && vendor/bin/pint --test
+        working-directory: examples/laravel
+      - name: Test application integration
+        run: php artisan test
+        working-directory: examples/laravel
 
   go:
     name: Go (${{ matrix.go }})

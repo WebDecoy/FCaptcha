@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FCaptcha + Django</title>
+</head>
+<body>
+  <main>
+    <h1>FCaptcha + Django</h1>
+    <form method="post">
+      {% csrf_token %}
+      {{ form.message.label_tag }}
+      {{ form.message }}
+      {{ form.message.errors }}
+      {{ form.fcaptcha_token }}
+      {{ form.fcaptcha_token.errors }}
+      <div data-fcaptcha="{{ fcaptcha_site_key }}" data-endpoint="{{ fcaptcha_origin }}" data-action="contact"></div>
+      <button type="submit">Send sample</button>
+    </form>
+  </main>
+  <script src="{{ fcaptcha_origin }}/fcaptcha.js"></script>
+</body>
+</html>

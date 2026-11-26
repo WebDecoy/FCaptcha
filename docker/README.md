@@ -5,7 +5,7 @@ The public, prebuilt image is **`ghcr.io/webdecoy/fcaptcha`**:
 - [Browse releases and tags on GitHub Container Registry](https://github.com/WebDecoy/FCaptcha/pkgs/container/fcaptcha).
 - Platforms: Linux `amd64` and `arm64` (including Docker on Apple Silicon).
 - Runtime: the Go server, with the browser widget and demo bundled.
-- Tags: `latest` and release versions without the `v` prefix, such as `1.52.0`.
+- Tags: `latest` and release versions without the `v` prefix, such as `1.53.0`.
 - Pulling the public image does not require a GitHub account or building the source.
 
 ## Quick local trial
@@ -13,12 +13,12 @@ The public, prebuilt image is **`ghcr.io/webdecoy/fcaptcha`**:
 Requires Docker and OpenSSL. This exposes the service only on your local machine:
 
 ```sh
-docker pull ghcr.io/webdecoy/fcaptcha:1.52.0
+docker pull ghcr.io/webdecoy/fcaptcha:1.53.0
 docker run -d --name fcaptcha \
   -p 127.0.0.1:3000:3000 \
   -e FCAPTCHA_SECRET="$(openssl rand -hex 32)" \
   -e FCAPTCHA_VERIFY_SECRET="$(openssl rand -hex 32)" \
-  ghcr.io/webdecoy/fcaptcha:1.52.0
+  ghcr.io/webdecoy/fcaptcha:1.53.0
 ```
 
 Open <http://localhost:3000/demo/>. The container also serves:
@@ -95,11 +95,11 @@ proxies with the [hardening guide](../HARDENING.md).
 
 ## Version pinning and upgrades
 
-Use `ghcr.io/webdecoy/fcaptcha:1.52.0` for a fixed release, or pin the multi-platform
+Use `ghcr.io/webdecoy/fcaptcha:1.53.0` for a fixed release, or pin the multi-platform
 digest shown by the registry:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/webdecoy/fcaptcha:1.52.0
+docker buildx imagetools inspect ghcr.io/webdecoy/fcaptcha:1.53.0
 # Use the reported top-level digest as:
 # ghcr.io/webdecoy/fcaptcha@sha256:<digest>
 ```
