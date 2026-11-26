@@ -33,10 +33,11 @@ var identityEngineLabels = map[string]string{
 
 // JA4_b is the hash of the sorted TLS cipher-suite set. These values come from
 // FoxIO's public, license-free reference mapping at commit
-// f1fea2e2313b5fd57de313fd5882eeacb3bd22ef. Unknown hashes stay unknown so a
-// TLS interceptor or a future browser release cannot manufacture a contradiction.
+// f1fea2e2313b5fd57de313fd5882eeacb3bd22ef. Only hashes still exclusive to one
+// family belong here. Chromium's historical TCP hash 8daaf6152771 is omitted:
+// stock Firefox 160 on macOS now shares it. Unknown or shared hashes stay
+// unknown so browser-version drift cannot manufacture a contradiction.
 var identityJA4CipherFamilies = map[string]string{
-	"8daaf6152771": "blink",  // Chromium over TCP
 	"55b375c5d22e": "blink",  // Chromium over QUIC
 	"5b57614c22b0": "gecko",  // Firefox/NSS
 	"a09f3c656075": "webkit", // Safari

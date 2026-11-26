@@ -19,11 +19,12 @@ const ENGINE_LABELS = { blink: 'Blink', gecko: 'Gecko', webkit: 'WebKit' };
 // JA4_b is the hash of the sorted TLS cipher-suite set. Unlike the complete
 // fingerprint, it is unaffected by extension-count drift and session-resumption
 // extensions. These values come from FoxIO's public, license-free reference
-// mapping at commit f1fea2e2313b5fd57de313fd5882eeacb3bd22ef. Unknown hashes
-// stay unknown: this is deliberately not a generic "browser-like" heuristic,
-// and a TLS-intercepting proxy must never become a contradiction.
+// mapping at commit f1fea2e2313b5fd57de313fd5882eeacb3bd22ef. Only hashes still
+// exclusive to one family belong here. Chromium's historical TCP hash
+// 8daaf6152771 is omitted because stock Firefox 160 on macOS now shares it.
+// Unknown or shared hashes stay unknown: this is deliberately not a generic
+// "browser-like" heuristic, and version drift must never become a contradiction.
 const JA4_CIPHER_FAMILIES = {
-  '8daaf6152771': 'blink',  // Chromium over TCP
   '55b375c5d22e': 'blink',  // Chromium over QUIC
   '5b57614c22b0': 'gecko',  // Firefox/NSS
   'a09f3c656075': 'webkit', // Safari
