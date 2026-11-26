@@ -62,7 +62,8 @@ function isHumanNeighborhood(sample) {
 }
 
 function familyKey(row) {
-  return row.sample.provenance === 'derived' ? row.sample.source : row.sample.id;
+  return row.sample.capture?.community?.familyId ||
+    (row.sample.provenance === 'derived' ? row.sample.source : row.sample.id);
 }
 
 function experimentalStats(rows, policy) {
@@ -150,6 +151,7 @@ function computeMetrics(results, opts = {}) {
   const evidentialHumans = humans.filter((r) => isObservedHuman(r.sample));
   const neighborhoodHumans = replayedHumans.filter((r) => isHumanNeighborhood(r.sample));
   const nonEvidentialHumans = humans.filter((r) => !isObservedHuman(r.sample));
+  const evidentialFamilyKeys = new Set(evidentialHumans.map(familyKey));
 
   const byGroup = (rows, isHit, keyFor = (r) => r.sample.group) => {
     const groups = new Map();
@@ -246,13 +248,13 @@ function computeMetrics(results, opts = {}) {
       humanTotal: evidentialHumans.length,
       humanFpr: rate(s.humanSamples.size, evidentialHumans.length),
       familyHits: s.humanFamilies.size,
-      familyTotal: evidentialHumans.length,
-      familyRate: rate(s.humanFamilies.size, evidentialHumans.length),
+      familyTotal: evidentialFamilyKeys.size,
+      familyRate: rate(s.humanFamilies.size, evidentialFamilyKeys.size),
       firesOnPersonas: [...s.humanFamilyPersonas].sort(),
       agentHits: s.agentSamples.size,
       agentTotal: agents.length,
       agentTpr: rate(s.agentSamples.size, agents.length),
-      overBudget: rate(s.humanFamilies.size, evidentialHumans.length) > cfg.perSignalFpBudget,
+      overBudget: rate(s.humanFamilies.size, evidentialFamilyKeys.size) > cfg.perSignalFpBudget,
     }))
     .sort((a, b) => (b.familyRate || 0) - (a.familyRate || 0) || a.signal.localeCompare(b.signal));
 
@@ -296,6 +298,7 @@ function computeMetrics(results, opts = {}) {
       errors: errors.length,
       humans: humans.length,
       humansEvidential: evidentialHumans.length,
+      humanCaptureFamilies: evidentialFamilyKeys.size,
       agents: agents.length,
       replayedHumans: replayedHumans.length,
       replayedAgents: replayedAgents.length,
@@ -304,9 +307,14 @@ function computeMetrics(results, opts = {}) {
     humanPanel: {
       all: { total: humans.length, hits: humans.filter(isFalsePositive).length, rate: rate(humans.filter(isFalsePositive).length, humans.length) },
       evidential: {
-        total: evidentialHumans.length,
-        hits: evidentialHumans.filter(isFalsePositive).length,
-        rate: rate(evidentialHumans.filter(isFalsePositive).length, evidentialHumans.length),
+        total: evidentialFamilyKeys.size,
+        hits: new Set(evidentialHumans.filter(isFalsePositive).map(familyKey)).size,
+        rate: rate(
+          new Set(evidentialHumans.filter(isFalsePositive).map(familyKey)).size,
+          evidentialFamilyKeys.size
+        ),
+        captures: evidentialHumans.length,
+        captureHits: evidentialHumans.filter(isFalsePositive).length,
       },
       neighborhood: (() => {
         const families = new Set(evidentialHumans.map(familyKey));

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "publicationConsent": {
+    "permanentPublic": true,
+    "license": "MIT",
+    "statement": "I consent to permanent public publication of this sanitized FCaptcha benchmark capture under the MIT license."
+  },
+  "attestations": {
+    "freshTestContext": true,
+    "noPersonalAccounts": true,
+    "noUnrelatedExtensions": true,
+    "noPersonalHistory": true,
+    "noPersonalFormContent": true,
+    "noOperationalIdentifiers": true,
+    "familyNonceScopedToThisDataset": true,
+    "labelAccurate": true
+  },
+  "captureFamilyNonce": "REPLACE_WITH_OPENSSL_RAND_HEX_32",
+  "sample": {
+    "label": "human",
+    "scenario": "firefox-linux-keyboard",
+    "captureMethod": "manual-browser",
+    "labelEvidence": "verified-human",
+    "limitations": [
+      "One operator and one hardware configuration."
+    ],
+    "environment": {
+      "browser": {
+        "name": "firefox",
+        "versionMajor": 160
+      },
+      "os": {
+        "name": "linux",
+        "versionMajor": 26
+      },
+      "inputMethods": [
+        "keyboard"
+      ],
+      "assistiveTechnology": []
+    },
+    "endpoint": "/api/score",
+    "mode": "invisible",
+    "signals": {
+      "behavioral": {
+        "totalPoints": 0,
+        "keyEvents": 18
+      },
+      "environmental": {
+        "automationFlags": {
+          "webdriver": false
+        }
+      }
+    }
+  }
+}

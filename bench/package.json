@@ -8,6 +8,8 @@
     "analyze:pairs": "node tools/analyze-paired-observations.js",
     "compare:servers": "node tools/compare-server-parity.js",
     "capture": "node capture/record.js",
+    "community:coverage": "node tools/community-coverage.js",
+    "community:prepare": "node tools/prepare-community-contribution.js",
     "install-browsers": "playwright install chromium",
     "test": "node --test lib/*.test.js"
   },

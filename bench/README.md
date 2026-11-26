@@ -313,6 +313,15 @@ expanded into derived samples. This preserves the demo's seven-day retention
 boundary instead of turning short-lived consent into a permanent repository
 artifact.
 
+### Contributing permanent public captures
+
+Community corpus contributions use a separate permanent-publication consent,
+local sanitizer, leak scanner, capture-family accounting, and redaction
+manifest. The hosted research consent above cannot be promoted into this path.
+See [COMMUNITY-CONTRIBUTIONS.md](COMMUNITY-CONTRIBUTIONS.md) for the capture and
+review procedure and [DATASET-CARD.md](DATASET-CARD.md) for intended use,
+prohibited claims, cohort bias, privacy controls, and licensing implications.
+
 ### What the first manual sessions changed
 
 Four trackpad-and-keyboard sessions were recorded without browser automation:
@@ -432,6 +441,8 @@ bench/
     EXTERNAL_CDP.md       isolated external real-Chrome CDP capture protocol
   lib/
     corpus.js             sample schema, provenance rules, jitter
+    community-contribution.js
+                          permanent consent, sanitization, leak/duplicate checks
     paired-analysis.js    paired flattening, screening, leave-one-out checks
     pow.js                browser-paced proof-of-work client
     replay.js             per-sample client IPs, bounded concurrency
@@ -446,6 +457,9 @@ bench/
                             validates and imports driver-free agent captures
     import-external-driver-capture.js
                             validates pinned external-driver captures
+    prepare-community-contribution.js
+                            emits a sanitized sample + redaction manifest
+    community-coverage.js  prints aggregate coverage without identities
   corpus/captured/        committed traces
 ```
 

@@ -87,7 +87,8 @@ function renderReport(metrics, corpus, gate) {
     const bad = evid.rate > cfg.panelFpBudget;
     out.push(
       `  ${bad ? C.red : C.green}Observed FP rate ${pct(evid.rate)}${C.reset} ` +
-        `(${evid.hits}/${evid.total} independently observed captures, target < ${pct(cfg.panelFpBudget)})${caveatNote}`
+        `(${evid.hits}/${evid.total} independently observed capture families; ` +
+        `${evid.captureHits}/${evid.captures} base captures, target < ${pct(cfg.panelFpBudget)})${caveatNote}`
     );
     const neighborhood = metrics.humanPanel.neighborhood;
     out.push(
@@ -95,12 +96,12 @@ function renderReport(metrics, corpus, gate) {
         `(${neighborhood.hits}/${neighborhood.total} capture families had any base or derived variant cross the threshold; ` +
         `derived rows never increase N)${C.reset}`
     );
-    if (metrics.counts.humans > evid.total) {
+    if (metrics.counts.humans > metrics.counts.humansEvidential) {
       const excluded = metrics.humanPanel.excludedByEvidence
         .map((row) => `${row.labelEvidence || row.group} ×${row.total}`)
         .join(', ');
       out.push(
-        `  ${C.dim}${metrics.counts.humans - evid.total} structural or self-reported human fixture(s) measured but excluded ` +
+        `  ${C.dim}${metrics.counts.humans - metrics.counts.humansEvidential} structural or self-reported human fixture(s) measured but excluded ` +
           `from this figure (${excluded}) — see bench/README.md${C.reset}`
       );
     }
