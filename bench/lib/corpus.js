@@ -12,6 +12,11 @@
  *     "group":     "keyboard-only"            // persona (human) or class (agent)
  *     "scenario":  "stealth-humanized"        // capture choreography/configuration
  *     "provenance":"captured" | "derived" | "self-reported" | "synthetic",
+ *     "captureMethod":"manual-browser" | "browser-internal" | "external-cdp" |
+ *                     "automated-browser" | "production-export" | "synthetic-payload",
+ *     "labelEvidence":"verified-human" | "paired-human-control" | "simulated-human" |
+ *                     "self-reported-human" | "observed-agent" | "simulated-agent" |
+ *                     "literature-agent",
  *     "source":    "human/keyboard-only/0000" // for derived: the capture it came from
  *     "notes":     "...",                     // free text, shown in the report
  *     "headers":   { "User-Agent": "...", ... },
@@ -19,11 +24,13 @@
  *     "capture":   { endpoint: "/api/verify" | "/api/score", ... }
  *   }
  *
- * `provenance` is the field that keeps this harness honest, so it is required
- * and validated rather than defaulted:
+ * Provenance says how the payload came into existence. Capture method says how
+ * the browser was actuated. Label evidence says why the human/agent label is
+ * believed. These are deliberately separate: a payload can come from a real
+ * browser while its "human" behaviour is a scripted structural stand-in.
  *
- *   captured  — recorded from a real browser driven by a real input sequence.
- *               The only provenance that supports a claim about real users.
+ *   captured  — recorded from a real browser. Label evidence still decides
+ *               whether it represents an observed person or a scripted fixture.
  *   derived   — a captured sample with its numeric fields jittered. Measures the
  *               neighbourhood around a real capture. Supports a claim about
  *               robustness near observed behaviour; does NOT support a
@@ -35,8 +42,9 @@
  *   synthetic — hand-authored from a description in a paper or vendor writeup.
  *               Supports regression detection only. Never a published number.
  *
- * The reporter refuses to print a headline FPR from anything but `captured`
- * plus `derived`, and labels which it used. See report.js.
+ * The reporter prints an observed-human result only from captured
+ * verified-human and paired-human-control rows. Derived rows are grouped by
+ * source capture and reported separately as robustness. See report.js.
  */
 
 const crypto = require('crypto');
@@ -45,9 +53,26 @@ const path = require('path');
 
 const LABELS = new Set(['human', 'agent']);
 const PROVENANCE = new Set(['captured', 'derived', 'self-reported', 'synthetic']);
+const CAPTURE_METHODS = new Set([
+  'manual-browser',
+  'browser-internal',
+  'external-cdp',
+  'automated-browser',
+  'production-export',
+  'synthetic-payload',
+]);
+const LABEL_EVIDENCE = new Set([
+  'verified-human',
+  'paired-human-control',
+  'simulated-human',
+  'self-reported-human',
+  'observed-agent',
+  'simulated-agent',
+  'literature-agent',
+]);
 
-/** Provenance strong enough to support a false-positive claim. */
-const EVIDENTIAL = new Set(['captured', 'derived']);
+/** Human labels strong enough to support an observed false-positive result. */
+const HUMAN_FP_EVIDENCE = new Set(['verified-human', 'paired-human-control']);
 
 const CORPUS_DIR = path.join(__dirname, '..', 'corpus');
 
@@ -62,6 +87,18 @@ function validate(sample, where) {
   if (typeof sample.group !== 'string' || !sample.group) fail(`${sample.id}: missing group`);
   if (!PROVENANCE.has(sample.provenance)) {
     fail(`${sample.id}: provenance must be one of ${[...PROVENANCE].join('|')}`);
+  }
+  if (!CAPTURE_METHODS.has(sample.captureMethod)) {
+    fail(`${sample.id}: captureMethod must be one of ${[...CAPTURE_METHODS].join('|')}`);
+  }
+  if (!LABEL_EVIDENCE.has(sample.labelEvidence)) {
+    fail(`${sample.id}: labelEvidence must be one of ${[...LABEL_EVIDENCE].join('|')}`);
+  }
+  if (sample.label === 'human' && !sample.labelEvidence.includes('human') && sample.labelEvidence !== 'paired-human-control') {
+    fail(`${sample.id}: human sample has agent labelEvidence ${sample.labelEvidence}`);
+  }
+  if (sample.label === 'agent' && !sample.labelEvidence.includes('agent')) {
+    fail(`${sample.id}: agent sample has human labelEvidence ${sample.labelEvidence}`);
   }
   if (sample.provenance === 'derived' && !sample.source) {
     fail(`${sample.id}: derived samples must name the capture they came from`);
@@ -166,6 +203,8 @@ function deriveVariant(sample, rng, index, pct = 0.15) {
     group: sample.group,
     scenario: sample.scenario,
     provenance: 'derived',
+    captureMethod: sample.captureMethod,
+    labelEvidence: sample.labelEvidence,
     source: sample.id,
     notes: `±${Math.round(pct * 100)}% jitter around ${sample.id}, distinct synthetic device`,
     headers: { ...(sample.headers || {}) },
@@ -175,9 +214,11 @@ function deriveVariant(sample, rng, index, pct = 0.15) {
 }
 
 module.exports = {
+  CAPTURE_METHODS,
   CORPUS_DIR,
-  EVIDENTIAL,
+  HUMAN_FP_EVIDENCE,
   LABELS,
+  LABEL_EVIDENCE,
   PROVENANCE,
   deriveVariant,
   loadCorpus,

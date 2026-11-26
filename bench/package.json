@@ -6,6 +6,7 @@
   "scripts": {
     "bench": "node run-bench.js",
     "analyze:pairs": "node tools/analyze-paired-observations.js",
+    "compare:servers": "node tools/compare-server-parity.js",
     "capture": "node capture/record.js",
     "install-browsers": "playwright install chromium",
     "test": "node --test lib/*.test.js"

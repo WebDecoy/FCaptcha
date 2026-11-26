@@ -477,6 +477,8 @@
       "mode": "invisible",
       "normalization": "none",
       "reportSha256": "7bb09ebb0077d212746f359ba768b3e140bb299039740d4dd62e90b0ea7736a9"
-    }
+    },
+    "captureMethod": "browser-internal",
+    "labelEvidence": "observed-agent"
   }
 ]

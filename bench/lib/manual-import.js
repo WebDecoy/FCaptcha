@@ -133,6 +133,11 @@ function toCorpusSample(report, options, reportBytes = null) {
     group: options.group,
     scenario: options.scenario,
     provenance: 'captured',
+    captureMethod: 'manual-browser',
+    labelEvidence: options.group === 'browser-internal-control' ||
+      options.group.endsWith('-cdp-control')
+      ? 'paired-human-control'
+      : 'verified-human',
     notes,
     headers: selectedHeaders(capture.headers),
     signals: cleanSignals,
@@ -194,6 +199,8 @@ function toBrowserInternalSample(report, options, reportBytes = null) {
     group: 'browser-internal',
     scenario: options.scenario,
     provenance: 'captured',
+    captureMethod: 'browser-internal',
+    labelEvidence: 'observed-agent',
     notes,
     headers: selectedHeaders(capture.headers),
     signals: cleanSignals,
@@ -282,6 +289,8 @@ function toExternalDriverSample(report, options, reportBytes = null) {
     group: options.group || `${driver.name}-cdp-agent`,
     scenario: options.scenario,
     provenance: 'captured',
+    captureMethod: 'external-cdp',
+    labelEvidence: 'observed-agent',
     notes,
     headers: selectedHeaders(capture.headers),
     signals: cleanSignals,

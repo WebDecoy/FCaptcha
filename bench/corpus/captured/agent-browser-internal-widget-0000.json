@@ -480,6 +480,8 @@
       "mode": "widget",
       "normalization": "none",
       "reportSha256": "c0937bb3f39f785d2ff9cf15463390ec5bf646a42748f01a8bd25f7703368a31"
-    }
+    },
+    "captureMethod": "browser-internal",
+    "labelEvidence": "observed-agent"
   }
 ]

@@ -335,6 +335,8 @@
         "viewportSize": "1280x720",
         "timezone": "America/Chicago"
       }
-    }
+    },
+    "captureMethod": "automated-browser",
+    "labelEvidence": "simulated-agent"
   }
 ]

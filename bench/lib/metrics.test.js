@@ -13,6 +13,8 @@ function result(id, group, scenario, score) {
       group,
       scenario,
       provenance: 'captured',
+      captureMethod: 'automated-browser',
+      labelEvidence: 'simulated-agent',
     },
     score,
     detections: [],
@@ -59,6 +61,8 @@ test('self-reported humans are measured but cannot create false-positive claims 
       label: 'human',
       group: 'manual',
       provenance: 'captured',
+      captureMethod: 'manual-browser',
+      labelEvidence: 'verified-human',
     },
     score: 0.1,
     detections: [],
@@ -69,6 +73,8 @@ test('self-reported humans are measured but cannot create false-positive claims 
       label: 'human',
       group: 'self-reported-chrome-macos-trackpad',
       provenance: 'self-reported',
+      captureMethod: 'production-export',
+      labelEvidence: 'self-reported-human',
     },
     score: 0.9,
     detections: [{ reason: 'Automation-like movement', category: 'behavioral' }],
@@ -78,7 +84,7 @@ test('self-reported humans are measured but cannot create false-positive claims 
 
   assert.equal(metrics.humanPanel.all.total, 2);
   assert.equal(metrics.humanPanel.evidential.total, 1);
-  assert.equal(metrics.humanPanel.excludedByProvenance[0].group, 'self-reported');
+  assert.equal(metrics.humanPanel.excludedByEvidence[0].group, 'self-reported-human');
   assert.equal(metrics.perSignal.length, 0);
   assert.equal(metrics.humanPanel.exploratorySignals[0].signal, 'Automation-like movement');
   assert.equal(metrics.humanPanel.exploratorySignals[0].hits, 1);
@@ -89,19 +95,19 @@ test('self-reported humans are measured but cannot create false-positive claims 
 test('experimental observations use base samples and stay outside every gate', () => {
   const observation = (status) => ({ observations: { 'animation-consistency-v1': { status } } });
   const human = {
-    sample: { id: 'human/manual/0000', label: 'human', group: 'manual', provenance: 'captured' },
+    sample: { id: 'human/manual/0000', label: 'human', group: 'manual', provenance: 'captured', captureMethod: 'manual-browser', labelEvidence: 'verified-human' },
     score: 0.1, detections: [], experimental: observation('clear'),
   };
   const derived = {
-    sample: { id: 'human/manual/derived-0000', label: 'human', group: 'manual', provenance: 'derived' },
+    sample: { id: 'human/manual/derived-0000', label: 'human', group: 'manual', provenance: 'derived', source: 'human/manual/0000', captureMethod: 'manual-browser', labelEvidence: 'verified-human' },
     score: 0.1, detections: [], experimental: observation('detected'),
   };
   const research = {
-    sample: { id: 'human/research/0000', label: 'human', group: 'research', provenance: 'self-reported' },
+    sample: { id: 'human/research/0000', label: 'human', group: 'research', provenance: 'self-reported', captureMethod: 'production-export', labelEvidence: 'self-reported-human' },
     score: 0.1, detections: [], experimental: observation('detected'),
   };
   const agent = {
-    sample: { id: 'agent/stealth/0000', label: 'agent', group: 'stealth-cdp-agent', provenance: 'captured' },
+    sample: { id: 'agent/stealth/0000', label: 'agent', group: 'stealth-cdp-agent', provenance: 'captured', captureMethod: 'external-cdp', labelEvidence: 'observed-agent' },
     score: 0.1, detections: [], experimental: observation('detected'),
   };
   const metrics = computeMetrics([human, derived, research, agent]);
@@ -113,4 +119,52 @@ test('experimental observations use base samples and stay outside every gate', (
   assert.equal(policy.agents.detected, 1);
   assert.equal(policy.byGroup.find((row) => row.group === 'manual').total, 1, 'derived rows are excluded');
   assert.equal(evaluateGate(metrics).passed, true, 'experimental observations never gate');
+});
+
+test('simulated human personas remain regression fixtures but cannot support an FP claim', () => {
+  const simulated = {
+    sample: {
+      id: 'human/screen-reader/0000', label: 'human', group: 'screen-reader',
+      provenance: 'captured', captureMethod: 'automated-browser', labelEvidence: 'simulated-human',
+    },
+    score: 0.9,
+    detections: [{ reason: 'Mechanical navigation', category: 'behavioral' }],
+  };
+  const metrics = computeMetrics([simulated]);
+
+  assert.equal(metrics.humanPanel.evidential.total, 0);
+  assert.equal(metrics.humanPanel.excludedByEvidence[0].group, 'simulated-human');
+  assert.equal(metrics.humanPanel.exploratorySignals[0].signal, 'Mechanical navigation');
+  assert.equal(metrics.perSignal.length, 0);
+  assert.equal(evaluateGate(metrics).passed, true);
+});
+
+test('derived variants count once per capture family and never change the evidence denominator', () => {
+  const base = {
+    sample: {
+      id: 'human/manual/0000', label: 'human', group: 'manual', provenance: 'captured',
+      captureMethod: 'manual-browser', labelEvidence: 'verified-human',
+    },
+    score: 0.1,
+    detections: [],
+  };
+  const variant = (index) => ({
+    sample: {
+      id: `human/manual/derived-${index}`, label: 'human', group: 'manual', provenance: 'derived',
+      source: base.sample.id, captureMethod: 'manual-browser', labelEvidence: 'verified-human',
+    },
+    score: 0.6,
+    detections: [{ reason: 'Boundary-sensitive signal (12ms)', category: 'behavioral' }],
+  });
+
+  const one = computeMetrics([base, variant(0)]);
+  const many = computeMetrics([base, ...Array.from({ length: 8 }, (_, i) => variant(i))]);
+  for (const metrics of [one, many]) {
+    assert.equal(metrics.humanPanel.evidential.total, 1);
+    assert.deepEqual(metrics.humanPanel.neighborhood, { total: 1, hits: 1, rate: 1 });
+    assert.equal(metrics.perSignal[0].humanHits, 0);
+    assert.equal(metrics.perSignal[0].familyHits, 1);
+    assert.equal(metrics.perSignal[0].familyTotal, 1);
+    assert.equal(evaluateGate(metrics).passed, false);
+  }
 });

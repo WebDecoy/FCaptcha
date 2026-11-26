@@ -476,6 +476,8 @@
       "mode": "invisible",
       "normalization": "none",
       "reportSha256": "619268382c44276409b1b6cbbb7e9f9377a10dfed847e70bd2a7e8dc1a3000c5"
-    }
+    },
+    "captureMethod": "manual-browser",
+    "labelEvidence": "paired-human-control"
   }
 ]

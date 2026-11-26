@@ -30,6 +30,11 @@ node run-bench.js --hosted-smoke --server https://fcaptcha.example.com --site-ke
                                       # bounded production deployment check
 node tools/analyze-paired-observations.js
                                       # rank paired agent/control differences
+node tools/compare-server-parity.js \
+  --server node=http://localhost:3001 \
+  --server go=http://localhost:3002 \
+  --server python=http://localhost:3003
+                                      # compare base-corpus detector verdicts
 
 On macOS, run the server and the harness under `caffeinate -i -s` for anything
 unattended. Maintenance Sleep pauses both processes together; a challenge
@@ -44,30 +49,55 @@ on whichever personas were in flight.
 
 This is the part to read before quoting anything from the output.
 
-**The corpus is captured, not sampled.** Traces come from real browsers, so the
-signal payloads are exactly what the client produces — including fields nobody
-remembered were there. Most human personas are Chromium driven through scripted
-input; four additional sessions are real Chrome, Safari and Firefox driven by a
-person. What this is *not* is a sample of the human population. Scripted personas
-are structural stand-ins, and four sessions from one person and machine do not
-establish how often real users get flagged.
+**The corpus is captured, not sampled.** Many traces come from real browsers, so
+the signal payloads are exactly what the client produces — including fields
+nobody remembered were there. That does not by itself make the label real-human
+evidence. Scripted accessibility and behaviour personas are structural
+stand-ins; manual sessions and paired human controls are observed behaviour.
+Neither is a sample of the human population, and repeated sessions from one
+operator do not establish how often real users get flagged.
 
 So: **a 0% FPR here means "no sample in this corpus crossed the threshold". It
 does not mean 0% of real users would.** The report prints sample counts next to
 every rate for that reason.
 
-**Provenance is tracked per sample and the reporter keeps the tiers apart:**
+**Three independent fields describe every sample:**
 
-| | what it is | what it can support |
+| field | examples | what it answers |
 |---|---|---|
-| `captured` | recorded from a real browser; notes identify scripted or manual input | a claim about observed behaviour |
-| `derived` | a capture with its numeric fields jittered ±15% | robustness near observed behaviour |
-| `self-reported` | consented hosted-demo trace labeled human by its visitor | coverage discovery only; never an FP claim or gate |
-| `synthetic` | hand-authored from a paper or vendor writeup | regression detection only |
+| `provenance` | `captured`, `derived`, `self-reported`, `synthetic` | how the payload came into existence |
+| `captureMethod` | `manual-browser`, `browser-internal`, `external-cdp`, `automated-browser` | how the browser or payload was actuated |
+| `labelEvidence` | `verified-human`, `paired-human-control`, `simulated-human`, `observed-agent` | why the human/agent label is believed |
 
-Headline rates and per-signal false-positive gates are computed from `captured`
-+ `derived` only. Self-reported and synthetic samples are replayed and shown,
-never folded into a false-positive figure or gate.
+Only captured `verified-human` and `paired-human-control` rows support an
+observed false-positive result. Simulated and self-reported human fixtures are
+replayed and shown but never folded into that result or its gate. Derived rows
+are grouped under their source capture: they report whether any jittered child
+crossed a boundary, but never increase the number of people or capture families.
+Changing `--derive` therefore cannot dilute or amplify a gate.
+
+The configured 0.3% per-signal budget is a product target, not a population
+estimate from this corpus. With fewer than 334 independent human observations,
+one observed hit already exceeds it. A passing gate means no non-exempt signal
+crossed the target in the observed capture families; it does not establish a
+population FPR below 0.3%.
+
+### Cross-server detector parity
+
+The shared conformance suite protects token, proof-of-work, and wire-contract
+security invariants. The benchmark additionally compares detector verdicts
+across the Go, Node, and Python production servers. It replays base samples only
+with one isolated site key per sample. Recommendation, experimental blocking
+decision, and observation statuses are a hard outcome-parity CI gate. Exact
+score, normalized detections, category scores, and full experimental details
+are retained in the artifact as a stricter migration report; run with `--strict`
+to gate on those as well. This two-tier result keeps non-decision drift from
+blocking a release while making scoring and detector-detail differences visible
+until all implementations converge. Floating-point output is normalized to
+eight decimal places.
+
+Derived variants run only in the primary regression job because they add
+robustness coverage, not another server contract.
 
 ### Paired observation analysis
 
@@ -118,24 +148,25 @@ Derived and self-reported samples never participate. The report also prints the
 largest distribution shifts separately, because an interesting paired change
 can still overlap humans and be unsafe as a detector.
 
-**The human panel's environment is partly reconstructed.** This is the harness's
-sharpest limitation and it is structural: the only way to produce repeatable real
-input events is to drive the browser with an automation tool, and an automated
-browser announces itself — `navigator.webdriver` is true, the plugin array is
-empty, `window.chrome` is missing, the viewport equals the window, WebRTC
-surfaces no local candidates, WebGL falls back to SwiftShader.
+**The simulated human panel's environment is partly reconstructed.** This is a
+structural limitation of those regression fixtures: repeatable scripted input
+uses an automation tool, and an automated browser announces itself —
+`navigator.webdriver` is true, the plugin array is empty, `window.chrome` is
+missing, the viewport equals the window, WebRTC surfaces no local candidates,
+and WebGL falls back to SwiftShader.
 
-Left alone, every "human" persona would be a false positive and the harness would
-report a 100% FPR that says nothing about humans and everything about Playwright.
-So `capture/normalize.js` restores what the same machine's ordinary Chrome
-reports, and the affected samples carry `caveats: ["environment-normalized"]`,
-which the report prints next to any figure derived from them.
+Left alone, every simulated "human" persona would report automation artifacts
+that say nothing about legitimate users and everything about Playwright. So
+`capture/normalize.js` restores what the same machine's ordinary Chrome reports,
+and the affected samples carry `caveats: ["environment-normalized"]`. These rows
+remain regression coverage under `simulated-human`; they no longer enter the
+observed-human denominator.
 
-The consequence, stated plainly: **this panel measures behavioural false
-positives well and environmental ones weakly.** Trajectory, velocity variance,
-tremor, cadence and timing are genuinely captured. Much of the environment is
-reconstructed. A published FPR from this corpus is a claim about behavioural
-signals.
+The consequence, stated plainly: **the simulated panel is good at finding
+behavioural regressions and weak as evidence about real people.** Trajectory,
+velocity variance, tremor, cadence and timing are genuinely produced by the
+scripted choreography. Much of the environment is reconstructed. Only manual
+and paired-control rows enter the observed result.
 
 **Two artifacts cannot be normalized away**, and are called out rather than
 hidden:

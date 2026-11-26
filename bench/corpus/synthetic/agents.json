@@ -12,8 +12,12 @@
       "Accept-Encoding": "gzip, deflate"
     },
     "signals": {
-      "meta": { "userAgent": "ClaudeBot/1.0" }
-    }
+      "meta": {
+        "userAgent": "ClaudeBot/1.0"
+      }
+    },
+    "captureMethod": "synthetic-payload",
+    "labelEvidence": "literature-agent"
   },
   {
     "id": "agent/hosted-computer-use/0000",
@@ -56,10 +60,17 @@
           "connectionRtt": 0,
           "notificationPermission": "denied"
         },
-        "webglInfo": { "vendor": "Google Inc.", "renderer": "SwiftShader" },
-        "canvasHash": { "hash": "b17c9f2e4a6d8103f5e2c4b7a9d0e6f3" }
+        "webglInfo": {
+          "vendor": "Google Inc.",
+          "renderer": "SwiftShader"
+        },
+        "canvasHash": {
+          "hash": "b17c9f2e4a6d8103f5e2c4b7a9d0e6f3"
+        }
       }
-    }
+    },
+    "captureMethod": "synthetic-payload",
+    "labelEvidence": "literature-agent"
   },
   {
     "id": "agent/source-patched/0000",
@@ -112,9 +123,16 @@
           "hasBattery": true,
           "hasMediaDevices": true
         },
-        "webglInfo": { "vendor": "Google Inc. (NVIDIA)", "renderer": "ANGLE (NVIDIA GeForce RTX 3060)" },
-        "canvasHash": { "hash": "7d3f1a9c5e2b8046f1a3c9e7d5b2a408" }
+        "webglInfo": {
+          "vendor": "Google Inc. (NVIDIA)",
+          "renderer": "ANGLE (NVIDIA GeForce RTX 3060)"
+        },
+        "canvasHash": {
+          "hash": "7d3f1a9c5e2b8046f1a3c9e7d5b2a408"
+        }
       }
-    }
+    },
+    "captureMethod": "synthetic-payload",
+    "labelEvidence": "literature-agent"
   }
 ]
