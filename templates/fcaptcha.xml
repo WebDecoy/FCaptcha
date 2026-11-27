@@ -11,7 +11,7 @@
   <Overview>Run your own CAPTCHA service for forms and other web actions. The image includes a browser widget, a demo and a server-side token verification endpoint. This template runs one instance with in-memory state.</Overview>
   <Support>https://github.com/WebDecoy/FCaptcha/discussions</Support>
   <Project>https://github.com/WebDecoy/FCaptcha</Project>
-  <TemplateURL>https://raw.githubusercontent.com/WebDecoy/FCaptcha/main/docker/unraid/fcaptcha.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/WebDecoy/FCaptcha/main/templates/fcaptcha.xml</TemplateURL>
   <ReadMe>https://github.com/WebDecoy/FCaptcha/blob/main/docker/README.md</ReadMe>
   <Category>Tools:Utilities</Category>
   <ExtraSearchTerms>captcha bot detection form spam</ExtraSearchTerms>

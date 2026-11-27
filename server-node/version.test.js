@@ -13,6 +13,7 @@
 // relying on a release-day grep.
 
 const assert = require('assert');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -42,7 +43,7 @@ const LOCATIONS = [
   // Integrators copy this snippet verbatim, so a stale pin ships a stale widget.
   ['README.md', /@webdecoy\/fcaptcha-client@([0-9]+\.[0-9]+\.[0-9]+)/],
   ['docker/README.md', /docker pull ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)/],
-  ['docker/unraid/fcaptcha.xml', /<Repository>ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)<\/Repository>/],
+  ['templates/fcaptcha.xml', /<Repository>ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)<\/Repository>/],
   ['examples/better-auth/README.md', /ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)/],
   ['examples/remix/README.md', /ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)/],
   ['examples/sveltekit/README.md', /ghcr\.io\/webdecoy\/fcaptcha:([0-9]+\.[0-9]+\.[0-9]+)/],
@@ -79,6 +80,19 @@ test('the CHANGELOG has an entry for this version', () => {
     read('CHANGELOG.md').includes(`## [${VERSION}]`),
     `CHANGELOG.md has no "## [${VERSION}]" section`
   );
+});
+
+test('Community Apps sees only its repository metadata and app template as XML', () => {
+  // The Community Apps repository scanner treats every tracked *.xml file as
+  // an Unraid template. Keep unrelated XML on a different suffix (PHPUnit
+  // supports phpunit.xml.dist) so a framework example cannot degrade the
+  // published app's health status.
+  const trackedXml = execFileSync('git', ['ls-files', '*.xml'], {
+    cwd: repo,
+    encoding: 'utf8',
+  }).trim().split('\n').filter(Boolean).sort();
+
+  assert.deepStrictEqual(trackedXml, ['ca_profile.xml', 'templates/fcaptcha.xml']);
 });
 
 let failed = 0;

@@ -70,7 +70,9 @@ The [catalog template](https://oneclickapps.caprover.com/v4/apps/fcaptcha) runs 
 
 ## Deploy on Unraid
 
-The [Unraid Docker template](unraid/fcaptcha.xml) maps host port `8300` to container port `3000`.
+The [Unraid Docker template](../templates/fcaptcha.xml) follows Community Apps'
+standard `templates/` repository layout and maps host port `8300` to container
+port `3000`.
 Run `openssl rand -hex 32` twice and enter the two different values as the
 signing and verification secrets. After starting the container, open its
 **WebUI** to try the demo. The template uses one instance with in-memory state.
